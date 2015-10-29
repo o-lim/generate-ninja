@@ -731,6 +731,23 @@ void NinjaBinaryTargetWriter::WriteCompilerBuildLine(
     path_output_.WriteFile(out_, order_only_dep);
   }
   out_ << std::endl;
+
+  const SubstitutionBits& subst_bits = target_->toolchain()->substitution_bits();
+  std::vector<SubstitutionType> source_substitutions_used;
+  for (size_t i = SUBSTITUTION_FIRST_PATTERN; i < SUBSTITUTION_NUM_TYPES; i++) {
+    if (subst_bits.used[i] && IsValidSourceSubstitution(static_cast<SubstitutionType>(i)))
+      source_substitutions_used.push_back(static_cast<SubstitutionType>(i));
+  }
+
+  EscapeOptions args_escape_options;
+  args_escape_options.mode = ESCAPE_NINJA_COMMAND;
+  // We're writing the substitution values, these should not be quoted since
+  // they will get pasted into the real command line.
+  args_escape_options.inhibit_quoting = true;
+
+  SubstitutionWriter::WriteNinjaVariablesForSource(
+      settings_, source, source_substitutions_used,
+      args_escape_options, out_);
 }
 
 void NinjaBinaryTargetWriter::WriteLinkerStuff(

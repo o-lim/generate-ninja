@@ -14,8 +14,8 @@ const char* kSubstitutionNames[SUBSTITUTION_NUM_TYPES] = {
   "{{source}}",  // SUBSTITUTION_SOURCE
   "{{output}}",  // SUBSTITUTION_OUTPUT
 
-  "{{source_name_part}}",  // SUBSTITUTION_NAME_PART
-  "{{source_file_part}}",  // SUBSTITUTION_FILE_PART
+  "{{source_name_part}}",  // SUBSTITUTION_SOURCE_NAME_PART
+  "{{source_file_part}}",  // SUBSTITUTION_SOURCE_FILE_PART
   "{{source_dir}}",  // SUBSTITUTION_SOURCE_DIR
   "{{source_root_relative_dir}}",  // SUBSTITUTION_SOURCE_ROOT_RELATIVE_DIR
   "{{source_gen_dir}}",  // SUBSTITUTION_SOURCE_GEN_DIR
@@ -51,8 +51,8 @@ const char* kSubstitutionNinjaNames[SUBSTITUTION_NUM_TYPES] = {
     "in",   // SUBSTITUTION_SOURCE
     "out",  // SUBSTITUTION_OUTPUT
 
-    "source_name_part",          // SUBSTITUTION_NAME_PART
-    "source_file_part",          // SUBSTITUTION_FILE_PART
+    "source_name_part",          // SUBSTITUTION_SOURCE_NAME_PART
+    "source_file_part",          // SUBSTITUTION_SOURCE_FILE_PART
     "source_dir",                // SUBSTITUTION_SOURCE_DIR
     "source_root_relative_dir",  // SUBSTITUTION_SOURCE_ROOT_RELATIVE_DIR
     "source_gen_dir",            // SUBSTITUTION_SOURCE_GEN_DIR
