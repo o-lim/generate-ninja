@@ -52,8 +52,14 @@ class ActionValues {
   bool is_console() const { return console_; }
   void set_console(bool value) { console_ = value; }
 
+  // Description option
+  bool has_description() const { return !description_.empty(); }
+  const SubstitutionPattern & description() const { return description_; }
+  void set_description(const SubstitutionPattern & desc) { description_ = desc; }
+
  private:
   SubstitutionPattern command_;
+  SubstitutionPattern description_;
   SourceFile script_;
   SubstitutionList args_;
   SubstitutionList outputs_;

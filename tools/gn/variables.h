@@ -203,6 +203,10 @@ extern const char kCommand[];
 extern const char kCommand_HelpShort[];
 extern const char kCommand_Help[];
 
+extern const char kDescription[];
+extern const char kDescription_HelpShort[];
+extern const char kDescription_Help[];
+
 extern const char kScript[];
 extern const char kScript_HelpShort[];
 extern const char kScript_Help[];

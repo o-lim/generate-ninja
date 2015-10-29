@@ -159,7 +159,14 @@ std::string NinjaActionTargetWriter::WriteRuleDefinition() {
     }
     out_ << std::endl;
   }
-  out_ << "  description = ACTION " << target_label << std::endl;
+  out_ << "  description = ";
+  if (target_->action_values().has_description()) {
+    SubstitutionWriter::WriteWithNinjaVariables(
+        target_->action_values().description(), cmd_escape_options, out_);
+    out_ << std::endl;
+  } else {
+    out_ << "ACTION " << target_label << std::endl;
+  }
   out_ << "  restat = 1" << std::endl;
 
   return custom_rule_name;

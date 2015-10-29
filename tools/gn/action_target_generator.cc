@@ -49,6 +49,9 @@ void ActionTargetGenerator::DoRun() {
   if (!FillArgs())
     return;
 
+  if (!FillDescription())
+    return;
+
   if (!FillOutputs(output_type_ == Target::ACTION_FOREACH))
     return;
 

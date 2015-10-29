@@ -1147,6 +1147,15 @@ const char kCommand_Help[] =
     "  The command to run for actions and action_foreach targets (see\"see\n"
     "  gn help action\" and \"gn help action_foreach\").\n";
 
+const char kDescription[] = "description";
+const char kDescription_HelpShort[] =
+    "description: [string with substitutions, optional] Description of the action.";
+const char kDescription_Help[] =
+    "description: Description of the action.\n"
+    "\n"
+    "  What to print when then action is run"
+    "  gn help action\" and \"gn help action_foreach\").\n";
+
 const char kScript[] = "script";
 const char kScript_HelpShort[] =
     "script: [file name] Script file for actions.";
@@ -1314,6 +1323,7 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(PublicDeps)
     INSERT_VARIABLE(Script)
     INSERT_VARIABLE(Command)
+    INSERT_VARIABLE(Description)
     INSERT_VARIABLE(Sources)
     INSERT_VARIABLE(Testonly)
     INSERT_VARIABLE(Visibility)
