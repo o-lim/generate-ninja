@@ -5,7 +5,9 @@
 #ifndef TOOLS_GN_ACTION_TARGET_GENERATOR_H_
 #define TOOLS_GN_ACTION_TARGET_GENERATOR_H_
 
+#include <vector>
 #include "base/macros.h"
+#include "tools/gn/substitution_type.h"
 #include "tools/gn/target.h"
 #include "tools/gn/target_generator.h"
 
@@ -23,10 +25,16 @@ class ActionTargetGenerator : public TargetGenerator {
   void DoRun() override;
 
  private:
+  bool FillCommandOrScript();
+  bool FillCommand();
   bool FillScript();
-  bool FillScriptArgs();
+  bool FillArgs();
   bool FillDepfile();
   bool FillConsole();
+
+  bool ValidateSubstitutionList(const std::vector<SubstitutionType>& list,
+                                const Value* value,
+                                Err* err);
 
   // Checks for errors in the outputs variable.
   bool CheckOutputs();

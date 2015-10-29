@@ -364,6 +364,12 @@ void PrintOutputs(const Target* target, bool display_header) {
   }
 }
 
+void PrintCommand(const Target* target, bool display_header) {
+  if (display_header)
+    OutputString("\ncommand:\n");
+  OutputString("  " + target->action_values().command().AsString() + "\n");
+}
+
 void PrintScript(const Target* target, bool display_header) {
   if (display_header)
     OutputString("\nscript:\n");
@@ -663,6 +669,8 @@ int RunDesc(const std::vector<std::string>& args) {
       PrintTestonly(target, false);
     } else if (what == variables::kInputs) {
       PrintInputs(target, false);
+    } else if (what == variables::kCommand) {
+      PrintCommand(target, false);
     } else if (what == variables::kScript) {
       PrintScript(target, false);
     } else if (what == variables::kArgs) {
@@ -754,6 +762,7 @@ int RunDesc(const std::vector<std::string>& args) {
 
   if (target->output_type() == Target::ACTION ||
       target->output_type() == Target::ACTION_FOREACH) {
+    PrintCommand(target, true);
     PrintScript(target, true);
     PrintArgs(target, true);
     PrintDepfile(target, true);

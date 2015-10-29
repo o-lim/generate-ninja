@@ -9,6 +9,7 @@
 #include "tools/gn/filesystem_utils.h"
 #include "tools/gn/parse_tree.h"
 #include "tools/gn/scope.h"
+#include "tools/gn/substitution_pattern.h"
 #include "tools/gn/value.h"
 #include "tools/gn/value_extractors.h"
 #include "tools/gn/variables.h"
@@ -42,10 +43,10 @@ void ActionTargetGenerator::DoRun() {
   if (!FillInputs())
     return;
 
-  if (!FillScript())
+  if (!FillCommandOrScript())
     return;
 
-  if (!FillScriptArgs())
+  if (!FillArgs())
     return;
 
   if (!FillOutputs(output_type_ == Target::ACTION_FOREACH))
@@ -67,12 +68,60 @@ void ActionTargetGenerator::DoRun() {
   // that dependency.
 }
 
+bool ActionTargetGenerator::FillCommandOrScript() {
+  const bool hasScript = FillScript();
+  const bool hasCommand = FillCommand();
+  if (!err_->has_error()) {
+    if (hasScript && hasCommand) {
+      *err_ = Err(function_call_, "This target type cannot have both a \"command\" and \"script\".");
+      return false;
+    } else if (!hasScript && !hasCommand) {
+      *err_ = Err(function_call_, "This target type requires a \"command\" or \"script\".");
+      return false;
+    }
+  }
+  return true;
+}
+
+bool ActionTargetGenerator::FillCommand() {
+  const Value* value = scope_->GetValue(variables::kCommand, true);
+  if (!value) {
+    return false;
+  }
+  if (!value->VerifyTypeIs(Value::STRING, err_))
+    return false;
+
+  SubstitutionPattern pattern;
+  if (!pattern.Parse(*value, err_))
+    return false;
+  if (!ValidateSubstitutionList(pattern.required_types(), value, err_))
+    return false;
+  if (err_->has_error())
+    return false;
+  target_->action_values().set_command(pattern);
+  return true;
+}
+
+bool ActionTargetGenerator::FillDescription() {
+  const Value* value = scope_->GetValue(variables::kDescription, true);
+  if (!value)
+    return true;
+  if (!value->VerifyTypeIs(Value::STRING, err_))
+    return false;
+  SubstitutionPattern pattern;
+  if (!pattern.Parse(*value, err_))
+    return false;
+  if (!ValidateSubstitutionList(pattern.required_types(), value, err_))
+    return false;
+  if (err_->has_error())
+    return false;
+  target_->action_values().set_description(pattern);
+  return true;
+}
+
 bool ActionTargetGenerator::FillScript() {
-  // If this gets called, the target type requires a script, so error out
-  // if it doesn't have one.
   const Value* value = scope_->GetValue(variables::kScript, true);
   if (!value) {
-    *err_ = Err(function_call_, "This target type requires a \"script\".");
     return false;
   }
   if (!value->VerifyTypeIs(Value::STRING, err_))
@@ -88,7 +137,7 @@ bool ActionTargetGenerator::FillScript() {
   return true;
 }
 
-bool ActionTargetGenerator::FillScriptArgs() {
+bool ActionTargetGenerator::FillArgs() {
   const Value* value = scope_->GetValue(variables::kArgs, true);
   if (!value)
     return true;
@@ -145,6 +194,20 @@ bool ActionTargetGenerator::CheckOutputs() {
           "An action_foreach target should have a source expansion pattern in\n"
           "it to map source file to unique output file name. Otherwise, the\n"
           "build system can't determine when your script needs to be run.");
+      return false;
+    }
+  }
+  return true;
+}
+
+bool ActionTargetGenerator::ValidateSubstitutionList(const std::vector<SubstitutionType>& list,
+                                                     const Value* value,
+                                                     Err* err) {
+  for (const auto& cur_type : list) {
+    if (!IsValidSourceSubstitution(cur_type)) {
+      *err = Err(*value, "Pattern not valid here.",
+          "You used the pattern " + std::string(kSubstitutionNames[cur_type]) +
+          "which is not valid\n for this variable.");
       return false;
     }
   }

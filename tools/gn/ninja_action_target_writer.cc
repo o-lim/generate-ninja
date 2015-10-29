@@ -103,7 +103,9 @@ std::string NinjaActionTargetWriter::WriteRuleDefinition() {
 
   const SubstitutionList& args = target_->action_values().args();
   EscapeOptions args_escape_options;
+  EscapeOptions cmd_escape_options;
   args_escape_options.mode = ESCAPE_NINJA_COMMAND;
+  cmd_escape_options.mode = ESCAPE_NINJA_PREFORMATTED_COMMAND;
 
   if (settings_->IsWin()) {
     // Send through gyp-win-tool and use a response file.
@@ -114,21 +116,24 @@ std::string NinjaActionTargetWriter::WriteRuleDefinition() {
 
     out_ << "rule " << custom_rule_name << std::endl;
     out_ << "  command = ";
-    path_output_.WriteFile(out_, settings_->build_settings()->python_path());
-    // TODO(brettw) this hardcodes "environment.x86" which is something that
-    // the Chrome Windows toolchain writes. We should have a way to invoke
-    // python without requiring this gyp_win_tool thing.
-    out_ << " gyp-win-tool action-wrapper environment.x86 " << rspfile
-         << std::endl;
-    out_ << "  description = ACTION " << target_label << std::endl;
-    out_ << "  restat = 1" << std::endl;
-    out_ << "  rspfile = " << rspfile << std::endl;
+    if (!target_->action_values().script().is_null()) {
+      path_output_.WriteFile(out_, settings_->build_settings()->python_path());
+      // TODO(brettw) this hardcodes "environment.x86" which is something that
+      // the Chrome Windows toolchain writes. We should have a way to invoke
+      // python without requiring this gyp_win_tool thing.
+      out_ << " gyp-win-tool action-wrapper environment.x86 " << rspfile
+          << std::endl;
+      out_ << "  rspfile = " << rspfile << std::endl;
 
-    // The build command goes in the rsp file.
-    out_ << "  rspfile_content = ";
-    path_output_.WriteFile(out_, settings_->build_settings()->python_path());
-    out_ << " ";
-    path_output_.WriteFile(out_, target_->action_values().script());
+      // The build command goes in the rsp file.
+      out_ << "  rspfile_content = ";
+      path_output_.WriteFile(out_, settings_->build_settings()->python_path());
+      out_ << " ";
+      path_output_.WriteFile(out_, target_->action_values().script());
+    } else {
+      SubstitutionWriter::WriteWithNinjaVariables(
+          target_->action_values().command(), cmd_escape_options, out_);
+    }
     for (const auto& arg : args.list()) {
       out_ << " ";
       SubstitutionWriter::WriteWithNinjaVariables(
@@ -139,18 +144,23 @@ std::string NinjaActionTargetWriter::WriteRuleDefinition() {
     // Posix can execute Python directly.
     out_ << "rule " << custom_rule_name << std::endl;
     out_ << "  command = ";
-    path_output_.WriteFile(out_, settings_->build_settings()->python_path());
-    out_ << " ";
-    path_output_.WriteFile(out_, target_->action_values().script());
+    if (!target_->action_values().script().is_null()) {
+      path_output_.WriteFile(out_, settings_->build_settings()->python_path());
+      out_ << " ";
+      path_output_.WriteFile(out_, target_->action_values().script());
+    } else {
+      SubstitutionWriter::WriteWithNinjaVariables(
+          target_->action_values().command(), cmd_escape_options, out_);
+    }
     for (const auto& arg : args.list()) {
       out_ << " ";
       SubstitutionWriter::WriteWithNinjaVariables(
           arg, args_escape_options, out_);
     }
     out_ << std::endl;
-    out_ << "  description = ACTION " << target_label << std::endl;
-    out_ << "  restat = 1" << std::endl;
   }
+  out_ << "  description = ACTION " << target_label << std::endl;
+  out_ << "  restat = 1" << std::endl;
 
   return custom_rule_name;
 }

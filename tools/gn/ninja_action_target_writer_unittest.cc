@@ -179,10 +179,10 @@ TEST(NinjaActionTargetWriter, ActionWithSources) {
     const char expected_win[] =
         "rule __foo_bar___rule\n"
         "  command = C$:/python/python.exe gyp-win-tool action-wrapper environment.x86 __foo_bar___rule.$unique_name.rsp\n"
-        "  description = ACTION //foo:bar()\n"
-        "  restat = 1\n"
         "  rspfile = __foo_bar___rule.$unique_name.rsp\n"
         "  rspfile_content = C$:/python/python.exe ../../foo/script.py\n"
+        "  description = ACTION //foo:bar()\n"
+        "  restat = 1\n"
         "build obj/foo/bar.inputdeps.stamp: stamp ../../foo/script.py "
             "../../foo/included.txt ../../foo/source.txt\n"
         "\n"
@@ -292,8 +292,6 @@ TEST(NinjaActionTargetWriter, ForEach) {
         "rule __foo_bar___rule\n"
         "  command = C$:/python/python.exe gyp-win-tool action-wrapper "
             "environment.x86 __foo_bar___rule.$unique_name.rsp\n"
-        "  description = ACTION //foo:bar()\n"
-        "  restat = 1\n"
         "  rspfile = __foo_bar___rule.$unique_name.rsp\n"
         "  rspfile_content = C$:/python/python.exe ../../foo/script.py -i "
 #if defined(OS_WIN)
@@ -301,6 +299,8 @@ TEST(NinjaActionTargetWriter, ForEach) {
 #else
             "${in} --out=foo\\$ bar${source_name_part}.o\n"
 #endif
+        "  description = ACTION //foo:bar()\n"
+        "  restat = 1\n"
         "build obj/foo/bar.inputdeps.stamp: stamp ../../foo/script.py "
             "../../foo/included.txt obj/foo/dep.stamp\n"
         "\n"
@@ -399,8 +399,6 @@ TEST(NinjaActionTargetWriter, ForEachWithDepfile) {
         "rule __foo_bar___rule\n"
         "  command = C$:/python/python.exe gyp-win-tool action-wrapper "
             "environment.x86 __foo_bar___rule.$unique_name.rsp\n"
-        "  description = ACTION //foo:bar()\n"
-        "  restat = 1\n"
         "  rspfile = __foo_bar___rule.$unique_name.rsp\n"
         "  rspfile_content = C$:/python/python.exe ../../foo/script.py -i "
 #if defined(OS_WIN)
@@ -408,6 +406,8 @@ TEST(NinjaActionTargetWriter, ForEachWithDepfile) {
 #else
             "${in} --out=foo\\$ bar${source_name_part}.o\n"
 #endif
+        "  description = ACTION //foo:bar()\n"
+        "  restat = 1\n"
         "build obj/foo/bar.inputdeps.stamp: stamp ../../foo/script.py "
             "../../foo/included.txt\n"
         "\n"

@@ -157,8 +157,9 @@ OutputFile NinjaTargetWriter::WriteInputDepsStampAndGetDep(
 
   // Actions get implicit dependencies on the script itself.
   bool add_script_source_as_dep =
-      (target_->output_type() == Target::ACTION) ||
-      (target_->output_type() == Target::ACTION_FOREACH);
+      ((target_->output_type() == Target::ACTION) ||
+       (target_->output_type() == Target::ACTION_FOREACH)) &&
+      (!target_->action_values().script().is_null());
 
   if (!add_script_source_as_dep &&
       extra_hard_deps.empty() &&

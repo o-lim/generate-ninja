@@ -10,6 +10,7 @@
 
 #include "base/macros.h"
 #include "tools/gn/source_file.h"
+#include "tools/gn/substitution_pattern.h"
 #include "tools/gn/substitution_list.h"
 
 class Target;
@@ -20,6 +21,10 @@ class ActionValues {
  public:
   ActionValues();
   ~ActionValues();
+
+  // Filename of the script to execute.
+  const SubstitutionPattern& command() const { return command_; }
+  void set_command(const SubstitutionPattern & cmd) { command_ = cmd; }
 
   // Filename of the script to execute.
   const SourceFile& script() const { return script_; }
@@ -48,6 +53,7 @@ class ActionValues {
   void set_console(bool value) { console_ = value; }
 
  private:
+  SubstitutionPattern command_;
   SourceFile script_;
   SubstitutionList args_;
   SubstitutionList outputs_;
