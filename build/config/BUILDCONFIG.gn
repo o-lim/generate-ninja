@@ -123,7 +123,7 @@ declare_args() {
   # Set to true when compiling with the Clang compiler. Typically this is used
   # to configure warnings.
   is_clang = current_os == "mac" || current_os == "ios" ||
-             current_os == "linux" || current_os == "chromeos"
+             current_os == "chromeos"
 
   if (current_os == "chromeos") {
     # Allows the target toolchain to be injected as arguments. This is needed

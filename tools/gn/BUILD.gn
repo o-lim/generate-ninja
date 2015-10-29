@@ -199,9 +199,16 @@ action("last_commit_position") {
   script = "last_commit_position.py"
 
   # This dependency forces a re-run when the code is synced.
+  head = exec_script("//build/util/githead.py",
+                     [ rebase_path("//.git/HEAD") ],
+                     "trim string",
+                     ["//.git/HEAD"])
   inputs = [
-    "//build/util/LASTCHANGE",
+    "//.git/HEAD",
   ]
+  if (head != "") {
+    inputs += [ "//.git/$head" ]
+  }
 
   outfile = "$target_gen_dir/last_commit_position.h"
   outputs = [
