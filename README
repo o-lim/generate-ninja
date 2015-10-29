@@ -1,0 +1,28 @@
+Original source code imported from chromium
+
+  url = https://chromium.googlesource.com/chromium/src.git
+
+with the following files/directories exported directly via git archive:
+
+  .gn
+  BUILD.gn
+  LICENSE
+  LICENSE.chromium_os
+  base
+  build
+  tools/gn
+  testing/test.gni
+  testing/perf
+  testing/*.h
+  testing/*.cc
+  testing/*.mm
+  third_party/libevent
+  third_party/libxml
+  third_party/modp_b64
+  third_party/zlib
+
+and the following git submodules exported into their respective directories:
+
+  testing/gmock
+  testing/gtest
+  third_party/icu
