@@ -344,6 +344,9 @@ std::string SubstitutionWriter::GetSourceSubstitution(
     case SUBSTITUTION_SOURCE_FILE_PART:
       return source.GetName();
 
+    case SUBSTITUTION_SOURCE_EXTENSION:
+      return FindExtension(&source.value()).as_string();
+
     case SUBSTITUTION_SOURCE_DIR:
       if (source.is_system_absolute())
         return DirectoryWithNoLastSlash(source.GetDir());

@@ -20,6 +20,7 @@ const char* kSubstitutionNames[SUBSTITUTION_NUM_TYPES] = {
   "{{source_root_relative_dir}}",  // SUBSTITUTION_SOURCE_ROOT_RELATIVE_DIR
   "{{source_gen_dir}}",  // SUBSTITUTION_SOURCE_GEN_DIR
   "{{source_out_dir}}",  // SUBSTITUTION_SOURCE_OUT_DIR
+  "{{source_extension}}",  // SUBSTITUTION_SOURCE_EXTENSION
 
   "{{label}}",  // SUBSTITUTION_LABEL
   "{{root_gen_dir}}",  // SUBSTITUTION_ROOT_GEN_DIR
@@ -57,6 +58,7 @@ const char* kSubstitutionNinjaNames[SUBSTITUTION_NUM_TYPES] = {
     "source_root_relative_dir",  // SUBSTITUTION_SOURCE_ROOT_RELATIVE_DIR
     "source_gen_dir",            // SUBSTITUTION_SOURCE_GEN_DIR
     "source_out_dir",            // SUBSTITUTION_SOURCE_OUT_DIR
+    "source_extension",          // SUBSTITUTION_SOURCE_EXTENSION
 
     "label",               // SUBSTITUTION_LABEL
     "root_gen_dir",        // SUBSTITUTION_ROOT_GEN_DIR
@@ -117,7 +119,8 @@ bool IsValidSourceSubstitution(SubstitutionType type) {
          type == SUBSTITUTION_SOURCE_DIR ||
          type == SUBSTITUTION_SOURCE_ROOT_RELATIVE_DIR ||
          type == SUBSTITUTION_SOURCE_GEN_DIR ||
-         type == SUBSTITUTION_SOURCE_OUT_DIR;
+         type == SUBSTITUTION_SOURCE_OUT_DIR ||
+         type == SUBSTITUTION_SOURCE_EXTENSION;
 }
 
 bool IsValidToolSubstutition(SubstitutionType type) {
