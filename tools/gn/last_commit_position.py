@@ -22,6 +22,7 @@ import os
 import re
 import subprocess
 import sys
+from optparse import OptionParser
 
 def RunGitCommand(directory, command):
   """
@@ -84,16 +85,32 @@ def WriteHeader(header_file, header_guard, value):
 #endif
 ''' % {'guard': header_guard, 'value': value})
 
+parser = OptionParser()
+parser.add_option('--git-dir', action='store', dest='git_directory', type='string')
+parser.add_option('--outfile', action='store', dest='outfile', type='string')
+parser.add_option('--version', action='store', dest='version', type='string')
+parser.add_option('--header-guard', action='store', dest='header_guard', type='string')
+(options, args) = parser.parse_args()
 
-if len(sys.argv) != 4:
-  print "Wrong number of arguments"
+if options.outfile == None:
+  print "Missing option '--outfile'"
+  sys.exit(1)
+if options.header_guard == None:
+  print "Missing option '--header-guard'"
+  sys.exit(1)
+if options.git_directory == None and options.version == None:
+  print "Must specify '--git-dir' or '--version' option"
   sys.exit(1)
 
-git_directory = sys.argv[1]
-output_file = sys.argv[2]
-header_guard = sys.argv[3]
+git_directory = options.git_directory
+version = options.version
+output_file = options.outfile
+header_guard = options.header_guard
 
-value = FetchCommitPosition(git_directory)
+if git_directory:
+  value = FetchCommitPosition(git_directory)
+else:
+  value = version
 if not value:
   print "Could not get last commit position."
   sys.exit(1)

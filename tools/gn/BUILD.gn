@@ -198,16 +198,27 @@ static_library("gn_lib") {
 action("last_commit_position") {
   script = "last_commit_position.py"
 
-  # This dependency forces a re-run when the code is synced.
-  head = exec_script("//build/util/githead.py",
-                     [ rebase_path("//.git/HEAD") ],
-                     "trim string",
-                     ["//.git/HEAD"])
-  inputs = [
-    "//.git/HEAD",
-  ]
-  if (head != "") {
-    inputs += [ "//.git/$head" ]
+  version = getenv("GN_VERSION")
+  if (version == "") {
+
+    head = exec_script("//build/util/githead.py",
+                       [ rebase_path("//.git/HEAD") ],
+                       "trim string",
+                       ["//.git/HEAD"])
+    # This dependency forces a re-run when the code is synced.
+    inputs = [
+      "//.git/HEAD",
+    ]
+    if (head != "") {
+      inputs += [ "//.git/$head" ]
+    }
+    args = [
+      "--git-dir", rebase_path("//", root_build_dir),
+    ]
+  } else {
+    args = [
+      "--version", version,
+    ]
   }
 
   outfile = "$target_gen_dir/last_commit_position.h"
@@ -215,10 +226,9 @@ action("last_commit_position") {
     outfile,
   ]
 
-  args = [
-    rebase_path("//", root_build_dir),
-    rebase_path(outfile, root_build_dir),
-    "TOOLS_GN_LAST_COMMIT_POSITION_H_",
+  args += [
+    "--outfile", rebase_path(outfile, root_build_dir),
+    "--header-guard", "TOOLS_GN_LAST_COMMIT_POSITION_H_",
   ]
 }
 
