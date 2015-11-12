@@ -9,9 +9,11 @@
 
 SourceFileType GetSourceFileType(const SourceFile& file) {
   base::StringPiece extension = FindExtension(&file.value());
-  if (extension == "cc" || extension == "cpp" || extension == "cxx")
+  if (extension == "cc" || extension == "cpp" || extension == "cxx" ||
+      extension == "c++" || extension == "C")
     return SOURCE_CPP;
-  if (extension == "h")
+  if (extension == "h" || extension == "hpp" || extension == "hxx" ||
+      extension == "hh" || extension == "h++" || extension == "H")
     return SOURCE_H;
   if (extension == "c")
     return SOURCE_C;
@@ -21,8 +23,10 @@ SourceFileType GetSourceFileType(const SourceFile& file) {
     return SOURCE_MM;
   if (extension == "rc")
     return SOURCE_RC;
-  if (extension == "S" || extension == "s" || extension == "asm")
+  if (extension == "S" || extension == "s")
     return SOURCE_S;
+  if (extension == "asm")
+    return SOURCE_ASM;
   if (extension == "o" || extension == "obj")
     return SOURCE_O;
   if (extension == "def")
