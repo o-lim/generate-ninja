@@ -35,6 +35,11 @@ const char* kSubstitutionNames[SUBSTITUTION_NUM_TYPES] = {
   "{{cflags_cc}}",  // SUBSTITUTION_CFLAGS_CC
   "{{cflags_objc}}",  // SUBSTITUTION_CFLAGS_OBJC
   "{{cflags_objcc}}",  // SUBSTITUTION_CFLAGS_OBJCC
+  "{{cppflags}}",  // SUBSTITUTION_CPPFLAGS
+  "{{cppflags_c}}",  // SUBSTITUTION_CPPFLAGS_C
+  "{{cppflags_cc}}",  // SUBSTITUTION_CPPFLAGS_CC
+  "{{cppflags_objc}}",  // SUBSTITUTION_CPPFLAGS_OBJC
+  "{{cppflags_objcc}}",  // SUBSTITUTION_CPPFLAGS_OBJCC
   "{{defines}}",  // SUBSTITUTION_DEFINES
   "{{include_dirs}}",  // SUBSTITUTION_INCLUDE_DIRS
 
@@ -73,6 +78,11 @@ const char* kSubstitutionNinjaNames[SUBSTITUTION_NUM_TYPES] = {
     "cflags_cc",     // SUBSTITUTION_CFLAGS_CC
     "cflags_objc",   // SUBSTITUTION_CFLAGS_OBJC
     "cflags_objcc",  // SUBSTITUTION_CFLAGS_OBJCC
+    "cppflags",        // SUBSTITUTION_CPPFLAGS
+    "cppflags_c",      // SUBSTITUTION_CPPFLAGS_C
+    "cppflags_cc",     // SUBSTITUTION_CPPFLAGS_CC
+    "cppflags_objc",   // SUBSTITUTION_CPPFLAGS_OBJC
+    "cppflags_objcc",  // SUBSTITUTION_CPPFLAGS_OBJCC
     "defines",       // SUBSTITUTION_DEFINES
     "include_dirs",  // SUBSTITUTION_INCLUDE_DIRS
 
@@ -144,6 +154,11 @@ bool IsValidCompilerSubstitution(SubstitutionType type) {
          type == SUBSTITUTION_CFLAGS_CC ||
          type == SUBSTITUTION_CFLAGS_OBJC ||
          type == SUBSTITUTION_CFLAGS_OBJCC ||
+         type == SUBSTITUTION_CPPFLAGS ||
+         type == SUBSTITUTION_CPPFLAGS_C ||
+         type == SUBSTITUTION_CPPFLAGS_CC ||
+         type == SUBSTITUTION_CPPFLAGS_OBJC ||
+         type == SUBSTITUTION_CPPFLAGS_OBJCC ||
          type == SUBSTITUTION_DEFINES ||
          type == SUBSTITUTION_INCLUDE_DIRS;
 }

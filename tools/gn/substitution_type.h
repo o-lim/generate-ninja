@@ -48,6 +48,11 @@ enum SubstitutionType {
   SUBSTITUTION_CFLAGS_CC,  // {{cflags_cc}}
   SUBSTITUTION_CFLAGS_OBJC,  // {{cflags_objc}}
   SUBSTITUTION_CFLAGS_OBJCC,  // {{cflags_objcc}}
+  SUBSTITUTION_CPPFLAGS,  // {{cppflags}}
+  SUBSTITUTION_CPPFLAGS_C,  // {{cppflags_c}}
+  SUBSTITUTION_CPPFLAGS_CC,  // {{cppflags_cc}}
+  SUBSTITUTION_CPPFLAGS_OBJC,  // {{cppflags_objc}}
+  SUBSTITUTION_CPPFLAGS_OBJCC,  // {{cppflags_objcc}}
   SUBSTITUTION_DEFINES,  // {{defines}}
   SUBSTITUTION_INCLUDE_DIRS,  // {{include_dirs}}
 

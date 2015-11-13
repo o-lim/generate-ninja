@@ -545,15 +545,20 @@ const char kDesc_Help[] =
     "  outputs\n"
     "      Outputs for script and copy target types.\n"
     "\n"
-    "  asmflags      [--blame]\n"
-    "  defines       [--blame]\n"
-    "  include_dirs  [--blame]\n"
-    "  cflags        [--blame]\n"
-    "  cflags_c      [--blame]\n"
-    "  cflags_cc     [--blame]\n"
-    "  cflags_objc   [--blame]\n"
-    "  cflags_objcc  [--blame]\n"
-    "  ldflags       [--blame]\n"
+    "  asmflags        [--blame]\n"
+    "  defines         [--blame]\n"
+    "  include_dirs    [--blame]\n"
+    "  cflags          [--blame]\n"
+    "  cflags_c        [--blame]\n"
+    "  cflags_cc       [--blame]\n"
+    "  cflags_objc     [--blame]\n"
+    "  cflags_objcc    [--blame]\n"
+    "  cppflags        [--blame]\n"
+    "  cppflags_c      [--blame]\n"
+    "  cppflags_cc     [--blame]\n"
+    "  cppflags_objc   [--blame]\n"
+    "  cppflags_objcc  [--blame]\n"
+    "  ldflags         [--blame]\n"
     "  lib_dirs\n"
     "  libs\n"
     "      Shows the given values taken from the target and all configs\n"
@@ -699,6 +704,11 @@ int RunDesc(const std::vector<std::string>& args) {
     CONFIG_VALUE_HANDLER(cflags_cc, std::string)
     CONFIG_VALUE_HANDLER(cflags_objc, std::string)
     CONFIG_VALUE_HANDLER(cflags_objcc, std::string)
+    CONFIG_VALUE_HANDLER(cppflags, std::string)
+    CONFIG_VALUE_HANDLER(cppflags_c, std::string)
+    CONFIG_VALUE_HANDLER(cppflags_cc, std::string)
+    CONFIG_VALUE_HANDLER(cppflags_objc, std::string)
+    CONFIG_VALUE_HANDLER(cppflags_objcc, std::string)
     CONFIG_VALUE_HANDLER(ldflags, std::string)
 
     } else {
@@ -760,6 +770,11 @@ int RunDesc(const std::vector<std::string>& args) {
     OUTPUT_CONFIG_VALUE(cflags_cc, std::string)
     OUTPUT_CONFIG_VALUE(cflags_objc, std::string)
     OUTPUT_CONFIG_VALUE(cflags_objcc, std::string)
+    OUTPUT_CONFIG_VALUE(cppflags, std::string)
+    OUTPUT_CONFIG_VALUE(cppflags_c, std::string)
+    OUTPUT_CONFIG_VALUE(cppflags_cc, std::string)
+    OUTPUT_CONFIG_VALUE(cppflags_objc, std::string)
+    OUTPUT_CONFIG_VALUE(cppflags_objcc, std::string)
     OUTPUT_CONFIG_VALUE(ldflags, std::string)
   }
 

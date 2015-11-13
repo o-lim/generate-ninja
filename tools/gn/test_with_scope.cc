@@ -42,7 +42,7 @@ void TestWithScope::SetupToolchain(Toolchain* toolchain) {
   // CC
   scoped_ptr<Tool> cc_tool(new Tool);
   SetCommandForTool(
-      "cc {{source}} {{cflags}} {{cflags_c}} {{defines}} {{include_dirs}} "
+      "cc {{source}} {{cflags}} {{cflags_c}} {{cppflags}} {{cppflags_c}} {{defines}} {{include_dirs}} "
       "-o {{output}}",
       cc_tool.get());
   cc_tool->set_outputs(SubstitutionList::MakeForTest(
@@ -52,7 +52,7 @@ void TestWithScope::SetupToolchain(Toolchain* toolchain) {
   // CXX
   scoped_ptr<Tool> cxx_tool(new Tool);
   SetCommandForTool(
-      "c++ {{source}} {{cflags}} {{cflags_cc}} {{defines}} {{include_dirs}} "
+      "c++ {{source}} {{cflags}} {{cflags_cc}} {{cppflags}} {{cppflags_cc}} {{defines}} {{include_dirs}} "
       "-o {{output}}",
       cxx_tool.get());
   cxx_tool->set_outputs(SubstitutionList::MakeForTest(
@@ -62,7 +62,7 @@ void TestWithScope::SetupToolchain(Toolchain* toolchain) {
   // OBJC
   scoped_ptr<Tool> objc_tool(new Tool);
   SetCommandForTool(
-      "objcc {{source}} {{cflags}} {{cflags_objc}} {{defines}} "
+      "objcc {{source}} {{cflags}} {{cflags_objc}} {{cppflags}} {{cppflags_objc}} {{defines}} "
       "{{include_dirs}} -o {{output}}",
       objc_tool.get());
   objc_tool->set_outputs(SubstitutionList::MakeForTest(
@@ -72,7 +72,7 @@ void TestWithScope::SetupToolchain(Toolchain* toolchain) {
   // OBJC
   scoped_ptr<Tool> objcxx_tool(new Tool);
   SetCommandForTool(
-      "objcxx {{source}} {{cflags}} {{cflags_objcc}} {{defines}} "
+      "objcxx {{source}} {{cflags}} {{cflags_objcc}} {{cppflags}} {{cppflags_objcc}} {{defines}} "
       "{{include_dirs}} -o {{output}}",
       objcxx_tool.get());
   objcxx_tool->set_outputs(SubstitutionList::MakeForTest(

@@ -442,6 +442,46 @@ const char kCflagsObjCC_HelpShort[] =
     "cflags_objcc: [string list] Flags passed to the Objective C++ compiler.";
 const char* kCflagsObjCC_Help = kCommonCflagsHelp;
 
+const char kCppflags[] = "cppflags";
+const char kCppflags_HelpShort[] =
+    "cppflags: [string list] Flags passed to all pre-processor variants.";
+const char kCommonCppflagsHelp[] =
+    "cppflags*: Flags passed to the pre-processor.\n"
+    "\n"
+    "  A list of strings.\n"
+    "\n"
+    "  \"cppflags\" are passed to all invocations of the C, C++, Objective C,\n"
+    "  and Objective C++ compilers.\n"
+    "\n"
+    "  To target one of these variants individually, use \"cppflags_c\",\n"
+    "  \"cppflags_cc\", \"cppflags_objc\", and \"cppflags_objcc\",\n"
+    "  respectively.\n"
+    "\n"
+    "  These variant-specific versions of cppflags* will be appended to the\n"
+    "  \"cppflags\".\n"
+    COMMON_ORDERING_HELP;
+const char* kCppflags_Help = kCommonCppflagsHelp;
+
+const char kCppflagsC[] = "cppflags_c";
+const char kCppflagsC_HelpShort[] =
+    "cppflags_c: [string list] Flags passed to the C pre-processor.";
+const char* kCppflagsC_Help = kCommonCppflagsHelp;
+
+const char kCppflagsCC[] = "cppflags_cc";
+const char kCppflagsCC_HelpShort[] =
+    "cppflags_cc: [string list] Flags passed to the C++ pre-processor.";
+const char* kCppflagsCC_Help = kCommonCppflagsHelp;
+
+const char kCppflagsObjC[] = "cppflags_objc";
+const char kCppflagsObjC_HelpShort[] =
+    "cppflags_objc: [string list] Flags passed to the Objective C pre-processor.";
+const char* kCppflagsObjC_Help = kCommonCppflagsHelp;
+
+const char kCppflagsObjCC[] = "cppflags_objcc";
+const char kCppflagsObjCC_HelpShort[] =
+    "cppflags_objcc: [string list] Flags passed to the Objective C++ pre-processor.";
+const char* kCppflagsObjCC_Help = kCommonCppflagsHelp;
+
 const char kCheckIncludes[] = "check_includes";
 const char kCheckIncludes_HelpShort[] =
     "check_includes: [boolean] Controls whether a target's files are checked.";
@@ -1298,6 +1338,11 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(CflagsCC)
     INSERT_VARIABLE(CflagsObjC)
     INSERT_VARIABLE(CflagsObjCC)
+    INSERT_VARIABLE(Cppflags)
+    INSERT_VARIABLE(CppflagsC)
+    INSERT_VARIABLE(CppflagsCC)
+    INSERT_VARIABLE(CppflagsObjC)
+    INSERT_VARIABLE(CppflagsObjCC)
     INSERT_VARIABLE(CheckIncludes)
     INSERT_VARIABLE(CompleteStaticLib)
     INSERT_VARIABLE(Configs)

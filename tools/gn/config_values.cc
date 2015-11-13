@@ -23,16 +23,21 @@ ConfigValues::~ConfigValues() {
 }
 
 void ConfigValues::AppendValues(const ConfigValues& append) {
-  VectorAppend(&cflags_,       append.cflags_);
-  VectorAppend(&cflags_c_,     append.cflags_c_);
-  VectorAppend(&cflags_cc_,    append.cflags_cc_);
-  VectorAppend(&cflags_objc_,  append.cflags_objc_);
-  VectorAppend(&cflags_objcc_, append.cflags_objcc_);
-  VectorAppend(&defines_,      append.defines_);
-  VectorAppend(&include_dirs_, append.include_dirs_);
-  VectorAppend(&ldflags_,      append.ldflags_);
-  VectorAppend(&lib_dirs_,     append.lib_dirs_);
-  VectorAppend(&libs_,         append.libs_);
+  VectorAppend(&cflags_,         append.cflags_);
+  VectorAppend(&cflags_c_,       append.cflags_c_);
+  VectorAppend(&cflags_cc_,      append.cflags_cc_);
+  VectorAppend(&cflags_objc_,    append.cflags_objc_);
+  VectorAppend(&cflags_objcc_,   append.cflags_objcc_);
+  VectorAppend(&cppflags_,       append.cppflags_);
+  VectorAppend(&cppflags_c_,     append.cppflags_c_);
+  VectorAppend(&cppflags_cc_,    append.cppflags_cc_);
+  VectorAppend(&cppflags_objc_,  append.cppflags_objc_);
+  VectorAppend(&cppflags_objcc_, append.cppflags_objcc_);
+  VectorAppend(&defines_,        append.defines_);
+  VectorAppend(&include_dirs_,   append.include_dirs_);
+  VectorAppend(&ldflags_,        append.ldflags_);
+  VectorAppend(&lib_dirs_,       append.lib_dirs_);
+  VectorAppend(&libs_,           append.libs_);
 
   // Only append precompiled header if there isn't one. It might be nice to
   // throw an error if there are conflicting precompiled headers, but that

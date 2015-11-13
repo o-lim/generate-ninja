@@ -427,23 +427,33 @@ void NinjaBinaryTargetWriter::WriteCompilerVars(
       used_types.Get(SOURCE_S) || used_types.Get(SOURCE_ASM)) {
     WriteOneFlag(SUBSTITUTION_CFLAGS, false, Toolchain::TYPE_NONE,
                  &ConfigValues::cflags, opts);
+    WriteOneFlag(SUBSTITUTION_CPPFLAGS, false, Toolchain::TYPE_NONE,
+                 &ConfigValues::cppflags, opts);
   }
   if (used_types.Get(SOURCE_C) || used_types.Get(SOURCE_S) ||
       used_types.Get(SOURCE_ASM)) {
     WriteOneFlag(SUBSTITUTION_CFLAGS_C, has_precompiled_headers,
                  Toolchain::TYPE_CC, &ConfigValues::cflags_c, opts);
+    WriteOneFlag(SUBSTITUTION_CPPFLAGS_C, has_precompiled_headers,
+                 Toolchain::TYPE_CC, &ConfigValues::cppflags_c, opts);
   }
   if (used_types.Get(SOURCE_CPP)) {
     WriteOneFlag(SUBSTITUTION_CFLAGS_CC, has_precompiled_headers,
                  Toolchain::TYPE_CXX, &ConfigValues::cflags_cc, opts);
+    WriteOneFlag(SUBSTITUTION_CPPFLAGS_CC, has_precompiled_headers,
+                 Toolchain::TYPE_CXX, &ConfigValues::cppflags_cc, opts);
   }
   if (used_types.Get(SOURCE_M)) {
     WriteOneFlag(SUBSTITUTION_CFLAGS_OBJC, has_precompiled_headers,
                  Toolchain::TYPE_OBJC, &ConfigValues::cflags_objc, opts);
+    WriteOneFlag(SUBSTITUTION_CPPFLAGS_OBJC, has_precompiled_headers,
+                 Toolchain::TYPE_OBJC, &ConfigValues::cppflags_objc, opts);
   }
   if (used_types.Get(SOURCE_MM)) {
     WriteOneFlag(SUBSTITUTION_CFLAGS_OBJCC, has_precompiled_headers,
                  Toolchain::TYPE_OBJCXX, &ConfigValues::cflags_objcc, opts);
+    WriteOneFlag(SUBSTITUTION_CPPFLAGS_OBJCC, has_precompiled_headers,
+                 Toolchain::TYPE_OBJCXX, &ConfigValues::cppflags_objcc, opts);
   }
 
   WriteSharedVars(subst);

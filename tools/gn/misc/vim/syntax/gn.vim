@@ -43,6 +43,8 @@ hi def link     gnFunctions         Macro
 syn keyword     gnVariable all_dependent_configs allow_circular_includes_from
 syn keyword     gnVariable args asmflags cflags cflags_c cflags_cc cflags_objc
 syn keyword     gnVariable cflags_objcc check_includes complete_static_lib
+syn keyword     gnVariable cppflags cppflags_c cppflags_cc cppflags_objc
+syn keyword     gnVariable cppflags_objcc
 syn keyword     gnVariable configs data data_deps defines depfile deps
 syn keyword     gnVariable forward_dependent_configs_from include_dirs inputs
 syn keyword     gnVariable ldflags lib_dirs libs output_extension output_name
