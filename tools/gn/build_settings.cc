@@ -25,6 +25,12 @@ BuildSettings::BuildSettings(const BuildSettings& other)
 BuildSettings::~BuildSettings() {
 }
 
+void BuildSettings::SetDotFilePath(const base::FilePath& d) {
+  DCHECK(d.value()[d.value().size() - 1] != base::FilePath::kSeparators[0]);
+  dotfile_path_ = d.NormalizePathSeparatorsTo('/');
+  dotfile_path_utf8_ = FilePathToUTF8(dotfile_path_);
+}
+
 void BuildSettings::SetRootPath(const base::FilePath& r) {
   DCHECK(r.value()[r.value().size() - 1] != base::FilePath::kSeparators[0]);
   root_path_ = r.NormalizePathSeparatorsTo('/');

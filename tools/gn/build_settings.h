@@ -30,6 +30,10 @@ class BuildSettings {
   BuildSettings(const BuildSettings& other);
   ~BuildSettings();
 
+  const base::FilePath& dotfile_path() const { return dotfile_path_; }
+  const std::string& dotfile_path_utf8() const { return dotfile_path_utf8_; }
+  void SetDotFilePath(const base::FilePath& d);
+
   // Absolute path of the source root on the local system. Everything is
   // relative to this. Does not end in a [back]slash.
   const base::FilePath& root_path() const { return root_path_; }
@@ -107,6 +111,8 @@ class BuildSettings {
   }
 
  private:
+  base::FilePath dotfile_path_;
+  std::string dotfile_path_utf8_;
   base::FilePath root_path_;
   std::string root_path_utf8_;
   base::FilePath secondary_source_path_;

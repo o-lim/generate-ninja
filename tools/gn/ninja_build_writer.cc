@@ -206,6 +206,7 @@ void NinjaBuildWriter::WriteNinjaRules() {
   // missing files are ignored.
   dep_out_ << "build.ninja:";
   std::vector<base::FilePath> input_files;
+  input_files.push_back(build_settings_->dotfile_path());
   g_scheduler->input_file_manager()->GetAllPhysicalInputFileNames(&input_files);
   for (const auto& input_file : input_files)
     dep_out_ << " " << FilePathToUTF8(input_file);
