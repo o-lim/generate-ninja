@@ -56,6 +56,28 @@ bool ReadString(Scope* scope,
   return true;
 }
 
+// Reads the given string list from the scope (if present) and puts the result
+// into dest. If the value is not a string list, sets the error and returns
+// false.
+bool ReadStringList(Scope* scope,
+                const char* var,
+                Tool* tool,
+                void (Tool::*set)(const std::vector<Value>&),
+                Err* err) {
+  const Value* v = scope->GetValue(var, true);
+  if (!v)
+    return true;  // Not present is fine.
+  if (!v->VerifyTypeIs(Value::LIST, err))
+    return false;
+  for (const Value s : v->list_value()) {
+    if (!s.VerifyTypeIs(Value::STRING, err))
+      return false;
+  }
+
+  (tool->*set)(v->list_value());
+  return true;
+}
+
 // Calls the given validate function on each type in the list. On failure,
 // sets the error, blame the value, and return false.
 bool ValidateSubstitutionList(const std::vector<SubstitutionType>& list,
@@ -582,6 +604,19 @@ const char kTool_Help[] =
     "            rspfile_content = \"{{inputs}} {{solibs}} {{libs}}\"\n"
     "          }\n"
     "\n"
+    "    source_extensions  [list of strings]\n"
+    "        Valid for: compiler tools (optional)\n"
+    "\n"
+    "        Specifies the source file extensions for which the tool applies.\n"
+    "\n"
+    "        Defaults for each tool:\n"
+    "           cc: [ \"c\" ]\n"
+    "           cxx: [ \"cc\", \"cpp\", \"cxx\", \"c++\", \"C\" ]\n"
+    "           objc: [ \"m\" ]\n"
+    "           objcxx: [ \"mm\" ]\n"
+    "           asm: [ \"asm\", \"S\", \"s\" ]\n"
+    "           rc: [ \"rc\" ]\n"
+    "\n"
     "Expansions for tool variables\n"
     "\n"
     "  All paths are relative to the root build directory, which is the\n"
@@ -832,7 +867,9 @@ Value RunTool(Scope* scope,
       !ReadPattern(&block_scope, "rspfile", subst_validator, tool.get(),
                    &Tool::set_rspfile, err) ||
       !ReadPattern(&block_scope, "rspfile_content", subst_validator, tool.get(),
-                   &Tool::set_rspfile_content, err)) {
+                   &Tool::set_rspfile_content, err) ||
+      !ReadStringList(&block_scope, "source_extensions", tool.get(),
+                   &Tool::set_source_extensions, err)) {
     return Value();
   }
 

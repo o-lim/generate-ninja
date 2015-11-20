@@ -26,6 +26,12 @@ TEST(NinjaBinaryTargetWriter, SourceSet) {
   // dependents to link.
   target.sources().push_back(SourceFile("//foo/input3.o"));
   target.sources().push_back(SourceFile("//foo/input4.obj"));
+  // Also test custom asm file extensions
+  target.sources().push_back(SourceFile("//foo/input5.asm"));
+  target.sources().push_back(SourceFile("//foo/input6.s"));
+  target.sources().push_back(SourceFile("//foo/input7.arm"));
+  // Also test unspecified asm file extension, which should be ignored.
+  target.sources().push_back(SourceFile("//foo/input8.S"));
   target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
@@ -38,8 +44,11 @@ TEST(NinjaBinaryTargetWriter, SourceSet) {
     const char expected[] =
         "defines =\n"
         "include_dirs =\n"
+        "asmflags =\n"
         "cflags =\n"
         "cppflags =\n"
+        "cflags_c =\n"
+        "cppflags_c =\n"
         "cflags_cc =\n"
         "cppflags_cc =\n"
         "root_out_dir = .\n"
@@ -52,9 +61,19 @@ TEST(NinjaBinaryTargetWriter, SourceSet) {
         "build obj/foo/bar.input2.o: cxx ../../foo/input2.cc\n"
         "  source_name_part = input2\n"
         "  source_out_dir = obj/foo\n"
+        "build obj/foo/bar.input5.o: asm ../../foo/input5.asm\n"
+        "  source_name_part = input5\n"
+        "  source_out_dir = obj/foo\n"
+        "build obj/foo/bar.input6.o: asm ../../foo/input6.s\n"
+        "  source_name_part = input6\n"
+        "  source_out_dir = obj/foo\n"
+        "build obj/foo/bar.input7.o: asm ../../foo/input7.arm\n"
+        "  source_name_part = input7\n"
+        "  source_out_dir = obj/foo\n"
         "\n"
         "build obj/foo/bar.stamp: stamp obj/foo/bar.input1.o "
-            "obj/foo/bar.input2.o ../../foo/input3.o ../../foo/input4.obj\n";
+            "obj/foo/bar.input2.o ../../foo/input3.o ../../foo/input4.obj "
+            "obj/foo/bar.input5.o obj/foo/bar.input6.o obj/foo/bar.input7.o\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str);
   }
@@ -84,6 +103,7 @@ TEST(NinjaBinaryTargetWriter, SourceSet) {
         // order.
         "build ./libshlib.so: solink obj/foo/bar.input1.o "
             "obj/foo/bar.input2.o ../../foo/input3.o ../../foo/input4.obj "
+            "obj/foo/bar.input5.o obj/foo/bar.input6.o obj/foo/bar.input7.o "
             "|| obj/foo/bar.stamp\n"
         "  ldflags =\n"
         "  libs =\n"
@@ -142,6 +162,7 @@ TEST(NinjaBinaryTargetWriter, SourceSet) {
         // order.
         "build obj/foo/libstlib.a: alink obj/foo/bar.input1.o "
             "obj/foo/bar.input2.o ../../foo/input3.o ../../foo/input4.obj "
+            "obj/foo/bar.input5.o obj/foo/bar.input6.o obj/foo/bar.input7.o "
             "|| obj/foo/bar.stamp\n"
         "  ldflags =\n"
         "  libs =\n"

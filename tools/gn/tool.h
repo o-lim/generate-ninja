@@ -6,11 +6,13 @@
 #define TOOLS_GN_TOOL_H_
 
 #include <string>
+#include <vector>
 
 #include "base/logging.h"
 #include "base/macros.h"
 #include "tools/gn/substitution_list.h"
 #include "tools/gn/substitution_pattern.h"
+#include "tools/gn/value.h"
 
 class Tool {
  public:
@@ -157,6 +159,13 @@ class Tool {
     rspfile_content_ = content;
   }
 
+  const std::vector<Value> & source_extensions() const {
+    return source_extensions_;
+  }
+  void set_source_extensions(const std::vector<Value> & exts) {
+    source_extensions_ = exts;
+  }
+
   // Other functions ----------------------------------------------------------
 
   // Called when the toolchain is saving this tool, after everything is filled
@@ -191,6 +200,7 @@ class Tool {
   bool restat_;
   SubstitutionPattern rspfile_;
   SubstitutionPattern rspfile_content_;
+  std::vector<Value> source_extensions_;
 
   bool complete_;
 

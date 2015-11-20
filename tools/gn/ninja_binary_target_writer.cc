@@ -108,7 +108,7 @@ bool GetOutputFilesForSource(const Target* target,
   outputs->clear();
   *computed_tool_type = Toolchain::TYPE_NONE;
 
-  SourceFileType file_type = GetSourceFileType(source);
+  SourceFileType file_type = target->toolchain()->GetSourceFileType(source);
   if (file_type == SOURCE_UNKNOWN)
     return false;
   if (file_type == SOURCE_O) {
@@ -256,7 +256,7 @@ void AddSourceSetObjectFiles(const Target* source_set,
     if (GetOutputFilesForSource(source_set, source, &tool_type, &tool_outputs))
       obj_files->push_back(tool_outputs[0]);
 
-    used_types.Set(GetSourceFileType(source));
+    used_types.Set(source_set->toolchain()->GetSourceFileType(source));
   }
 
   // Add MSVC precompiled header object files. GCC .gch files are not object
@@ -310,7 +310,7 @@ void NinjaBinaryTargetWriter::Run() {
   // Figure out what source types are needed.
   SourceFileTypeSet used_types;
   for (const auto& source : target_->sources())
-    used_types.Set(GetSourceFileType(source));
+    used_types.Set(target_->toolchain()->GetSourceFileType(source));
 
   WriteCompilerVars(used_types);
 
@@ -674,7 +674,7 @@ void NinjaBinaryTargetWriter::WriteSources(
     deps.resize(0);
     Toolchain::ToolType tool_type = Toolchain::TYPE_NONE;
     if (!GetOutputFilesForSource(target_, source, &tool_type, &tool_outputs)) {
-      if (GetSourceFileType(source) == SOURCE_DEF)
+      if (target_->toolchain()->GetSourceFileType(source) == SOURCE_DEF)
         other_files->push_back(source);
       continue;  // No output for this source.
     }
@@ -808,7 +808,7 @@ void NinjaBinaryTargetWriter::WriteLinkerStuff(
   const SourceFile* optional_def_file = nullptr;
   if (!other_files.empty()) {
     for (const SourceFile& src_file : other_files) {
-      if (GetSourceFileType(src_file) == SOURCE_DEF) {
+      if (target_->toolchain()->GetSourceFileType(src_file) == SOURCE_DEF) {
         optional_def_file = &src_file;
         implicit_deps.push_back(
             OutputFile(settings_->build_settings(), src_file));

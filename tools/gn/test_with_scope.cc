@@ -79,7 +79,18 @@ void TestWithScope::SetupToolchain(Toolchain* toolchain) {
       "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o"));
   toolchain->SetTool(Toolchain::TYPE_OBJCXX, objcxx_tool.Pass());
 
-  // Don't use RC and ASM tools in unit tests yet. Add here if needed.
+  // ASM
+  scoped_ptr<Tool> asm_tool(new Tool);
+  SetCommandForTool(
+      "asm {{source}} {{asmflags}} {{cflags}} {{cflags_c}} {{defines}} "
+      "{{include_dirs}} -o {{output}}",
+      asm_tool.get());
+  asm_tool->set_source_extensions({Value(nullptr, "asm"), Value(nullptr, "s"), Value(nullptr, "arm")});
+  asm_tool->set_outputs(SubstitutionList::MakeForTest(
+      "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o"));
+  toolchain->SetTool(Toolchain::TYPE_ASM, asm_tool.Pass());
+
+  // Don't use RC tools in unit tests yet. Add here if needed.
 
   // ALINK
   scoped_ptr<Tool> alink_tool(new Tool);

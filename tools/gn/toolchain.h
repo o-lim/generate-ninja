@@ -66,6 +66,9 @@ class Toolchain : public Item {
   Toolchain* AsToolchain() override;
   const Toolchain* AsToolchain() const override;
 
+  // Returns the source file type for the toolchain
+  SourceFileType GetSourceFileType(const SourceFile& file) const;
+
   // Returns TYPE_NONE on failure.
   static ToolType ToolNameToType(const base::StringPiece& str);
   static std::string ToolTypeToName(ToolType type);
@@ -94,6 +97,12 @@ class Toolchain : public Item {
   // Returns the tool for compiling the given source file type.
   static ToolType GetToolTypeForSourceType(SourceFileType type);
   const Tool* GetToolForSourceType(SourceFileType type);
+
+  // Returns true if the tool has source extensions defined
+  bool ToolHasSourceExtensions(ToolType type) const;
+
+  // Returns the source file type given tool type.
+  static SourceFileType GetSourceTypeForToolType(ToolType type);
 
   // Returns the tool that produces the final output for the given target type.
   // This isn't necessarily the tool you would expect. For copy target, this

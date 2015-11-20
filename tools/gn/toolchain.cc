@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "base/logging.h"
+#include "tools/gn/filesystem_utils.h"
 #include "tools/gn/target.h"
 #include "tools/gn/value.h"
 
@@ -37,6 +38,55 @@ Toolchain* Toolchain::AsToolchain() {
 
 const Toolchain* Toolchain::AsToolchain() const {
   return this;
+}
+
+SourceFileType Toolchain::GetSourceFileType(const SourceFile& file) const {
+  base::StringPiece extension = FindExtension(&file.value());
+  for (size_t i= TYPE_NONE; i < TYPE_NUMTYPES; i++) {
+    const Tool* tool = tools_[i].get();
+    if (tool != NULL) {
+      for (const auto & ext : tool->source_extensions()) {
+        if (extension == ext.string_value()) {
+          ToolType toolType = static_cast<ToolType>(i);
+          SourceFileType fileType = GetSourceTypeForToolType(toolType);
+          if (fileType != SOURCE_UNKNOWN)
+            return fileType;
+        }
+      }
+    }
+  }
+
+  if (!ToolHasSourceExtensions(TYPE_CXX) &&
+      (extension == "cc" || extension == "cpp" || extension == "cxx" ||
+       extension == "c++" || extension == "C"))
+    return SOURCE_CPP;
+  if (extension == "h" || extension == "hpp" || extension == "hxx" ||
+      extension == "hh" || extension == "h++" || extension == "H")
+    return SOURCE_H;
+  if (!ToolHasSourceExtensions(TYPE_CC) &&
+      extension == "c")
+    return SOURCE_C;
+  if (!ToolHasSourceExtensions(TYPE_OBJC) &&
+      extension == "m")
+    return SOURCE_M;
+  if (!ToolHasSourceExtensions(TYPE_OBJCXX) &&
+      extension == "mm")
+    return SOURCE_MM;
+  if (!ToolHasSourceExtensions(TYPE_RC) &&
+      extension == "rc")
+    return SOURCE_RC;
+  if (!ToolHasSourceExtensions(TYPE_ASM) &&
+      (extension == "S" || extension == "s"))
+    return SOURCE_S;
+  if (!ToolHasSourceExtensions(TYPE_ASM) &&
+      extension == "asm")
+    return SOURCE_ASM;
+  if (extension == "o" || extension == "obj")
+    return SOURCE_O;
+  if (extension == "def")
+    return SOURCE_DEF;
+
+  return SOURCE_UNKNOWN;
 }
 
 // static
@@ -124,8 +174,32 @@ Toolchain::ToolType Toolchain::GetToolTypeForSourceType(SourceFileType type) {
   }
 }
 
+SourceFileType Toolchain::GetSourceTypeForToolType(ToolType type) {
+  switch (type) {
+    case TYPE_CC:
+      return SOURCE_C;
+    case TYPE_CXX:
+      return SOURCE_CPP;
+    case TYPE_OBJC:
+      return SOURCE_M;
+    case TYPE_OBJCXX:
+      return SOURCE_MM;
+    case TYPE_ASM:
+      return SOURCE_ASM;
+    case TYPE_RC:
+      return SOURCE_RC;
+    default:
+      return SOURCE_UNKNOWN;
+  }
+}
+
 const Tool* Toolchain::GetToolForSourceType(SourceFileType type) {
   return tools_[GetToolTypeForSourceType(type)].get();
+}
+
+bool Toolchain::ToolHasSourceExtensions(ToolType type) const {
+  const Tool* t = tools_[type].get();
+  return t != NULL && !t->source_extensions().empty();
 }
 
 // static
