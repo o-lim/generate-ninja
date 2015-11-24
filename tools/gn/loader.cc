@@ -116,7 +116,7 @@ void LoaderImpl::Load(const SourceFile& file,
       ? default_toolchain_label_ : in_toolchain_name;
   LoadID load_id(file, toolchain_name);
   if (!invocations_.insert(load_id).second)
-    return;  // Already in set, so this file was already loaded or schedulerd.
+    return;  // Already in set, so this file was already loaded or scheduled.
 
   if (toolchain_records_.empty()) {
     // Nothing loaded, need to load the default build config. The intial load
