@@ -331,6 +331,7 @@ bool Builder::AddDeps(BuilderRecord* record,
     if (!dep_record)
       return false;
     record->AddDep(dep_record);
+    ScheduleItemLoadIfNecessary(dep_record);
   }
   return true;
 }
@@ -344,6 +345,7 @@ bool Builder::AddDeps(BuilderRecord* record,
     if (!dep_record)
       return false;
     record->AddDep(dep_record);
+    ScheduleItemLoadIfNecessary(dep_record);
   }
   return true;
 }
