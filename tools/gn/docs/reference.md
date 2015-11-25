@@ -390,12 +390,20 @@
   outputs
       Outputs for script and copy target types.
 
-  defines       [--blame]
-  include_dirs  [--blame]
-  cflags        [--blame]
-  cflags_cc     [--blame]
-  cflags_cxx    [--blame]
-  ldflags       [--blame]
+  asmflags        [--blame]
+  defines         [--blame]
+  include_dirs    [--blame]
+  cflags          [--blame]
+  cflags_c        [--blame]
+  cflags_cc       [--blame]
+  cflags_objc     [--blame]
+  cflags_objcc    [--blame]
+  cppflags        [--blame]
+  cppflags_c      [--blame]
+  cppflags_cc     [--blame]
+  cppflags_objc   [--blame]
+  cppflags_objcc  [--blame]
+  ldflags         [--blame]
   lib_dirs
   libs
       Shows the given values taken from the target and all configs
@@ -862,7 +870,7 @@
 ### **Variables**
 
 ```
-  args, data, data_deps, depfile, deps, outputs*, script*,
+  args, console, data, data_deps, depfile, deps, outputs*, script*,
   inputs, sources
   * = required
 
@@ -949,7 +957,7 @@
 ### **Variables**
 
 ```
-  args, data, data_deps, depfile, deps, outputs*, script*,
+  args, console, data, data_deps, depfile, deps, outputs*, script*,
   inputs, sources*
   * = required
 
@@ -1028,7 +1036,8 @@
 
 ### **Variables valid in a config definition**:
 ```
-  Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
+  Flags: asmflags, cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
+         cppflags, cppflags_c, cppflags_cc, cppflags_objc, cppflags_objcc,
          defines, include_dirs, ldflags, lib_dirs, libs,
          precompiled_header, precompiled_source
 
@@ -1227,7 +1236,8 @@
 ### **Variables**
 
 ```
-  Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
+  Flags: asmflags, cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
+         cppflags, cppflags_c, cppflags_cc, cppflags_objc, cppflags_objcc,
          defines, include_dirs, ldflags, lib_dirs, libs,
          precompiled_header, precompiled_source
   Deps: data_deps, deps, forward_dependent_configs_from, public_deps
@@ -2002,7 +2012,8 @@
 ### **Variables**
 
 ```
-  Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
+  Flags: asmflags, cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
+         cppflags, cppflags_c, cppflags_cc, cppflags_objc, cppflags_objcc,
          defines, include_dirs, ldflags, lib_dirs, libs,
          precompiled_header, precompiled_source
   Deps: data_deps, deps, forward_dependent_configs_from, public_deps
@@ -2043,7 +2054,8 @@
 ### **Variables**
 
 ```
-  Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
+  Flags: asmflags, cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
+         cppflags, cppflags_c, cppflags_cc, cppflags_objc, cppflags_objcc,
          defines, include_dirs, ldflags, lib_dirs, libs,
          precompiled_header, precompiled_source
   Deps: data_deps, deps, forward_dependent_configs_from, public_deps
@@ -2067,7 +2079,8 @@
 ### **Variables**
 
 ```
-  Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
+  Flags: asmflags, cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
+         cppflags, cppflags_c, cppflags_cc, cppflags_objc, cppflags_objcc,
          defines, include_dirs, ldflags, lib_dirs, libs,
          precompiled_header, precompiled_source
   Deps: data_deps, deps, forward_dependent_configs_from, public_deps
@@ -2479,6 +2492,19 @@
             rspfile_content = "{{inputs}} {{solibs}} {{libs}}"
           }
 
+    source_extensions  [list of strings]
+        Valid for: compiler tools (optional)
+
+        Specifies the source file extensions for which the tool applies.
+
+        Defaults for each tool:
+           cc: [ "c" ]
+           cxx: [ "cc", "cpp", "cxx", "c++", "C" ]
+           objc: [ "m" ]
+           objcxx: [ "mm" ]
+           asm: [ "asm", "S", "s" ]
+           rc: [ "rc" ]
+
 ```
 
 ### **Expansions for tool variables**
@@ -2518,6 +2544,7 @@
   along with a set of compiler-specific flags. The following expansions
   are available:
 
+    {{asmflags}}
     {{cflags}}
     {{cflags_c}}
     {{cflags_cc}}
@@ -3224,8 +3251,11 @@
   and Objective C++ compilers.
 
   To target one of these variants individually, use "cflags_c",
-  "cflags_cc", "cflags_objc", and "cflags_objcc", respectively.
-  These variant-specific versions will be appended to the "cflags".
+  "cflags_cc", "cflags_objc", and "cflags_objcc",
+  respectively.
+
+  These variant-specific versions of cflags* will be appended to the
+  "cflags".
 
 ```
 
@@ -3257,8 +3287,11 @@
   and Objective C++ compilers.
 
   To target one of these variants individually, use "cflags_c",
-  "cflags_cc", "cflags_objc", and "cflags_objcc", respectively.
-  These variant-specific versions will be appended to the "cflags".
+  "cflags_cc", "cflags_objc", and "cflags_objcc",
+  respectively.
+
+  These variant-specific versions of cflags* will be appended to the
+  "cflags".
 
 ```
 
@@ -3290,8 +3323,11 @@
   and Objective C++ compilers.
 
   To target one of these variants individually, use "cflags_c",
-  "cflags_cc", "cflags_objc", and "cflags_objcc", respectively.
-  These variant-specific versions will be appended to the "cflags".
+  "cflags_cc", "cflags_objc", and "cflags_objcc",
+  respectively.
+
+  These variant-specific versions of cflags* will be appended to the
+  "cflags".
 
 ```
 
@@ -3323,8 +3359,11 @@
   and Objective C++ compilers.
 
   To target one of these variants individually, use "cflags_c",
-  "cflags_cc", "cflags_objc", and "cflags_objcc", respectively.
-  These variant-specific versions will be appended to the "cflags".
+  "cflags_cc", "cflags_objc", and "cflags_objcc",
+  respectively.
+
+  These variant-specific versions of cflags* will be appended to the
+  "cflags".
 
 ```
 
@@ -3356,8 +3395,11 @@
   and Objective C++ compilers.
 
   To target one of these variants individually, use "cflags_c",
-  "cflags_cc", "cflags_objc", and "cflags_objcc", respectively.
-  These variant-specific versions will be appended to the "cflags".
+  "cflags_cc", "cflags_objc", and "cflags_objcc",
+  respectively.
+
+  These variant-specific versions of cflags* will be appended to the
+  "cflags".
 
 ```
 
@@ -3425,6 +3467,14 @@
     check_includes = false
     ...
   }
+
+
+```
+## **command**: Command to run for actions.
+
+```
+  The command to run for actions and action_foreach targets (see"see
+  gn help action" and "gn help action_foreach").
 
 
 ```
@@ -3556,6 +3606,211 @@
       configs = [ ":no_optimization" ]
     }
   }
+
+
+```
+## **console**: Run this action in the console pool.
+
+```
+  Boolean. Defaults to false.
+
+  Actions marked "console = true" will be run in the built-in ninja
+  "console" pool. They will have access to real stdin and stdout, and
+  output will not be buffered by ninja. This can be useful for
+  long-running actions with progress logs, or actions that require user
+  input.
+
+  Only one console pool target can run at any one time in Ninja. Refer
+  to the Ninja documentation on the console pool for more info.
+
+```
+
+### **Example**
+
+```
+  action("long_action_with_progress_logs") {
+    console = true
+  }
+
+
+```
+## **cppflags***: Flags passed to the pre-processor.
+
+```
+  A list of strings.
+
+  "cppflags" are passed to all invocations of the C, C++, Objective C,
+  and Objective C++ compilers.
+
+  To target one of these variants individually, use "cppflags_c",
+  "cppflags_cc", "cppflags_objc", and "cppflags_objcc",
+  respectively.
+
+  These variant-specific versions of cppflags* will be appended to the
+  "cppflags".
+
+```
+
+### **Ordering of flags and values**
+
+```
+  1. Those set on the current target (not in a config).
+  2. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  3. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  4. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  5. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  6. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+
+
+```
+## **cppflags***: Flags passed to the pre-processor.
+
+```
+  A list of strings.
+
+  "cppflags" are passed to all invocations of the C, C++, Objective C,
+  and Objective C++ compilers.
+
+  To target one of these variants individually, use "cppflags_c",
+  "cppflags_cc", "cppflags_objc", and "cppflags_objcc",
+  respectively.
+
+  These variant-specific versions of cppflags* will be appended to the
+  "cppflags".
+
+```
+
+### **Ordering of flags and values**
+
+```
+  1. Those set on the current target (not in a config).
+  2. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  3. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  4. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  5. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  6. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+
+
+```
+## **cppflags***: Flags passed to the pre-processor.
+
+```
+  A list of strings.
+
+  "cppflags" are passed to all invocations of the C, C++, Objective C,
+  and Objective C++ compilers.
+
+  To target one of these variants individually, use "cppflags_c",
+  "cppflags_cc", "cppflags_objc", and "cppflags_objcc",
+  respectively.
+
+  These variant-specific versions of cppflags* will be appended to the
+  "cppflags".
+
+```
+
+### **Ordering of flags and values**
+
+```
+  1. Those set on the current target (not in a config).
+  2. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  3. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  4. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  5. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  6. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+
+
+```
+## **cppflags***: Flags passed to the pre-processor.
+
+```
+  A list of strings.
+
+  "cppflags" are passed to all invocations of the C, C++, Objective C,
+  and Objective C++ compilers.
+
+  To target one of these variants individually, use "cppflags_c",
+  "cppflags_cc", "cppflags_objc", and "cppflags_objcc",
+  respectively.
+
+  These variant-specific versions of cppflags* will be appended to the
+  "cppflags".
+
+```
+
+### **Ordering of flags and values**
+
+```
+  1. Those set on the current target (not in a config).
+  2. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  3. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  4. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  5. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  6. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+
+
+```
+## **cppflags***: Flags passed to the pre-processor.
+
+```
+  A list of strings.
+
+  "cppflags" are passed to all invocations of the C, C++, Objective C,
+  and Objective C++ compilers.
+
+  To target one of these variants individually, use "cppflags_c",
+  "cppflags_cc", "cppflags_objc", and "cppflags_objcc",
+  respectively.
+
+  These variant-specific versions of cppflags* will be appended to the
+  "cppflags".
+
+```
+
+### **Ordering of flags and values**
+
+```
+  1. Those set on the current target (not in a config).
+  2. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  3. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  4. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  5. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  6. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
 
 
 ```
@@ -3694,6 +3949,13 @@
   dependent configs are not forwarded.
 
   See also "public_deps" and "data_deps".
+
+
+```
+## **description**: Description of the action.
+
+```
+  What to print when then action is run  gn help action" and "gn help action_foreach").
 
 
 ```
