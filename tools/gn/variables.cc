@@ -639,7 +639,7 @@ const char kConsole_Help[] =
     "  Actions marked \"console = true\" will be run in the built-in ninja\n"
     "  \"console\" pool. They will have access to real stdin and stdout, and\n"
     "  output will not be buffered by ninja. This can be useful for\n"
-    "  long-running actions with progress logs, or actions that require user \n"
+    "  long-running actions with progress logs, or actions that require user\n"
     "  input.\n"
     "\n"
     "  Only one console pool target can run at any one time in Ninja. Refer\n"
