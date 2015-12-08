@@ -10,6 +10,9 @@
     # For Android-specific targets.
     'android_app_targets%': [],
   },
+  'includes': [
+    '../third_party/openh264/openh264_args.gypi',
+  ],
   'targets': [
     {
       'target_name': 'All',
@@ -85,10 +88,9 @@
               'dependencies': [
                 '../android_webview/android_webview.gyp:android_webview_apk',
                 '../android_webview/android_webview.gyp:system_webview_apk',
-                '../android_webview/android_webview_shell.gyp:android_webview_shell_apk',
+                '../android_webview/android_webview_shell.gyp:system_webview_shell_apk',
                 '../chrome/android/chrome_apk.gyp:chrome_public_apk',
                 '../chrome/android/chrome_apk.gyp:chrome_sync_shell_apk',
-                '../remoting/remoting.gyp:remoting_apk',
               ],
             }],
             # TODO: Enable packed relocations for x64. See: b/20532404
@@ -109,7 +111,6 @@
           'dependencies': [
             '../third_party/re2/re2.gyp:re2',
             '../chrome/chrome.gyp:*',
-            '../chrome/tools/profile_reset/jtl_compiler.gyp:*',
             '../cc/blink/cc_blink_tests.gyp:*',
             '../cc/cc_tests.gyp:*',
             '../device/usb/usb.gyp:*',
@@ -159,10 +160,9 @@
           'dependencies': [
             '../device/bluetooth/bluetooth.gyp:*',
             '../device/device_tests.gyp:*',
-            '../gpu/skia_runner/skia_runner.gyp:*',
           ],
         }],
-        ['use_openssl==0 and (OS=="mac" or OS=="ios" or OS=="win")', {
+        ['use_openssl==0 and OS=="ios"', {
           'dependencies': [
             '../third_party/nss/nss.gyp:*',
            ],
@@ -287,6 +287,11 @@
         ['envoy==1', {
           'dependencies': [
             '../envoy/envoy.gyp:*',
+          ],
+        }],
+        ['use_openh264==1', {
+          'dependencies': [
+            '../third_party/openh264/openh264.gyp:*',
           ],
         }],
       ],
@@ -475,7 +480,7 @@
         }],
         ['use_aura==1 or toolkit_views==1', {
           'dependencies': [
-            '../ui/events/events.gyp:events_unittests',
+            '../ui/events/events_unittests.gyp:events_unittests',
           ],
         }],
         ['use_ash==1', {
@@ -498,7 +503,7 @@
   ],
   'conditions': [
     # TODO(GYP): make gn_migration.gypi work unconditionally.
-    ['OS=="mac" or OS=="win" or (OS=="linux" and target_arch=="x64" and chromecast==0)', {
+    ['OS=="mac" or OS=="win" or (OS=="android" and chromecast==0) or (OS=="linux" and target_arch=="x64" and chromecast==0)', {
       'includes': [
         'gn_migration.gypi',
       ],
@@ -833,7 +838,7 @@
             '../tools/android/findbugs_plugin/findbugs_plugin.gyp:findbugs_plugin_test',
             '../ui/android/ui_android.gyp:ui_android_unittests',
             '../ui/base/ui_base_tests.gyp:ui_base_unittests',
-            '../ui/events/events.gyp:events_unittests',
+            '../ui/events/events_unittests.gyp:events_unittests',
             '../ui/touch_selection/ui_touch_selection.gyp:ui_touch_selection_unittests',
             # Unit test bundles packaged as an apk.
             '../base/base.gyp:base_unittests_apk',
@@ -851,14 +856,13 @@
             '../media/media.gyp:media_unittests_apk',
             '../media/midi/midi.gyp:midi_unittests_apk',
             '../net/net.gyp:net_unittests_apk',
-            '../sandbox/sandbox.gyp:sandbox_linux_jni_unittests_apk',
             '../skia/skia_tests.gyp:skia_unittests_apk',
             '../sql/sql.gyp:sql_unittests_apk',
             '../sync/sync.gyp:sync_unit_tests_apk',
             '../tools/android/heap_profiler/heap_profiler.gyp:heap_profiler_unittests_apk',
             '../ui/android/ui_android.gyp:ui_android_unittests_apk',
             '../ui/base/ui_base_tests.gyp:ui_base_unittests_apk',
-            '../ui/events/events.gyp:events_unittests_apk',
+            '../ui/events/events_unittests.gyp:events_unittests_apk',
             '../ui/gfx/gfx_tests.gyp:gfx_unittests_apk',
             '../ui/gl/gl_tests.gyp:gl_unittests_apk',
             '../ui/touch_selection/ui_touch_selection.gyp:ui_touch_selection_unittests_apk',
@@ -871,10 +875,11 @@
                 # Unit test bundles packaged as an apk.
                 '../android_webview/android_webview.gyp:android_webview_test_apk',
                 '../android_webview/android_webview.gyp:android_webview_unittests_apk',
+                '../android_webview/android_webview_shell.gyp:system_webview_shell_layout_test_apk',
+                '../android_webview/android_webview_shell.gyp:system_webview_shell_page_cycler_apk',
                 '../chrome/android/chrome_apk.gyp:chrome_public_test_apk',
                 '../chrome/android/chrome_apk.gyp:chrome_sync_shell_test_apk',
                 '../chrome/chrome.gyp:chrome_junit_tests',
-                '../chrome/chrome.gyp:chrome_uiautomator_tests',
                 '../chrome/chrome.gyp:chromedriver_webview_shell_apk',
                 '../chrome/chrome.gyp:unit_tests_apk',
                 '../third_party/custom_tabs_client/custom_tabs_client.gyp:custom_tabs_client_example_apk',
@@ -1093,7 +1098,7 @@
             '../tools/perf/clear_system_cache/clear_system_cache.gyp:*',
             '../tools/telemetry/telemetry.gyp:*',
             '../ui/base/ui_base_tests.gyp:ui_base_unittests',
-            '../ui/events/events.gyp:events_unittests',
+            '../ui/events/events_unittests.gyp:events_unittests',
             '../ui/gfx/gfx_tests.gyp:gfx_unittests',
             '../ui/gl/gl_tests.gyp:gl_unittests',
             '../ui/touch_selection/ui_touch_selection.gyp:ui_touch_selection_unittests',
@@ -1198,7 +1203,7 @@
             '../ui/aura/aura.gyp:aura_unittests',
             '../ui/compositor/compositor.gyp:compositor_unittests',
             '../ui/display/display.gyp:display_unittests',
-            '../ui/events/events.gyp:events_unittests',
+            '../ui/events/events_unittests.gyp:events_unittests',
             '../ui/gfx/gfx_tests.gyp:gfx_unittests',
             '../ui/gl/gl_tests.gyp:gl_unittests',
             '../ui/keyboard/keyboard.gyp:keyboard_unittests',

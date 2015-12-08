@@ -646,6 +646,7 @@ TEST(TimeTicks, HighRes) {
 #endif
 TEST(ThreadTicks, MAYBE_ThreadNow) {
   if (ThreadTicks::IsSupported()) {
+    ThreadTicks::WaitUntilInitialized();
     TimeTicks begin = TimeTicks::Now();
     ThreadTicks begin_thread = ThreadTicks::Now();
     // Make sure that ThreadNow value is non-zero.
@@ -662,12 +663,6 @@ TEST(ThreadTicks, MAYBE_ThreadNow) {
     TimeDelta difference = delta - delta_thread;
     EXPECT_GE(difference.InMicroseconds(), 9000);
   }
-}
-
-TEST(TraceTicks, NowFromSystemTraceTime) {
-  // Re-use HighRes test for now since clock properties are identical.
-  using NowFunction = TimeTicks (*)(void);
-  HighResClockTest(reinterpret_cast<NowFunction>(&TraceTicks::Now));
 }
 
 TEST(TimeTicks, SnappedToNextTickBasic) {

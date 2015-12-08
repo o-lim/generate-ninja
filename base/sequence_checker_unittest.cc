@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/sequence_checker.h"
+
+#include <utility>
+
 #include "base/basictypes.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -9,7 +13,6 @@
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/sequence_checker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/test/sequenced_worker_pool_owner.h"
 #include "base/threading/thread.h"
@@ -63,7 +66,6 @@ class SequenceCheckerTest : public testing::Test {
 
   void TearDown() override {
     other_thread_.Stop();
-    pool()->Shutdown();
   }
 
  protected:
@@ -130,7 +132,7 @@ TEST_F(SequenceCheckerTest, DestructorAllowedOnDifferentThread) {
       new SequenceCheckedObject);
 
   // Verify the destructor doesn't assert when called on a different thread.
-  PostDeleteToOtherThread(sequence_checked_object.Pass());
+  PostDeleteToOtherThread(std::move(sequence_checked_object));
   other_thread()->Stop();
 }
 
@@ -157,7 +159,7 @@ TEST_F(SequenceCheckerTest, SameSequenceTokenValid) {
   PostDoStuffToWorkerPool(sequence_checked_object.get(), "A");
   pool()->FlushForTesting();
 
-  PostDeleteToOtherThread(sequence_checked_object.Pass());
+  PostDeleteToOtherThread(std::move(sequence_checked_object));
   other_thread()->Stop();
 }
 
@@ -175,7 +177,7 @@ TEST_F(SequenceCheckerTest, DetachSequenceTokenValid) {
   PostDoStuffToWorkerPool(sequence_checked_object.get(), "B");
   pool()->FlushForTesting();
 
-  PostDeleteToOtherThread(sequence_checked_object.Pass());
+  PostDeleteToOtherThread(std::move(sequence_checked_object));
   other_thread()->Stop();
 }
 
@@ -245,7 +247,7 @@ void SequenceCheckerTest::DifferentSequenceTokensDeathTest() {
   PostDoStuffToWorkerPool(sequence_checked_object.get(), "B");
   pool()->FlushForTesting();
 
-  PostDeleteToOtherThread(sequence_checked_object.Pass());
+  PostDeleteToOtherThread(std::move(sequence_checked_object));
   other_thread()->Stop();
 }
 
@@ -306,7 +308,6 @@ void SequenceCheckerTest::TwoDifferentWorkerPoolsDeathTest() {
       base::Bind(&SequenceCheckedObject::DoStuff,
                  base::Unretained(sequence_checked_object.get())));
   second_pool_owner.pool()->FlushForTesting();
-  second_pool_owner.pool()->Shutdown();
 }
 
 #if ENABLE_SEQUENCE_CHECKER

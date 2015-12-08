@@ -23,6 +23,7 @@ const char* kSubstitutionNames[SUBSTITUTION_NUM_TYPES] = {
   "{{source_extension}}",  // SUBSTITUTION_SOURCE_EXTENSION
 
   "{{label}}",  // SUBSTITUTION_LABEL
+  "{{label_name}}",  // SUBSTITUTION_LABEL_NAME
   "{{root_gen_dir}}",  // SUBSTITUTION_ROOT_GEN_DIR
   "{{root_out_dir}}",  // SUBSTITUTION_ROOT_OUT_DIR
   "{{target_gen_dir}}",  // SUBSTITUTION_TARGET_GEN_DIR
@@ -49,6 +50,8 @@ const char* kSubstitutionNames[SUBSTITUTION_NUM_TYPES] = {
   "{{libs}}",  // SUBSTITUTION_LIBS
   "{{output_extension}}",  // SUBSTITUTION_OUTPUT_EXTENSION
   "{{solibs}}",  // SUBSTITUTION_SOLIBS
+
+  "{{response_file_name}}",  // SUBSTITUTION_RSP_FILE_NAME
 };
 
 const char* kSubstitutionNinjaNames[SUBSTITUTION_NUM_TYPES] = {
@@ -66,6 +69,7 @@ const char* kSubstitutionNinjaNames[SUBSTITUTION_NUM_TYPES] = {
     "source_extension",          // SUBSTITUTION_SOURCE_EXTENSION
 
     "label",               // SUBSTITUTION_LABEL
+    "label_name",          // SUBSTITUTION_LABEL_NAME
     "root_gen_dir",        // SUBSTITUTION_ROOT_GEN_DIR
     "root_out_dir",        // SUBSTITUTION_ROOT_OUT_DIR
     "target_gen_dir",      // SUBSTITUTION_TARGET_GEN_DIR
@@ -95,6 +99,8 @@ const char* kSubstitutionNinjaNames[SUBSTITUTION_NUM_TYPES] = {
     "libs",              // SUBSTITUTION_LIBS
     "output_extension",  // SUBSTITUTION_OUTPUT_EXTENSION
     "solibs",            // SUBSTITUTION_SOLIBS
+
+    "rspfile",  // SUBSTITUTION_RSP_FILE_NAME
 };
 
 SubstitutionBits::SubstitutionBits() : used() {
@@ -137,6 +143,7 @@ bool IsValidToolSubstutition(SubstitutionType type) {
   return type == SUBSTITUTION_LITERAL ||
          type == SUBSTITUTION_OUTPUT ||
          type == SUBSTITUTION_LABEL ||
+         type == SUBSTITUTION_LABEL_NAME ||
          type == SUBSTITUTION_ROOT_GEN_DIR ||
          type == SUBSTITUTION_ROOT_OUT_DIR ||
          type == SUBSTITUTION_TARGET_GEN_DIR ||

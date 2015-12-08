@@ -224,6 +224,26 @@ enum { NSWorkspaceLaunchWithErrorPresentation = 0x00000040 };
 
 #endif  // MAC_OS_X_VERSION_10_9
 
+#if !defined(MAC_OS_X_VERSION_10_11) || \
+    MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_11
+
+enum {
+  NSPressureBehaviorUnknown = -1,
+  NSPressureBehaviorPrimaryDefault = 0,
+  NSPressureBehaviorPrimaryClick = 1,
+  NSPressureBehaviorPrimaryGeneric = 2,
+  NSPressureBehaviorPrimaryAccelerator = 3,
+  NSPressureBehaviorPrimaryDeepClick = 5,
+  NSPressureBehaviorPrimaryDeepDrag = 6
+};
+typedef NSInteger NSPressureBehavior;
+
+@interface NSPressureConfiguration : NSObject
+- (instancetype)initWithPressureBehavior:(NSPressureBehavior)pressureBehavior;
+@end
+
+#endif // MAC_OS_X_VERSION_10_11
+
 // ----------------------------------------------------------------------------
 // Define NSStrings only available in newer versions of the OSX SDK to force
 // them to be statically linked.
@@ -308,6 +328,7 @@ BASE_EXPORT extern NSString* const NSAppearanceNameVibrantDark;
 - (void)toggleFullScreen:(id)sender;
 - (void)setRestorable:(BOOL)flag;
 - (NSRect)convertRectFromScreen:(NSRect)aRect;
+- (NSSize)convertRectToScreen:(NSRect)aRect;
 @end
 
 @interface NSCursor (LionSDKDeclarations)
@@ -493,6 +514,17 @@ BASE_EXPORT extern NSString* const NSAppearanceNameVibrantDark;
 
 @interface NSViewController (YosemiteSDK)
 - (void)viewDidLoad;
+@end
+
+#endif  // MAC_OS_X_VERSION_10_10
+
+// Once Chrome no longer supports OSX 10.10.2, everything within this
+// preprocessor block can be removed.
+#if !defined(MAC_OS_X_VERSION_10_10_3) || \
+    MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_10_3
+
+@interface NSView (YosemiteSDK)
+- (void)setPressureConfiguration:(NSPressureConfiguration*)aConfiguration;
 @end
 
 #endif  // MAC_OS_X_VERSION_10_10

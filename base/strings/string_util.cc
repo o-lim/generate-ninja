@@ -99,18 +99,6 @@ template<> struct NonASCIIMask<8, wchar_t> {
 };
 #endif  // WCHAR_T_IS_UTF32
 
-// DO NOT USE. http://crbug.com/24917
-//
-// tolower() will given incorrect results for non-ASCII characters. Use the
-// ASCII version, base::i18n::ToLower, or base::i18n::FoldCase. This is here
-// for backwards-compat for StartsWith until such calls can be updated.
-struct CaseInsensitiveCompareDeprecated {
- public:
-  bool operator()(char16 x, char16 y) const {
-    return tolower(x) == tolower(y);
-  }
-};
-
 }  // namespace
 
 bool IsWprintfFormatPortable(const wchar_t* format) {
@@ -415,14 +403,6 @@ StringPiece TrimWhitespaceASCII(StringPiece input, TrimPositions positions) {
   return TrimStringPieceT(input, StringPiece(kWhitespaceASCII), positions);
 }
 
-// This function is only for backward-compatibility.
-// To be removed when all callers are updated.
-TrimPositions TrimWhitespace(const std::string& input,
-                             TrimPositions positions,
-                             std::string* output) {
-  return TrimWhitespaceASCII(input, positions, output);
-}
-
 template<typename STR>
 STR CollapseWhitespaceT(const STR& text,
                         bool trim_sequences_with_line_breaks) {
@@ -672,6 +652,15 @@ char HexDigitToInt(wchar_t c) {
   if (c >= 'a' && c <= 'f')
     return static_cast<char>(c - 'a' + 10);
   return 0;
+}
+
+bool IsUnicodeWhitespace(wchar_t c) {
+  // kWhitespaceWide is a NULL-terminated string
+  for (const wchar_t* cur = kWhitespaceWide; *cur; ++cur) {
+    if (*cur == c)
+      return true;
+  }
+  return false;
 }
 
 static const char* const kByteStringsUnlocalized[] = {

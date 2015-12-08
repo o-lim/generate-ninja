@@ -238,6 +238,9 @@ BASE_EXPORT void SetMinLogLevel(int level);
 // Gets the current log level.
 BASE_EXPORT int GetMinLogLevel();
 
+// Used by LOG_IS_ON to lazy-evaluate stream arguments.
+BASE_EXPORT bool ShouldCreateLogMessage(int severity);
+
 // Gets the VLOG default verbosity level.
 BASE_EXPORT int GetVlogVerbosity();
 
@@ -340,7 +343,7 @@ const LogSeverity LOG_0 = LOG_ERROR;
 // LOG_IS_ON(DFATAL) always holds in debug mode. In particular, CHECK()s will
 // always fire if they fail.
 #define LOG_IS_ON(severity) \
-  ((::logging::LOG_ ## severity) >= ::logging::GetMinLogLevel())
+  (::logging::ShouldCreateLogMessage(::logging::LOG_##severity))
 
 // We can't do any caching tricks with VLOG_IS_ON() like the
 // google-glog version since it requires GCC extensions.  This means
@@ -571,7 +574,6 @@ DEFINE_CHECK_OP_IMPL(GT, > )
 #define CHECK_LT(val1, val2) CHECK_OP(LT, < , val1, val2)
 #define CHECK_GE(val1, val2) CHECK_OP(GE, >=, val1, val2)
 #define CHECK_GT(val1, val2) CHECK_OP(GT, > , val1, val2)
-#define CHECK_IMPLIES(val1, val2) CHECK(!(val1) || (val2))
 
 #if defined(NDEBUG)
 #define ENABLE_DLOG 0
@@ -725,7 +727,6 @@ const LogSeverity LOG_DCHECK = LOG_INFO;
 #define DCHECK_LT(val1, val2) DCHECK_OP(LT, < , val1, val2)
 #define DCHECK_GE(val1, val2) DCHECK_OP(GE, >=, val1, val2)
 #define DCHECK_GT(val1, val2) DCHECK_OP(GT, > , val1, val2)
-#define DCHECK_IMPLIES(val1, val2) DCHECK(!(val1) || (val2))
 
 #if !DCHECK_IS_ON() && defined(OS_CHROMEOS)
 // Implement logging of NOTREACHED() as a dedicated function to get function
@@ -954,9 +955,9 @@ inline std::ostream& operator<<(std::ostream& out, const std::wstring& wstr) {
 #define NOTIMPLEMENTED() EAT_STREAM_PARAMETERS
 #elif NOTIMPLEMENTED_POLICY == 1
 // TODO, figure out how to generate a warning
-#define NOTIMPLEMENTED() COMPILE_ASSERT(false, NOT_IMPLEMENTED)
+#define NOTIMPLEMENTED() static_assert(false, "NOT_IMPLEMENTED")
 #elif NOTIMPLEMENTED_POLICY == 2
-#define NOTIMPLEMENTED() COMPILE_ASSERT(false, NOT_IMPLEMENTED)
+#define NOTIMPLEMENTED() static_assert(false, "NOT_IMPLEMENTED")
 #elif NOTIMPLEMENTED_POLICY == 3
 #define NOTIMPLEMENTED() NOTREACHED()
 #elif NOTIMPLEMENTED_POLICY == 4

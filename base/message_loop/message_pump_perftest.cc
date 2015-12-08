@@ -25,6 +25,11 @@ class ScheduleWorkTest : public testing::Test {
  public:
   ScheduleWorkTest() : counter_(0) {}
 
+  void SetUp() override {
+    if (base::ThreadTicks::IsSupported())
+      base::ThreadTicks::WaitUntilInitialized();
+  }
+
   void Increment(uint64_t amount) { counter_ += amount; }
 
   void Schedule(int index) {
@@ -79,14 +84,15 @@ class ScheduleWorkTest : public testing::Test {
       target_->WaitUntilThreadStarted();
     }
 
-    ScopedVector<Thread> scheduling_threads;
+    std::vector<scoped_ptr<Thread>> scheduling_threads;
     scheduling_times_.reset(new base::TimeDelta[num_scheduling_threads]);
     scheduling_thread_times_.reset(new base::TimeDelta[num_scheduling_threads]);
     min_batch_times_.reset(new base::TimeDelta[num_scheduling_threads]);
     max_batch_times_.reset(new base::TimeDelta[num_scheduling_threads]);
 
     for (int i = 0; i < num_scheduling_threads; ++i) {
-      scheduling_threads.push_back(new Thread("posting thread"));
+      scheduling_threads.push_back(
+          make_scoped_ptr(new Thread("posting thread")));
       scheduling_threads[i]->Start();
     }
 

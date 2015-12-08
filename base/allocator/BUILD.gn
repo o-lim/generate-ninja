@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/allocator.gni")
+import("//build/config/compiler/compiler.gni")
 
 declare_args() {
   # Provide a way to force disable debugallocation in Debug builds,
@@ -71,6 +72,12 @@ if (is_win) {
         visual_studio_path + "/vc/lib",
         rebase_path("$target_gen_dir/allocator"),
         current_cpu,
+
+        # The environment file in the build directory. This is required because
+        # the Windows toolchain setup saves the VC paths and such so that
+        # running "mc.exe" will work with the configured toolchain. This file
+        # is in the root build dir.
+        "environment.$current_cpu",
       ]
     }
 
@@ -84,6 +91,7 @@ if (is_win) {
       public_configs = [ ":nocmt" ]
       deps = [
         ":prep_libc",
+        "//base",
       ]
     }
   }
@@ -140,8 +148,6 @@ if (use_allocator == "tcmalloc") {
       "$tcmalloc_dir/src/base/synchronization_profiling.h",
       "$tcmalloc_dir/src/base/sysinfo.cc",
       "$tcmalloc_dir/src/base/sysinfo.h",
-      "$tcmalloc_dir/src/base/thread_lister.c",
-      "$tcmalloc_dir/src/base/thread_lister.h",
       "$tcmalloc_dir/src/base/vdso_support.cc",
       "$tcmalloc_dir/src/base/vdso_support.h",
       "$tcmalloc_dir/src/central_freelist.cc",
@@ -168,11 +174,6 @@ if (use_allocator == "tcmalloc") {
       "$tcmalloc_dir/src/memory_region_map.h",
       "$tcmalloc_dir/src/page_heap.cc",
       "$tcmalloc_dir/src/page_heap.h",
-      "$tcmalloc_dir/src/profile-handler.cc",
-      "$tcmalloc_dir/src/profile-handler.h",
-      "$tcmalloc_dir/src/profiledata.cc",
-      "$tcmalloc_dir/src/profiledata.h",
-      "$tcmalloc_dir/src/profiler.cc",
       "$tcmalloc_dir/src/raw_printer.cc",
       "$tcmalloc_dir/src/raw_printer.h",
       "$tcmalloc_dir/src/sampler.cc",
@@ -219,21 +220,8 @@ if (use_allocator == "tcmalloc") {
 
     deps = []
 
-    if (is_win) {
-      sources -= [
-        "$tcmalloc_dir/src/base/elf_mem_image.cc",
-        "$tcmalloc_dir/src/base/elf_mem_image.h",
-        "$tcmalloc_dir/src/base/linuxthreads.cc",
-        "$tcmalloc_dir/src/base/linuxthreads.h",
-        "$tcmalloc_dir/src/base/vdso_support.cc",
-        "$tcmalloc_dir/src/base/vdso_support.h",
-        "$tcmalloc_dir/src/maybe_threads.cc",
-        "$tcmalloc_dir/src/maybe_threads.h",
-        "$tcmalloc_dir/src/symbolize.h",
-        "$tcmalloc_dir/src/system-alloc.cc",
-        "$tcmalloc_dir/src/system-alloc.h",
-
-        # cpuprofiler
+    if (enable_profiling) {
+      sources += [
         "$tcmalloc_dir/src/base/thread_lister.c",
         "$tcmalloc_dir/src/base/thread_lister.h",
         "$tcmalloc_dir/src/profile-handler.cc",
@@ -242,17 +230,7 @@ if (use_allocator == "tcmalloc") {
         "$tcmalloc_dir/src/profiledata.h",
         "$tcmalloc_dir/src/profiler.cc",
       ]
-      defines += [ "PERFTOOLS_DLL_DECL=" ]
-
-      configs -= [
-        # Tcmalloc defines this itself, and we don't want duplicate definition
-        # warnings.
-        "//build/config/win:nominmax",
-      ]
-
-      public_configs = [ ":nocmt" ]
-
-      deps += [ ":prep_libc" ]
+      defines += [ "ENABLE_PROFILING=1" ]
     }
 
     if (is_linux || is_android) {
@@ -292,21 +270,5 @@ if (use_allocator == "tcmalloc") {
     }
 
     deps += [ "//base/third_party/dynamic_annotations" ]
-
-    if (is_win) {
-      ldflags = [ "/ignore:4006:4221" ]
-    }
   }
 }  # !is_android
-
-source_set("allocator_extension_thunks") {
-  visibility = [ "//base/*" ]
-  sources = [
-    "allocator_extension_thunks.cc",
-    "allocator_extension_thunks.h",
-  ]
-  if (is_android && !is_debug) {
-    configs -= [ "//build/config/compiler:default_optimization" ]
-    configs += [ "//build/config/compiler:optimize_max" ]
-  }
-}

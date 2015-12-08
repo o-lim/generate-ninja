@@ -240,6 +240,17 @@ bool Builder::ConfigDefined(BuilderRecord* record, Err* err) {
   Config* config = record->item()->AsConfig();
   if (!AddDeps(record, config->configs(), err))
     return false;
+
+  // Make sure all deps of this config are scheduled to be loaded. For other
+  // item types like targets, the "should generate" flag is propagated around
+  // to mark whether this should happen. We could call
+  // RecursiveSetShouldGenerate to do this step here, but since configs nor
+  // anything they depend on is actually written, the "generate" flag isn't
+  // relevant and means extra book keeping. Just force load any deps of this
+  // config.
+  for (const auto& cur : record->all_deps())
+    ScheduleItemLoadIfNecessary(cur);
+
   return true;
 }
 
@@ -407,7 +418,6 @@ bool Builder::ResolveItem(BuilderRecord* record, Err* err) {
         !ResolveConfigs(&target->configs(), err) ||
         !ResolveConfigs(&target->all_dependent_configs(), err) ||
         !ResolveConfigs(&target->public_configs(), err) ||
-        !ResolveForwardDependentConfigs(target, err) ||
         !ResolveToolchain(target, err))
       return false;
   } else if (record->type() == BuilderRecord::ITEM_CONFIG) {
@@ -464,37 +474,6 @@ bool Builder::ResolveConfigs(UniqueVector<LabelConfigPair>* configs, Err* err) {
     if (!record)
       return false;
     const_cast<LabelConfigPair&>(cur).ptr = record->item()->AsConfig();
-  }
-  return true;
-}
-
-// "Forward dependent configs" should refer to targets in the deps that should
-// have their configs forwarded.
-bool Builder::ResolveForwardDependentConfigs(Target* target, Err* err) {
-  const UniqueVector<LabelTargetPair>& configs =
-      target->forward_dependent_configs();
-
-  // Assume that the lists are small so that brute-force n^2 is appropriate.
-  for (const auto& config : configs) {
-    for (const auto& dep_pair : target->GetDeps(Target::DEPS_LINKED)) {
-      if (config.label == dep_pair.label) {
-        DCHECK(dep_pair.ptr);  // Should already be resolved.
-        // UniqueVector's contents are constant so uniqueness is preserved, but
-        // we want to update this pointer which doesn't change uniqueness
-        // (uniqueness in this vector is determined by the label only).
-        const_cast<LabelTargetPair&>(config).ptr = dep_pair.ptr;
-        break;
-      }
-    }
-    if (!config.ptr) {
-      *err = Err(target->defined_from(),
-          "Target in forward_dependent_configs_from was not listed in the deps",
-          "This target has a forward_dependent_configs_from entry that was "
-          "not present in\nthe deps. A target can only forward things it "
-          "depends on. It was forwarding:\n  " +
-          config.label.GetUserVisibleName(false));
-      return false;
-    }
   }
   return true;
 }

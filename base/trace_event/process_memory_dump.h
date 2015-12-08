@@ -18,12 +18,21 @@
 #include "base/trace_event/process_memory_maps.h"
 #include "base/trace_event/process_memory_totals.h"
 
+// Define COUNT_RESIDENT_BYTES_SUPPORTED if platform supports counting of the
+// resident memory.
+// TODO(crbug.com/542671): COUNT_RESIDENT_BYTES_SUPPORTED is disabled on iOS
+// as it cause memory corruption on iOS 9.0+ devices.
+#if defined(OS_POSIX) && !defined(OS_NACL) && !defined(OS_IOS)
+#define COUNT_RESIDENT_BYTES_SUPPORTED
+#endif
+
 namespace base {
 namespace trace_event {
 
 class ConvertableToTraceFormat;
 class MemoryDumpManager;
 class MemoryDumpSessionState;
+class TracedValue;
 
 // ProcessMemoryDump is as a strongly typed container which holds the dumps
 // produced by the MemoryDumpProvider(s) for a specific process.
@@ -40,6 +49,17 @@ class BASE_EXPORT ProcessMemoryDump {
   // MemoryAllocatorDump instances.
   using AllocatorDumpsMap =
       SmallMap<hash_map<std::string, MemoryAllocatorDump*>>;
+
+  using HeapDumpsMap =
+      SmallMap<hash_map<std::string, scoped_refptr<TracedValue>>>;
+
+#if defined(COUNT_RESIDENT_BYTES_SUPPORTED)
+  // Returns the total bytes resident for a virtual address range, with given
+  // |start_address| and |mapped_size|. |mapped_size| is specified in bytes. The
+  // value returned is valid only if the given range is currently mmapped by the
+  // process. The |start_address| must be page-aligned.
+  static size_t CountResidentBytes(void* start_address, size_t mapped_size);
+#endif
 
   ProcessMemoryDump(const scoped_refptr<MemoryDumpSessionState>& session_state);
   ~ProcessMemoryDump();
@@ -64,6 +84,9 @@ class BASE_EXPORT ProcessMemoryDump {
   // nullptr if not found.
   MemoryAllocatorDump* GetAllocatorDump(const std::string& absolute_name) const;
 
+  MemoryAllocatorDump* GetOrCreateAllocatorDump(
+      const std::string& absolute_name);
+
   // Creates a shared MemoryAllocatorDump, to express cross-process sharing.
   // Shared allocator dumps are allowed to have duplicate guids within the
   // global scope, in order to reference the same dump from multiple processes.
@@ -77,6 +100,12 @@ class BASE_EXPORT ProcessMemoryDump {
 
   // Returns the map of the MemoryAllocatorDumps added to this dump.
   const AllocatorDumpsMap& allocator_dumps() const { return allocator_dumps_; }
+
+  // Adds a heap dump for the allocator with |absolute_name|. The |TracedValue|
+  // must have the correct format. |trace_event::HeapDumper| will generate such
+  // a value from a |trace_event::AllocationRegister|.
+  void AddHeapDump(const std::string& absolute_name,
+                   scoped_refptr<TracedValue> heap_dump);
 
   // Adds an ownership relationship between two MemoryAllocatorDump(s) with the
   // semantics: |source| owns |target|, and has the effect of attributing
@@ -138,6 +167,7 @@ class BASE_EXPORT ProcessMemoryDump {
   bool has_process_mmaps_;
 
   AllocatorDumpsMap allocator_dumps_;
+  HeapDumpsMap heap_dumps_;
 
   // ProcessMemoryDump handles the memory ownership of all its belongings.
   ScopedVector<MemoryAllocatorDump> allocator_dumps_storage_;

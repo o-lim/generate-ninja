@@ -9,6 +9,7 @@
 #define BASE_CALLBACK_INTERNAL_H_
 
 #include <stddef.h>
+#include <type_traits>
 
 #include "base/atomic_ref_count.h"
 #include "base/base_export.h"
@@ -92,7 +93,7 @@ class BASE_EXPORT CallbackBase {
 };
 
 // A helper template to determine if given type is non-const move-only-type,
-// i.e. if a value of the given type should be passed via .Pass() in a
+// i.e. if a value of the given type should be passed via std::move() in a
 // destructive way.
 template <typename T> struct IsMoveOnlyType {
   template <typename U>
@@ -103,18 +104,6 @@ template <typename T> struct IsMoveOnlyType {
 
   static const bool value = sizeof((Test<T>(0))) == sizeof(YesType) &&
                             !is_const<T>::value;
-};
-
-// Returns |Then| as SelectType::Type if |condition| is true. Otherwise returns
-// |Else|.
-template <bool condition, typename Then, typename Else>
-struct SelectType {
-  typedef Then Type;
-};
-
-template <typename Then, typename Else>
-struct SelectType<false, Then, Else> {
-  typedef Else Type;
 };
 
 template <typename>
@@ -140,9 +129,9 @@ struct CallbackParamTraitsForNonMoveOnlyType;
 // break passing of C-string literals.
 template <typename T>
 struct CallbackParamTraits
-    : SelectType<IsMoveOnlyType<T>::value,
+    : std::conditional<IsMoveOnlyType<T>::value,
          CallbackParamTraitsForMoveOnlyType<T>,
-         CallbackParamTraitsForNonMoveOnlyType<T> >::Type {
+         CallbackParamTraitsForNonMoveOnlyType<T>>::type {
 };
 
 template <typename T>
@@ -208,7 +197,7 @@ struct CallbackParamTraitsForMoveOnlyType {
 // default template compiles out to be a no-op.
 //
 // In C++11, std::forward would replace all uses of this function.  However, it
-// is impossible to implement a general std::forward with C++11 due to a lack
+// is impossible to implement a general std::forward without C++11 due to a lack
 // of rvalue references.
 //
 // In addition to Callback/Bind, this is used by PostTaskAndReplyWithResult to
@@ -216,13 +205,15 @@ struct CallbackParamTraitsForMoveOnlyType {
 // parameter to another callback. This is to support Callbacks that return
 // the movable-but-not-copyable types whitelisted above.
 template <typename T>
-typename enable_if<!IsMoveOnlyType<T>::value, T>::type& CallbackForward(T& t) {
+typename std::enable_if<!IsMoveOnlyType<T>::value, T>::type& CallbackForward(
+    T& t) {
   return t;
 }
 
 template <typename T>
-typename enable_if<IsMoveOnlyType<T>::value, T>::type CallbackForward(T& t) {
-  return t.Pass();
+typename std::enable_if<IsMoveOnlyType<T>::value, T>::type CallbackForward(
+    T& t) {
+  return std::move(t);
 }
 
 }  // namespace internal

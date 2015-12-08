@@ -8,7 +8,6 @@ import("//build/config/crypto.gni")
 import("//build/config/features.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
-import("//build/module_args/v8.gni")
 import("//build/toolchain/goma.gni")
 
 declare_args() {
@@ -168,11 +167,11 @@ config("feature_flags") {
   if (is_msan) {
     defines += [ "MEMORY_SANITIZER" ]
   }
+  if (is_ubsan || is_ubsan_vptr) {
+    defines += [ "UNDEFINED_SANITIZER" ]
+  }
   if (enable_webrtc) {
     defines += [ "ENABLE_WEBRTC=1" ]
-  }
-  if (disable_ftp_support) {
-    defines += [ "DISABLE_FTP_SUPPORT=1" ]
   }
   if (!enable_nacl) {
     defines += [ "DISABLE_NACL" ]
@@ -216,14 +215,8 @@ config("feature_flags") {
   if (enable_autofill_dialog) {
     defines += [ "ENABLE_AUTOFILL_DIALOG=1" ]
   }
-  if (enable_wifi_bootstrapping) {
-    defines += [ "ENABLE_WIFI_BOOTSTRAPPING=1" ]
-  }
   if (enable_image_loader_extension) {
     defines += [ "IMAGE_LOADER_EXTENSION=1" ]
-  }
-  if (enable_google_now) {
-    defines += [ "ENABLE_GOOGLE_NOW=1" ]
   }
   if (enable_one_click_signin) {
     defines += [ "ENABLE_ONE_CLICK_SIGNIN" ]
@@ -234,20 +227,17 @@ config("feature_flags") {
   if (enable_topchrome_md) {
     defines += [ "ENABLE_TOPCHROME_MD=1" ]
   }
+  if (enable_wayland_server) {
+    defines += [ "ENABLE_WAYLAND_SERVER=1" ]
+  }
   if (proprietary_codecs) {
     defines += [ "USE_PROPRIETARY_CODECS" ]
   }
   if (enable_hangout_services_extension) {
     defines += [ "ENABLE_HANGOUT_SERVICES_EXTENSION=1" ]
   }
-  if (v8_use_external_startup_data) {
-    defines += [ "V8_USE_EXTERNAL_STARTUP_DATA" ]
-  }
   if (enable_background) {
     defines += [ "ENABLE_BACKGROUND=1" ]
-  }
-  if (enable_pre_sync_backup) {
-    defines += [ "ENABLE_PRE_SYNC_BACKUP" ]
   }
   if (enable_video_hole) {
     defines += [ "VIDEO_HOLE=1" ]
@@ -256,14 +246,8 @@ config("feature_flags") {
     defines += [ "FULL_SAFE_BROWSING" ]
     defines += [ "SAFE_BROWSING_CSD" ]
     defines += [ "SAFE_BROWSING_DB_LOCAL" ]
-    defines += [ "SAFE_BROWSING_SERVICE" ]
   } else if (safe_browsing_mode == 2) {
-    defines += [ "MOBILE_SAFE_BROWSING" ]
-    defines += [ "SAFE_BROWSING_SERVICE" ]
-  } else if (safe_browsing_mode == 3) {
-    defines += [ "MOBILE_SAFE_BROWSING" ]
     defines += [ "SAFE_BROWSING_DB_REMOTE" ]
-    defines += [ "SAFE_BROWSING_SERVICE" ]
   }
   if (is_official_build) {
     defines += [ "OFFICIAL_BUILD" ]
@@ -449,9 +433,7 @@ config("precompiled_headers") {
     # then delete the precompile.c.obj file, then build again.
     cflags_c = [ "/wd4206" ]
   } else if (is_mac && !is_official_build && !use_goma) {
-    # TODO(andybons): enable this when GCC PCH support in the binary has been
-    # rolled.
-    #precompiled_header = "build/precompile.h"
-    #precompiled_source = "//build/precompile.h"
+    precompiled_header = "build/precompile.h"
+    precompiled_source = "//build/precompile.h"
   }
 }

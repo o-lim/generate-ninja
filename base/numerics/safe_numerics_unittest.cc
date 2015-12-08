@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <limits>
+#include <type_traits>
 
 #include "base/compiler_specific.h"
 #include "base/numerics/safe_conversions.h"
@@ -30,7 +31,6 @@ using base::internal::RANGE_INVALID;
 using base::internal::RANGE_OVERFLOW;
 using base::internal::RANGE_UNDERFLOW;
 using base::internal::SignedIntegerForSize;
-using base::enable_if;
 
 // These tests deliberately cause arithmetic overflows. If the compiler is
 // aggressive enough, it can const fold these overflows. Disable warnings about
@@ -76,9 +76,9 @@ template <typename Dst>
 static void TestSpecializedArithmetic(
     const char* dst,
     int line,
-    typename enable_if<
-        numeric_limits<Dst>::is_integer&& numeric_limits<Dst>::is_signed,
-        int>::type = 0) {
+    typename std::enable_if<numeric_limits<Dst>::is_integer &&
+                                numeric_limits<Dst>::is_signed,
+                            int>::type = 0) {
   typedef numeric_limits<Dst> DstLimits;
   TEST_EXPECTED_VALIDITY(RANGE_OVERFLOW,
                          -CheckedNumeric<Dst>(DstLimits::min()));
@@ -132,9 +132,9 @@ template <typename Dst>
 static void TestSpecializedArithmetic(
     const char* dst,
     int line,
-    typename enable_if<
-        numeric_limits<Dst>::is_integer && !numeric_limits<Dst>::is_signed,
-        int>::type = 0) {
+    typename std::enable_if<numeric_limits<Dst>::is_integer &&
+                                !numeric_limits<Dst>::is_signed,
+                            int>::type = 0) {
   typedef numeric_limits<Dst> DstLimits;
   TEST_EXPECTED_VALIDITY(RANGE_VALID, -CheckedNumeric<Dst>(DstLimits::min()));
   TEST_EXPECTED_VALIDITY(RANGE_VALID,
@@ -172,7 +172,7 @@ template <typename Dst>
 void TestSpecializedArithmetic(
     const char* dst,
     int line,
-    typename enable_if<numeric_limits<Dst>::is_iec559, int>::type = 0) {
+    typename std::enable_if<numeric_limits<Dst>::is_iec559, int>::type = 0) {
   typedef numeric_limits<Dst> DstLimits;
   TEST_EXPECTED_VALIDITY(RANGE_VALID, -CheckedNumeric<Dst>(DstLimits::min()));
 
@@ -739,4 +739,28 @@ TEST(SafeNumerics, IsValueInRangeForNumericType) {
       static_cast<int64_t>(std::numeric_limits<int32_t>::min())));
   EXPECT_TRUE(IsValueInRangeForNumericType<int64_t>(
       std::numeric_limits<int64_t>::min()));
+}
+
+TEST(SafeNumerics, CompoundNumericOperations) {
+  CheckedNumeric<int> a = 1;
+  CheckedNumeric<int> b = 2;
+  CheckedNumeric<int> c = 3;
+  CheckedNumeric<int> d = 4;
+  a += b;
+  EXPECT_EQ(3, a.ValueOrDie());
+  a -= c;
+  EXPECT_EQ(0, a.ValueOrDie());
+  d /= b;
+  EXPECT_EQ(2, d.ValueOrDie());
+  d *= d;
+  EXPECT_EQ(4, d.ValueOrDie());
+
+  CheckedNumeric<int> too_large = std::numeric_limits<int>::max();
+  EXPECT_TRUE(too_large.IsValid());
+  too_large += d;
+  EXPECT_FALSE(too_large.IsValid());
+  too_large -= d;
+  EXPECT_FALSE(too_large.IsValid());
+  too_large /= d;
+  EXPECT_FALSE(too_large.IsValid());
 }

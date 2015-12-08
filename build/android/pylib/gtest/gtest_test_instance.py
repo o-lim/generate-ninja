@@ -77,6 +77,9 @@ _EXTRA_NATIVE_TEST_ACTIVITY = (
         'NativeTestActivity')
 _EXTRA_RUN_IN_SUB_THREAD = (
     'org.chromium.native_test.NativeTestActivity.RunInSubThread')
+EXTRA_SHARD_NANO_TIMEOUT = (
+    'org.chromium.native_test.NativeTestInstrumentationTestRunner.'
+        'ShardNanoTimeout')
 _EXTRA_SHARD_SIZE_LIMIT = (
     'org.chromium.native_test.NativeTestInstrumentationTestRunner.'
         'ShardSizeLimit')
@@ -133,33 +136,31 @@ class GtestTestInstance(test_instance.TestInstance):
       raise ValueError('Platform mode currently supports only 1 gtest suite')
     self._suite = args.suite_name[0]
 
-    self._apk_path = os.path.join(
+    self._shard_timeout = args.shard_timeout
+
+    incremental_part = '_incremental' if args.incremental_install else ''
+    apk_path = os.path.join(
         constants.GetOutDirectory(), '%s_apk' % self._suite,
-        '%s-debug.apk' % self._suite)
+        '%s-debug%s.apk' % (self._suite, incremental_part))
     self._exe_path = os.path.join(constants.GetOutDirectory(),
                                   self._suite)
-    if not os.path.exists(self._apk_path):
-      self._apk_path = None
-      self._activity = None
-      self._package = None
-      self._runner = None
+    if not os.path.exists(apk_path):
+      self._apk_helper = None
     else:
-      helper = apk_helper.ApkHelper(self._apk_path)
-      self._activity = helper.GetActivityName()
-      self._package = helper.GetPackageName()
-      self._runner = helper.GetInstrumentationName()
-      self._permissions = helper.GetPermissions()
+      self._apk_helper = apk_helper.ApkHelper(apk_path)
       self._extras = {
-        _EXTRA_NATIVE_TEST_ACTIVITY: self._activity,
+          _EXTRA_NATIVE_TEST_ACTIVITY: self._apk_helper.GetActivityName(),
       }
       if self._suite in RUN_IN_SUB_THREAD_TEST_SUITES:
         self._extras[_EXTRA_RUN_IN_SUB_THREAD] = 1
       if self._suite in BROWSER_TEST_SUITES:
         self._extras[_EXTRA_SHARD_SIZE_LIMIT] = 1
+        self._extras[EXTRA_SHARD_NANO_TIMEOUT] = int(1e9 * self._shard_timeout)
+        self._shard_timeout = 900
 
     if not os.path.exists(self._exe_path):
       self._exe_path = None
-    if not self._apk_path and not self._exe_path:
+    if not self._apk_helper and not self._exe_path:
       error_func('Could not find apk or executable for %s' % self._suite)
 
     self._data_deps = []
@@ -197,6 +198,64 @@ class GtestTestInstance(test_instance.TestInstance):
       self._app_data_files = None
       self._app_data_file_dir = None
 
+    self._test_arguments = args.test_arguments
+
+  @property
+  def activity(self):
+    return self._apk_helper and self._apk_helper.GetActivityName()
+
+  @property
+  def apk(self):
+    return self._apk_helper and self._apk_helper.path
+
+  @property
+  def apk_helper(self):
+    return self._apk_helper
+
+  @property
+  def app_file_dir(self):
+    return self._app_data_file_dir
+
+  @property
+  def app_files(self):
+    return self._app_data_files
+
+  @property
+  def exe(self):
+    return self._exe_path
+
+  @property
+  def extras(self):
+    return self._extras
+
+  @property
+  def gtest_filter(self):
+    return self._gtest_filter
+
+  @property
+  def package(self):
+    return self._apk_helper and self._apk_helper.GetPackageName()
+
+  @property
+  def permissions(self):
+    return self._apk_helper and self._apk_helper.GetPermissions()
+
+  @property
+  def runner(self):
+    return self._apk_helper and self._apk_helper.GetInstrumentationName()
+
+  @property
+  def shard_timeout(self):
+    return self._shard_timeout
+
+  @property
+  def suite(self):
+    return self._suite
+
+  @property
+  def test_arguments(self):
+    return self._test_arguments
+
   #override
   def TestType(self):
     return 'gtest'
@@ -212,7 +271,8 @@ class GtestTestInstance(test_instance.TestInstance):
       dest_dir = None
       if self._suite == 'breakpad_unittests':
         dest_dir = '/data/local/tmp/'
-      self._data_deps.extend([(constants.ISOLATE_DEPS_DIR, dest_dir)])
+      self._data_deps.extend([
+          (self._isolate_delegate.isolate_deps_dir, dest_dir)])
 
 
   def GetDataDependencies(self):
@@ -293,7 +353,7 @@ class GtestTestInstance(test_instance.TestInstance):
 
       if result_type:
         test_name = matcher.group(2)
-        duration = matcher.group(3) if matcher.group(3) else 0
+        duration = int(matcher.group(3)) if matcher.group(3) else 0
         results.append(base_test_result.BaseTestResult(
             test_name, result_type, duration,
             log=('\n'.join(log) if log else '')))
@@ -307,44 +367,4 @@ class GtestTestInstance(test_instance.TestInstance):
     """Clear the mappings created by SetUp."""
     if self._isolate_delegate:
       self._isolate_delegate.Clear()
-
-  @property
-  def activity(self):
-    return self._activity
-
-  @property
-  def apk(self):
-    return self._apk_path
-
-  @property
-  def app_file_dir(self):
-    return self._app_data_file_dir
-
-  @property
-  def app_files(self):
-    return self._app_data_files
-
-  @property
-  def exe(self):
-    return self._exe_path
-
-  @property
-  def extras(self):
-    return self._extras
-
-  @property
-  def package(self):
-    return self._package
-
-  @property
-  def permissions(self):
-    return self._permissions
-
-  @property
-  def runner(self):
-    return self._runner
-
-  @property
-  def suite(self):
-    return self._suite
 

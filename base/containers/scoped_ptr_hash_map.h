@@ -57,7 +57,7 @@ class ScopedPtrHashMap {
     std::pair<iterator, bool> result =
         data_.insert(std::make_pair(key, data.get()));
     if (result.second)
-      ignore_result(data.release());
+      ::ignore_result(data.release());
     return result;
   }
 
@@ -82,7 +82,7 @@ class ScopedPtrHashMap {
 
     ScopedPtr ret(it->second);
     it->second = NULL;
-    return ret.Pass();
+    return ret;
   }
 
   ScopedPtr take(const Key& k) {
@@ -100,7 +100,7 @@ class ScopedPtrHashMap {
 
     ScopedPtr ret(it->second);
     data_.erase(it);
-    return ret.Pass();
+    return ret;
   }
 
   ScopedPtr take_and_erase(const Key& k) {

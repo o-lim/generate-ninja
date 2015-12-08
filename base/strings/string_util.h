@@ -36,9 +36,14 @@ int vsnprintf(char* buffer, size_t size, const char* format, va_list arguments)
 
 // We separate the declaration from the implementation of this inline
 // function just so the PRINTF_FORMAT works.
-inline int snprintf(char* buffer, size_t size, const char* format, ...)
-    PRINTF_FORMAT(3, 4);
-inline int snprintf(char* buffer, size_t size, const char* format, ...) {
+inline int snprintf(char* buffer,
+                    size_t size,
+                    _Printf_format_string_ const char* format,
+                    ...) PRINTF_FORMAT(3, 4);
+inline int snprintf(char* buffer,
+                    size_t size,
+                    _Printf_format_string_ const char* format,
+                    ...) {
   va_list arguments;
   va_start(arguments, format);
   int result = vsnprintf(buffer, size, format, arguments);
@@ -238,12 +243,6 @@ BASE_EXPORT TrimPositions TrimWhitespaceASCII(const std::string& input,
 BASE_EXPORT StringPiece TrimWhitespaceASCII(StringPiece input,
                                             TrimPositions positions);
 
-// Deprecated. This function is only for backward compatibility and calls
-// TrimWhitespaceASCII().
-BASE_EXPORT TrimPositions TrimWhitespace(const std::string& input,
-                                         TrimPositions positions,
-                                         std::string* output);
-
 // Searches  for CR or LF characters.  Removes all contiguous whitespace
 // strings that contain them.  This is useful when trying to deal with text
 // copied from terminals.
@@ -358,9 +357,7 @@ inline bool IsHexDigit(Char c) {
 BASE_EXPORT char HexDigitToInt(wchar_t c);
 
 // Returns true if it's a Unicode whitespace character.
-inline bool IsUnicodeWhitespace(wchar_t c) {
-  return wcschr(base::kWhitespaceWide, c) != NULL;
-}
+BASE_EXPORT bool IsUnicodeWhitespace(wchar_t c);
 
 // Return a byte string in human-readable format with a unit suffix. Not
 // appropriate for use in any UI; use of FormatBytes and friends in ui/base is

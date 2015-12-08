@@ -85,7 +85,8 @@ const char* const kFilteredEventGroupNames[] = {
     "v8",                                              // 0x400
     "disabled-by-default-cc.debug",                    // 0x800
     "disabled-by-default-cc.debug.picture",            // 0x1000
-    "disabled-by-default-toplevel.flow"};              // 0x2000
+    "disabled-by-default-toplevel.flow",               // 0x2000
+    "startup"};                                        // 0x4000
 const char kOtherEventsGroupName[] = "__OTHER_EVENTS";  // 0x2000000000000000
 const char kDisabledOtherEventsGroupName[] =
     "__DISABLED_OTHER_EVENTS";  // 0x4000000000000000
@@ -335,20 +336,12 @@ void TraceEventETWExport::AddEvent(
 }
 
 // static
-void TraceEventETWExport::AddCustomEvent(const char* name,
-                                         char const* phase,
-                                         const char* arg_name_1,
-                                         const char* arg_value_1,
-                                         const char* arg_name_2,
-                                         const char* arg_value_2,
-                                         const char* arg_name_3,
-                                         const char* arg_value_3) {
+void TraceEventETWExport::AddCompleteEndEvent(const char* name) {
   auto* instance = GetInstance();
   if (!instance || !instance->etw_export_enabled_ || !EventEnabledChromeEvent())
     return;
 
-  EventWriteChromeEvent(name, phase, arg_name_1, arg_value_1, arg_name_2,
-                        arg_value_2, arg_name_3, arg_value_3);
+  EventWriteChromeEvent(name, "Complete End", "", "", "", "", "", "");
 }
 
 // static

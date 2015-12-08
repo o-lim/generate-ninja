@@ -16,6 +16,8 @@ typedef HANDLE MutexHandle;
 // Windows doesn't define STDERR_FILENO.  Define it here.
 #define STDERR_FILENO 2
 #elif defined(OS_MACOSX)
+#include <asl.h>
+#include <CoreFoundation/CoreFoundation.h>
 #include <mach/mach.h>
 #include <mach/mach_time.h>
 #include <mach-o/dyld.h>
@@ -30,10 +32,12 @@ typedef HANDLE MutexHandle;
 
 #if defined(OS_POSIX)
 #include <errno.h>
+#include <paths.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #define MAX_PATH PATH_MAX
 typedef FILE* FileHandle;
@@ -56,6 +60,7 @@ typedef pthread_mutex_t* MutexHandle;
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock_impl.h"
 #include "base/threading/platform_thread.h"
@@ -385,6 +390,17 @@ int GetMinLogLevel() {
   return g_min_log_level;
 }
 
+bool ShouldCreateLogMessage(int severity) {
+  if (severity < g_min_log_level)
+    return false;
+
+  // Return true here unless we know ~LogMessage won't do anything. Note that
+  // ~LogMessage writes to stderr if severity_ >= kAlwaysPrintErrorLevel, even
+  // when g_logging_destination is LOG_NONE.
+  return g_logging_destination != LOG_NONE || log_message_handler ||
+         severity >= kAlwaysPrintErrorLevel;
+}
+
 int GetVlogVerbosity() {
   return std::max(-1, LOG_INFO - GetMinLogLevel());
 }
@@ -449,38 +465,8 @@ void DisplayDebugMessageInDialog(const std::string& str) {
     return;
 
 #if defined(OS_WIN)
-  // For Windows programs, it's possible that the message loop is
-  // messed up on a fatal error, and creating a MessageBox will cause
-  // that message loop to be run. Instead, we try to spawn another
-  // process that displays its command line. We look for "Debug
-  // Message.exe" in the same directory as the application. If it
-  // exists, we use it, otherwise, we use a regular message box.
-  wchar_t prog_name[MAX_PATH];
-  GetModuleFileNameW(nullptr, prog_name, MAX_PATH);
-  wchar_t* backslash = wcsrchr(prog_name, '\\');
-  if (backslash)
-    backslash[1] = 0;
-  wcscat_s(prog_name, MAX_PATH, L"debug_message.exe");
-
-  std::wstring cmdline = base::UTF8ToWide(str);
-  if (cmdline.empty())
-    return;
-
-  STARTUPINFO startup_info;
-  memset(&startup_info, 0, sizeof(startup_info));
-  startup_info.cb = sizeof(startup_info);
-
-  PROCESS_INFORMATION process_info;
-  if (CreateProcessW(prog_name, &cmdline[0], nullptr, nullptr, false, 0,
-                     nullptr, nullptr, &startup_info, &process_info)) {
-    WaitForSingleObject(process_info.hProcess, INFINITE);
-    CloseHandle(process_info.hThread);
-    CloseHandle(process_info.hProcess);
-  } else {
-    // debug process broken, let's just do a message box
-    MessageBoxW(nullptr, &cmdline[0], L"Fatal error",
-                MB_OK | MB_ICONHAND | MB_TOPMOST);
-  }
+  MessageBoxW(nullptr, base::UTF8ToUTF16(str).c_str(), L"Fatal error",
+              MB_OK | MB_ICONHAND | MB_TOPMOST);
 #else
   // We intentionally don't implement a dialog on other platforms.
   // You can just look at stderr.
@@ -546,6 +532,121 @@ LogMessage::~LogMessage() {
   if ((g_logging_destination & LOG_TO_SYSTEM_DEBUG_LOG) != 0) {
 #if defined(OS_WIN)
     OutputDebugStringA(str_newline.c_str());
+#elif defined(OS_MACOSX)
+    // In LOG_TO_SYSTEM_DEBUG_LOG mode, log messages are always written to
+    // stderr. If stderr is /dev/null, also log via ASL (Apple System Log). If
+    // there's something weird about stderr, assume that log messages are going
+    // nowhere and log via ASL too. Messages logged via ASL show up in
+    // Console.app.
+    //
+    // Programs started by launchd, as UI applications normally are, have had
+    // stderr connected to /dev/null since OS X 10.8. Prior to that, stderr was
+    // a pipe to launchd, which logged what it received (see log_redirect_fd in
+    // 10.7.5 launchd-392.39/launchd/src/launchd_core_logic.c).
+    //
+    // Another alternative would be to determine whether stderr is a pipe to
+    // launchd and avoid logging via ASL only in that case. See 10.7.5
+    // CF-635.21/CFUtilities.c also_do_stderr(). This would result in logging to
+    // both stderr and ASL even in tests, where it's undesirable to log to the
+    // system log at all.
+    //
+    // Note that the ASL client by default discards messages whose levels are
+    // below ASL_LEVEL_NOTICE. It's possible to change that with
+    // asl_set_filter(), but this is pointless because syslogd normally applies
+    // the same filter.
+    const bool log_via_asl = []() {
+      struct stat stderr_stat;
+      if (fstat(fileno(stderr), &stderr_stat) == -1) {
+        return true;
+      }
+      if (!S_ISCHR(stderr_stat.st_mode)) {
+        return false;
+      }
+
+      struct stat dev_null_stat;
+      if (stat(_PATH_DEVNULL, &dev_null_stat) == -1) {
+        return true;
+      }
+
+      return !S_ISCHR(dev_null_stat.st_mode) ||
+             stderr_stat.st_rdev == dev_null_stat.st_rdev;
+    }();
+
+    if (log_via_asl) {
+      // Log roughly the same way that CFLog() and NSLog() would. See 10.10.5
+      // CF-1153.18/CFUtilities.c __CFLogCString().
+      //
+      // The ASL facility is set to the main bundle ID if available. Otherwise,
+      // "com.apple.console" is used.
+      CFBundleRef main_bundle = CFBundleGetMainBundle();
+      CFStringRef main_bundle_id_cf =
+          main_bundle ? CFBundleGetIdentifier(main_bundle) : nullptr;
+      std::string asl_facility =
+          main_bundle_id_cf ? base::SysCFStringRefToUTF8(main_bundle_id_cf)
+                            : std::string("com.apple.console");
+
+      class ASLClient {
+       public:
+        explicit ASLClient(const std::string& asl_facility)
+            : client_(asl_open(nullptr,
+                               asl_facility.c_str(),
+                               ASL_OPT_NO_DELAY)) {}
+        ~ASLClient() { asl_close(client_); }
+
+        aslclient get() const { return client_; }
+
+       private:
+        aslclient client_;
+        DISALLOW_COPY_AND_ASSIGN(ASLClient);
+      } asl_client(asl_facility);
+
+      class ASLMessage {
+       public:
+        ASLMessage() : message_(asl_new(ASL_TYPE_MSG)) {}
+        ~ASLMessage() { asl_free(message_); }
+
+        aslmsg get() const { return message_; }
+
+       private:
+        aslmsg message_;
+        DISALLOW_COPY_AND_ASSIGN(ASLMessage);
+      } asl_message;
+
+      // By default, messages are only readable by the admin group. Explicitly
+      // make them readable by the user generating the messages.
+      char euid_string[12];
+      snprintf(euid_string, arraysize(euid_string), "%d", geteuid());
+      asl_set(asl_message.get(), ASL_KEY_READ_UID, euid_string);
+
+      // Map Chrome log severities to ASL log levels.
+      const char* const asl_level_string = [](LogSeverity severity) {
+        // ASL_LEVEL_* are ints, but ASL needs equivalent strings. This
+        // non-obvious two-step macro trick achieves what's needed.
+        // https://gcc.gnu.org/onlinedocs/cpp/Stringification.html
+#define ASL_LEVEL_STR(level) ASL_LEVEL_STR_X(level)
+#define ASL_LEVEL_STR_X(level) #level
+        switch (severity) {
+          case LOG_INFO:
+            return ASL_LEVEL_STR(ASL_LEVEL_INFO);
+          case LOG_WARNING:
+            return ASL_LEVEL_STR(ASL_LEVEL_WARNING);
+          case LOG_ERROR:
+            return ASL_LEVEL_STR(ASL_LEVEL_ERR);
+          case LOG_FATAL:
+            return ASL_LEVEL_STR(ASL_LEVEL_CRIT);
+          default:
+            return severity < 0 ? ASL_LEVEL_STR(ASL_LEVEL_DEBUG)
+                                : ASL_LEVEL_STR(ASL_LEVEL_NOTICE);
+        }
+#undef ASL_LEVEL_STR
+#undef ASL_LEVEL_STR_X
+      }(severity_);
+      asl_set(asl_message.get(), ASL_KEY_LEVEL, asl_level_string);
+
+      asl_set(asl_message.get(), ASL_KEY_MSG, str_newline.c_str());
+
+      asl_send(asl_client.get(), asl_message.get());
+    }
 #elif defined(OS_ANDROID)
     android_LogPriority priority =
         (severity_ < 0) ? ANDROID_LOG_VERBOSE : ANDROID_LOG_UNKNOWN;

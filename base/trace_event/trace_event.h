@@ -13,8 +13,7 @@
 
 #include "base/atomicops.h"
 #include "base/time/time.h"
-#include "base/trace_event/trace_event_common.h"
-#include "base/trace_event/trace_event_memory.h"
+#include "base/trace_event/common/trace_event_common.h"
 #include "base/trace_event/trace_event_system_stats_monitor.h"
 #include "base/trace_event/trace_log.h"
 #include "build/build_config.h"
@@ -125,6 +124,26 @@
 #define TRACE_EVENT_API_ADD_TRACE_EVENT_WITH_CONTEXT_ID \
     base::trace_event::TraceLog::GetInstance()->AddTraceEventWithContextId
 
+// Add a trace event to the platform tracing system overriding the pid.
+// The resulting event will have tid = pid == (process_id passed here).
+// base::trace_event::TraceEventHandle
+// TRACE_EVENT_API_ADD_TRACE_EVENT_WITH_PROCESS_ID(
+//                    char phase,
+//                    const unsigned char* category_group_enabled,
+//                    const char* name,
+//                    unsigned long long id,
+//                    unsigned long long context_id,
+//                    int process_id,
+//                    int num_args,
+//                    const char** arg_names,
+//                    const unsigned char* arg_types,
+//                    const unsigned long long* arg_values,
+//                    const scoped_refptr<ConvertableToTraceFormat>*
+//                    convertable_values,
+//                    unsigned int flags)
+#define TRACE_EVENT_API_ADD_TRACE_EVENT_WITH_PROCESS_ID \
+  base::trace_event::TraceLog::GetInstance()->AddTraceEventWithProcessId
+
 // Add a trace event to the platform tracing system.
 // base::trace_event::TraceEventHandle
 // TRACE_EVENT_API_ADD_TRACE_EVENT_WITH_TIMESTAMP(
@@ -134,7 +153,7 @@
 //                    unsigned long long id,
 //                    unsigned long long context_id,
 //                    int thread_id,
-//                    const TraceTicks& timestamp,
+//                    const TimeTicks& timestamp,
 //                    int num_args,
 //                    const char** arg_names,
 //                    const unsigned char* arg_types,
@@ -153,6 +172,15 @@
 //     base::trace_event::TraceEventHandle id)
 #define TRACE_EVENT_API_UPDATE_TRACE_EVENT_DURATION \
     base::trace_event::TraceLog::GetInstance()->UpdateTraceEventDuration
+
+// Adds a metadata event to the trace log. The |AppendValueAsTraceFormat| method
+// on the convertable value will be called at flush time.
+// TRACE_EVENT_API_ADD_METADATA_EVENT(
+//   const char* event_name,
+//   const char* arg_name,
+//   scoped_refptr<ConvertableToTraceFormat> arg_value)
+#define TRACE_EVENT_API_ADD_METADATA_EVENT \
+    trace_event_internal::AddMetadataEvent
 
 // Defines atomic operations used internally by the tracing system.
 #define TRACE_EVENT_API_ATOMIC_WORD base::subtle::AtomicWord
@@ -273,6 +301,23 @@ TRACE_EVENT_API_CLASS_EXPORT extern \
 
 // Implementation detail: internal macro to create static category and add
 // event if the category is enabled.
+#define INTERNAL_TRACE_EVENT_ADD_WITH_TIMESTAMP(phase, category_group, name, \
+                                                timestamp, flags, ...)       \
+  do {                                                                       \
+    INTERNAL_TRACE_EVENT_GET_CATEGORY_INFO(category_group);                  \
+    if (INTERNAL_TRACE_EVENT_CATEGORY_GROUP_ENABLED_FOR_RECORDING_MODE()) {  \
+      trace_event_internal::AddTraceEventWithThreadIdAndTimestamp(           \
+          phase, INTERNAL_TRACE_EVENT_UID(category_group_enabled), name,     \
+          trace_event_internal::kNoId, trace_event_internal::kNoId,          \
+          TRACE_EVENT_API_CURRENT_THREAD_ID,                                 \
+          base::TimeTicks::FromInternalValue(timestamp),                     \
+          flags | TRACE_EVENT_FLAG_EXPLICIT_TIMESTAMP,                       \
+          trace_event_internal::kNoId, ##__VA_ARGS__);                       \
+    }                                                                        \
+  } while (0)
+
+// Implementation detail: internal macro to create static category and add
+// event if the category is enabled.
 #define INTERNAL_TRACE_EVENT_ADD_WITH_ID_TID_AND_TIMESTAMP(phase, \
         category_group, name, id, thread_id, timestamp, flags, ...) \
     do { \
@@ -284,7 +329,7 @@ TRACE_EVENT_API_CLASS_EXPORT extern \
         trace_event_internal::AddTraceEventWithThreadIdAndTimestamp( \
             phase, INTERNAL_TRACE_EVENT_UID(category_group_enabled), \
             name, trace_event_trace_id.data(), trace_event_internal::kNoId, \
-            thread_id, base::TraceTicks::FromInternalValue(timestamp), \
+            thread_id, base::TimeTicks::FromInternalValue(timestamp), \
             trace_event_flags | TRACE_EVENT_FLAG_EXPLICIT_TIMESTAMP, \
             trace_event_internal::kNoId, ##__VA_ARGS__); \
       } \
@@ -488,13 +533,6 @@ static inline void SetTraceValue(const base::ThreadTicks arg,
   *value = arg.ToInternalValue();
 }
 
-static inline void SetTraceValue(const base::TraceTicks arg,
-                                 unsigned char* type,
-                                 unsigned long long* value) {
-  *type = TRACE_VALUE_TYPE_INT;
-  *value = arg.ToInternalValue();
-}
-
 // These AddTraceEvent and AddTraceEventWithThreadIdAndTimestamp template
 // functions are defined here instead of in the macro, because the arg_values
 // could be temporary objects, such as std::string. In order to store
@@ -509,7 +547,7 @@ AddTraceEventWithThreadIdAndTimestamp(
     unsigned long long id,
     unsigned long long context_id,
     int thread_id,
-    const base::TraceTicks& timestamp,
+    const base::TimeTicks& timestamp,
     unsigned int flags,
     unsigned long long bind_id,
     const char* arg1_name,
@@ -531,7 +569,7 @@ AddTraceEventWithThreadIdAndTimestamp(
     unsigned long long id,
     unsigned long long context_id,
     int thread_id,
-    const base::TraceTicks& timestamp,
+    const base::TimeTicks& timestamp,
     unsigned int flags,
     unsigned long long bind_id,
     const char* arg1_name,
@@ -566,7 +604,7 @@ AddTraceEventWithThreadIdAndTimestamp(
     unsigned long long id,
     unsigned long long context_id,
     int thread_id,
-    const base::TraceTicks& timestamp,
+    const base::TimeTicks& timestamp,
     unsigned int flags,
     unsigned long long bind_id,
     const char* arg1_name,
@@ -600,7 +638,7 @@ AddTraceEventWithThreadIdAndTimestamp(
     unsigned long long id,
     unsigned long long context_id,
     int thread_id,
-    const base::TraceTicks& timestamp,
+    const base::TimeTicks& timestamp,
     unsigned int flags,
     unsigned long long bind_id,
     const char* arg1_name,
@@ -629,7 +667,7 @@ AddTraceEventWithThreadIdAndTimestamp(
     unsigned long long id,
     unsigned long long context_id,
     int thread_id,
-    const base::TraceTicks& timestamp,
+    const base::TimeTicks& timestamp,
     unsigned int flags,
     unsigned long long bind_id) {
   return TRACE_EVENT_API_ADD_TRACE_EVENT_WITH_THREAD_ID_AND_TIMESTAMP(
@@ -645,7 +683,7 @@ static inline base::trace_event::TraceEventHandle AddTraceEvent(
     unsigned int flags,
     unsigned long long bind_id) {
   const int thread_id = static_cast<int>(base::PlatformThread::CurrentId());
-  const base::TraceTicks now = base::TraceTicks::Now();
+  const base::TimeTicks now = base::TimeTicks::Now();
   return AddTraceEventWithThreadIdAndTimestamp(phase, category_group_enabled,
                                                name, id, kNoId, thread_id, now,
                                                flags, bind_id);
@@ -660,7 +698,7 @@ AddTraceEventWithThreadIdAndTimestamp(
     unsigned long long id,
     unsigned long long context_id,
     int thread_id,
-    const base::TraceTicks& timestamp,
+    const base::TimeTicks& timestamp,
     unsigned int flags,
     unsigned long long bind_id,
     const char* arg1_name,
@@ -685,7 +723,7 @@ static inline base::trace_event::TraceEventHandle AddTraceEvent(
     const char* arg1_name,
     const ARG1_TYPE& arg1_val) {
   int thread_id = static_cast<int>(base::PlatformThread::CurrentId());
-  base::TraceTicks now = base::TraceTicks::Now();
+  base::TimeTicks now = base::TimeTicks::Now();
   return AddTraceEventWithThreadIdAndTimestamp(phase, category_group_enabled,
                                                name, id, kNoId, thread_id, now,
                                                flags, bind_id,
@@ -701,7 +739,7 @@ AddTraceEventWithThreadIdAndTimestamp(
     unsigned long long id,
     unsigned long long context_id,
     int thread_id,
-    const base::TraceTicks& timestamp,
+    const base::TimeTicks& timestamp,
     unsigned int flags,
     unsigned long long bind_id,
     const char* arg1_name,
@@ -732,12 +770,43 @@ static inline base::trace_event::TraceEventHandle AddTraceEvent(
     const char* arg2_name,
     const ARG2_TYPE& arg2_val) {
   int thread_id = static_cast<int>(base::PlatformThread::CurrentId());
-  base::TraceTicks now = base::TraceTicks::Now();
+  base::TimeTicks now = base::TimeTicks::Now();
   return AddTraceEventWithThreadIdAndTimestamp(phase, category_group_enabled,
                                                name, id, kNoId, thread_id, now,
                                                flags, bind_id,
                                                arg1_name, arg1_val,
                                                arg2_name, arg2_val);
+}
+
+static inline void AddMetadataEvent(
+    const char* event_name,
+    const char* arg_name,
+    scoped_refptr<base::trace_event::ConvertableToTraceFormat> arg_value) {
+  const char* arg_names[1] = {arg_name};
+  scoped_refptr<base::trace_event::ConvertableToTraceFormat>
+      convertable_values[1] = {arg_value};
+  unsigned char arg_types[1] = {TRACE_VALUE_TYPE_CONVERTABLE};
+  base::trace_event::TraceLog::GetInstance()->AddMetadataEvent(
+      event_name,
+      1,  // num_args
+      arg_names, arg_types,
+      nullptr,  // arg_values
+      convertable_values, TRACE_EVENT_FLAG_NONE);
+}
+
+template <class ARG1_TYPE>
+static void AddMetadataEvent(const char* event_name,
+                             const char* arg_name,
+                             const ARG1_TYPE& arg_val) {
+  const int num_args = 1;
+  const char* arg_names[1] = {arg_name};
+  unsigned char arg_types[1];
+  unsigned long long arg_values[1];
+  SetTraceValue(arg_val, &arg_types[0], &arg_values[0]);
+
+  base::trace_event::TraceLog::GetInstance()->AddMetadataEvent(
+      event_name, num_args, arg_names, arg_types, arg_values, nullptr,
+      TRACE_EVENT_FLAG_NONE);
 }
 
 // Used by TRACE_EVENTx macros. Do not use directly.

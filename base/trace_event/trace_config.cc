@@ -4,6 +4,8 @@
 
 #include "base/trace_event/trace_config.h"
 
+#include <utility>
+
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/strings/pattern.h"
@@ -53,6 +55,22 @@ const TraceConfig::MemoryDumpTriggerConfig kDefaultHeavyMemoryDumpTrigger = {
 const TraceConfig::MemoryDumpTriggerConfig kDefaultLightMemoryDumpTrigger = {
     250,  // periodic_interval_ms
     MemoryDumpLevelOfDetail::LIGHT};
+
+class ConvertableTraceConfigToTraceFormat
+    : public base::trace_event::ConvertableToTraceFormat {
+ public:
+  explicit ConvertableTraceConfigToTraceFormat(const TraceConfig& trace_config)
+      : trace_config_(trace_config) {}
+  void AppendAsTraceFormat(std::string* out) const override {
+    out->append(trace_config_.ToString());
+  }
+
+ protected:
+  ~ConvertableTraceConfigToTraceFormat() override {}
+
+ private:
+  const TraceConfig trace_config_;
+};
 
 }  // namespace
 
@@ -138,6 +156,11 @@ std::string TraceConfig::ToString() const {
   return json;
 }
 
+scoped_refptr<ConvertableToTraceFormat>
+TraceConfig::AsConvertableToTraceFormat() const {
+  return new ConvertableTraceConfigToTraceFormat(*this);
+}
+
 std::string TraceConfig::ToCategoryFilterString() const {
   std::string filter_string;
   WriteCategoryFilterString(included_categories_, &filter_string, true);
@@ -188,9 +211,13 @@ bool TraceConfig::IsCategoryGroupEnabled(
         break;
       }
       // One of the category of category_group_name is not present in
-      // excluded_ list. So, it has to be included_ list. Enable the
-      // category_group_name for recording.
-      category_group_disabled = false;
+      // excluded_ list. So, if it's not a disabled-by-default category,
+      // it has to be included_ list. Enable the category_group_name
+      // for recording.
+      if (!base::MatchPattern(category_group_token.c_str(),
+                              TRACE_DISABLED_BY_DEFAULT("*"))) {
+        category_group_disabled = false;
+      }
     }
     // One of the categories present in category_group_name is not present in
     // excluded_ list. Implies this category_group_name group can be enabled
@@ -445,7 +472,7 @@ void TraceConfig::AddCategoryToDict(base::DictionaryValue& dict,
     list->AppendString(*ci);
   }
 
-  dict.Set(param, list.Pass());
+  dict.Set(param, std::move(list));
 }
 
 void TraceConfig::SetMemoryDumpConfig(
@@ -537,13 +564,13 @@ void TraceConfig::ToDict(base::DictionaryValue& dict) const {
                                static_cast<int>(config.periodic_interval_ms));
       trigger_dict->SetString(
           kModeParam, MemoryDumpLevelOfDetailToString(config.level_of_detail));
-      triggers_list->Append(trigger_dict.Pass());
+      triggers_list->Append(std::move(trigger_dict));
     }
 
     // Empty triggers will still be specified explicitly since it means that
     // the periodic dumps are not enabled.
-    memory_dump_config->Set(kTriggersParam, triggers_list.Pass());
-    dict.Set(kMemoryDumpConfigParam, memory_dump_config.Pass());
+    memory_dump_config->Set(kTriggersParam, std::move(triggers_list));
+    dict.Set(kMemoryDumpConfigParam, std::move(memory_dump_config));
   }
 }
 

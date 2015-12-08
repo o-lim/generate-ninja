@@ -157,10 +157,11 @@ void HeaderChecker::RunCheckOverFiles(const FileMap& files, bool force_check) {
   scoped_refptr<base::SequencedWorkerPool> pool(
       new base::SequencedWorkerPool(16, "HeaderChecker"));
   for (const auto& file : files) {
-    // If any target marks it as generated or not a source file, don't check it.
+    // If any target marks it as generated, don't check it.
     bool is_source = false;
+    // being checked.
     bool is_generated = false;
-    for (const auto& vect_i : file.second) {
+    for (const auto& vect_i : file_map_[file.first]) {
       // Only check C-like source files (RC files also have includes).
       SourceFileType type = vect_i.target->toolchain()->GetSourceFileType(file.first);
       if (type == SOURCE_CPP || type == SOURCE_H || type == SOURCE_C ||

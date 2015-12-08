@@ -82,10 +82,15 @@ const char kWriteFile_Help[] =
     "  written, the file will not be updated. This will prevent unnecessary\n"
     "  rebuilds of targets that depend on this file.\n"
     "\n"
+    "  One use for write_file is to write a list of inputs to an script\n"
+    "  that might be too long for the command line. However, it is\n"
+    "  preferrable to use response files for this purpose. See\n"
+    "  \"gn help response_file_contents\".\n"
+    "\n"
     "  TODO(brettw) we probably need an optional third argument to control\n"
     "  list formatting.\n"
     "\n"
-    "Arguments:\n"
+    "Arguments\n"
     "\n"
     "  filename\n"
     "      Filename to write. This must be within the output directory.\n"
@@ -114,6 +119,14 @@ Value RunWriteFile(Scope* scope,
           source_file.value(), args[0].origin(), err))
     return Value();
   g_scheduler->AddWrittenFile(source_file);  // Track that we wrote this file.
+
+  // Track how to recreate this file, since we write it a gen time.
+  // Note this is a hack since the correct output is not a dependency proper,
+  // but an addition of this file to the output of the gn rule that writes it.
+  // This dependency will, however, cause the gen step to be re-run and the
+  // build restarted if the file is missing.
+  g_scheduler->AddGenDependency(
+      scope->settings()->build_settings()->GetFullPath(source_file));
 
   // Compute output.
   std::ostringstream contents;

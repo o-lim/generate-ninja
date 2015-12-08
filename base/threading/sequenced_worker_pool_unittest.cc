@@ -11,6 +11,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
+#include "base/stl_util.h"
 #include "base/synchronization/condition_variable.h"
 #include "base/synchronization/lock.h"
 #include "base/test/sequenced_task_runner_test_template.h"
@@ -69,7 +70,8 @@ class ThreadBlocker {
 class DestructionDeadlockChecker
     : public base::RefCountedThreadSafe<DestructionDeadlockChecker> {
  public:
-  DestructionDeadlockChecker(const scoped_refptr<SequencedWorkerPool>& pool)
+  explicit DestructionDeadlockChecker(
+      const scoped_refptr<SequencedWorkerPool>& pool)
       : pool_(pool) {}
 
  protected:
@@ -234,8 +236,6 @@ class SequencedWorkerPoolTest : public testing::Test {
     ResetPool();
   }
 
-  void TearDown() override { pool()->Shutdown(); }
-
   const scoped_refptr<SequencedWorkerPool>& pool() {
     return pool_owner_->pool();
   }
@@ -351,7 +351,6 @@ TEST_F(SequencedWorkerPoolTest, DelayedTaskDuringShutdown) {
   ASSERT_EQ(1u, completion_sequence.size());
   ASSERT_EQ(1, completion_sequence[0]);
 
-  pool()->Shutdown();
   // Shutdown is asynchronous, so use ResetPool() to block until the pool is
   // fully destroyed (and thus shut down).
   ResetPool();
@@ -430,9 +429,6 @@ TEST_F(SequencedWorkerPoolTest, LotsOfTasksTwoPools) {
   std::vector<int> result =
       tracker()->WaitUntilTasksComplete(2*kNumTasks);
   EXPECT_EQ(2 * kNumTasks, result.size());
-
-  pool2.pool()->Shutdown();
-  pool1.pool()->Shutdown();
 }
 
 // Test that tasks with the same sequence token are executed in order but don't
@@ -525,10 +521,8 @@ TEST_F(SequencedWorkerPoolTest, DISABLED_IgnoresAfterShutdown) {
 
   // The kNumWorkerThread items should have completed, in no particular order.
   ASSERT_EQ(kNumWorkerThreads, result.size());
-  for (size_t i = 0; i < kNumWorkerThreads; i++) {
-    EXPECT_TRUE(std::find(result.begin(), result.end(), static_cast<int>(i)) !=
-                result.end());
-  }
+  for (size_t i = 0; i < kNumWorkerThreads; i++)
+    EXPECT_TRUE(ContainsValue(result, static_cast<int>(i)));
 
   // No further tasks, regardless of shutdown mode, should be allowed.
   EXPECT_FALSE(pool()->PostWorkerTaskWithShutdownBehavior(
@@ -660,11 +654,9 @@ TEST_F(SequencedWorkerPoolTest, DiscardOnShutdown) {
   // The kNumWorkerThread items should have completed, plus the BLOCK_SHUTDOWN
   // one, in no particular order.
   ASSERT_EQ(kNumWorkerThreads + 1, result.size());
-  for (size_t i = 0; i < kNumWorkerThreads; i++) {
-    EXPECT_TRUE(std::find(result.begin(), result.end(), static_cast<int>(i)) !=
-                result.end());
-  }
-  EXPECT_TRUE(std::find(result.begin(), result.end(), 102) != result.end());
+  for (size_t i = 0; i < kNumWorkerThreads; i++)
+    EXPECT_TRUE(ContainsValue(result, static_cast<int>(i)));
+  EXPECT_TRUE(ContainsValue(result, 102));
 }
 
 // Tests that CONTINUE_ON_SHUTDOWN tasks don't block shutdown.
@@ -760,10 +752,8 @@ TEST_F(SequencedWorkerPoolTest, SkipOnShutdown) {
   // allowed to complete. No additional non-blocking tasks should have been
   // started.
   ASSERT_EQ(kNumWorkerThreads, result.size());
-  for (size_t i = 0; i < kNumWorkerThreads; i++) {
-    EXPECT_TRUE(std::find(result.begin(), result.end(), static_cast<int>(i)) !=
-                result.end());
-  }
+  for (size_t i = 0; i < kNumWorkerThreads; i++)
+    EXPECT_TRUE(ContainsValue(result, static_cast<int>(i)));
 }
 
 // Ensure all worker threads are created, and then trigger a spurious
@@ -799,33 +789,30 @@ TEST_F(SequencedWorkerPoolTest, IsRunningOnCurrentThread) {
   SequencedWorkerPool::SequenceToken token2 = pool()->GetSequenceToken();
   SequencedWorkerPool::SequenceToken unsequenced_token;
 
-  scoped_refptr<SequencedWorkerPool> unused_pool =
-      new SequencedWorkerPool(2, "unused_pool");
+  SequencedWorkerPoolOwner unused_pool_owner(2, "unused_pool");
 
   EXPECT_FALSE(pool()->RunsTasksOnCurrentThread());
   EXPECT_FALSE(pool()->IsRunningSequenceOnCurrentThread(token1));
   EXPECT_FALSE(pool()->IsRunningSequenceOnCurrentThread(token2));
   EXPECT_FALSE(pool()->IsRunningSequenceOnCurrentThread(unsequenced_token));
-  EXPECT_FALSE(unused_pool->RunsTasksOnCurrentThread());
-  EXPECT_FALSE(unused_pool->IsRunningSequenceOnCurrentThread(token1));
-  EXPECT_FALSE(unused_pool->IsRunningSequenceOnCurrentThread(token2));
+  EXPECT_FALSE(unused_pool_owner.pool()->RunsTasksOnCurrentThread());
   EXPECT_FALSE(
-      unused_pool->IsRunningSequenceOnCurrentThread(unsequenced_token));
+      unused_pool_owner.pool()->IsRunningSequenceOnCurrentThread(token1));
+  EXPECT_FALSE(
+      unused_pool_owner.pool()->IsRunningSequenceOnCurrentThread(token2));
+  EXPECT_FALSE(unused_pool_owner.pool()->IsRunningSequenceOnCurrentThread(
+      unsequenced_token));
 
   pool()->PostSequencedWorkerTask(
-      token1, FROM_HERE,
-      base::Bind(&IsRunningOnCurrentThreadTask,
-                 token1, token2, pool(), unused_pool));
+      token1, FROM_HERE, base::Bind(&IsRunningOnCurrentThreadTask, token1,
+                                    token2, pool(), unused_pool_owner.pool()));
   pool()->PostSequencedWorkerTask(
       token2, FROM_HERE,
-      base::Bind(&IsRunningOnCurrentThreadTask,
-                 token2, unsequenced_token, pool(), unused_pool));
+      base::Bind(&IsRunningOnCurrentThreadTask, token2, unsequenced_token,
+                 pool(), unused_pool_owner.pool()));
   pool()->PostWorkerTask(
-      FROM_HERE,
-      base::Bind(&IsRunningOnCurrentThreadTask,
-                 unsequenced_token, token1, pool(), unused_pool));
-  pool()->Shutdown();
-  unused_pool->Shutdown();
+      FROM_HERE, base::Bind(&IsRunningOnCurrentThreadTask, unsequenced_token,
+                            token1, pool(), unused_pool_owner.pool()));
 }
 
 // Checks that tasks are destroyed in the right context during shutdown. If a
@@ -904,16 +891,57 @@ TEST_F(SequencedWorkerPoolTest, FlushForTesting) {
   pool()->FlushForTesting();
 }
 
-TEST(SequencedWorkerPoolRefPtrTest, ShutsDownCleanWithContinueOnShutdown) {
-  MessageLoop loop;
-  scoped_refptr<SequencedWorkerPool> pool(new SequencedWorkerPool(3, "Pool"));
+namespace {
+
+void CheckWorkerPoolAndSequenceToken(
+    const scoped_refptr<SequencedWorkerPool>& expected_pool,
+    SequencedWorkerPool::SequenceToken expected_token) {
+  SequencedWorkerPool::SequenceToken token =
+      SequencedWorkerPool::GetSequenceTokenForCurrentThread();
+  EXPECT_EQ(expected_token.ToString(), token.ToString());
+
+  scoped_refptr<SequencedWorkerPool> pool =
+      SequencedWorkerPool::GetWorkerPoolForCurrentThread();
+  EXPECT_EQ(expected_pool, pool);
+}
+
+}  // namespace
+
+TEST_F(SequencedWorkerPoolTest, GetWorkerPoolAndSequenceTokenForCurrentThread) {
+  EnsureAllWorkersCreated();
+
+  // The current thread should have neither a worker pool nor a sequence token.
+  SequencedWorkerPool::SequenceToken local_token =
+      SequencedWorkerPool::GetSequenceTokenForCurrentThread();
+  scoped_refptr<SequencedWorkerPool> local_pool =
+      SequencedWorkerPool::GetWorkerPoolForCurrentThread();
+  EXPECT_FALSE(local_token.IsValid()) << local_token.ToString();
+  EXPECT_FALSE(local_pool);
+
+  SequencedWorkerPool::SequenceToken token1 = pool()->GetSequenceToken();
+  SequencedWorkerPool::SequenceToken token2 = pool()->GetSequenceToken();
+  pool()->PostSequencedWorkerTask(
+      token1, FROM_HERE,
+      base::Bind(&CheckWorkerPoolAndSequenceToken, pool(), token1));
+  pool()->PostSequencedWorkerTask(
+      token2, FROM_HERE,
+      base::Bind(&CheckWorkerPoolAndSequenceToken, pool(), token2));
+
+  pool()->PostWorkerTask(FROM_HERE,
+                         base::Bind(&CheckWorkerPoolAndSequenceToken, pool(),
+                                    SequencedWorkerPool::SequenceToken()));
+
+  pool()->FlushForTesting();
+}
+
+TEST_F(SequencedWorkerPoolTest, ShutsDownCleanWithContinueOnShutdown) {
   scoped_refptr<SequencedTaskRunner> task_runner =
-      pool->GetSequencedTaskRunnerWithShutdownBehavior(
-          pool->GetSequenceToken(),
+      pool()->GetSequencedTaskRunnerWithShutdownBehavior(
+          pool()->GetSequenceToken(),
           base::SequencedWorkerPool::CONTINUE_ON_SHUTDOWN);
 
   // Upon test exit, should shut down without hanging.
-  pool->Shutdown();
+  pool()->Shutdown();
 }
 
 class SequencedWorkerPoolTaskRunnerTestDelegate {

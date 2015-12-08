@@ -12,13 +12,10 @@
 
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
+#include "base/win/registry.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using base::Time;
-using base::TimeDelta;
-using base::TimeTicks;
-using base::TraceTicks;
-
+namespace base {
 namespace {
 
 class MockTimeTicks : public TimeTicks {
@@ -66,7 +63,14 @@ unsigned __stdcall RolloverTestThreadMain(void* param) {
 
 }  // namespace
 
-TEST(TimeTicks, WinRollover) {
+// This test spawns many threads, and can occasionally fail due to resource
+// exhaustion in the presence of ASan.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_WinRollover DISABLED_WinRollover
+#else
+#define MAYBE_WinRollover WinRollover
+#endif
+TEST(TimeTicks, MAYBE_WinRollover) {
   // The internal counter rolls over at ~49days.  We'll use a mock
   // timer to test this case.
   // Basic test algorithm:
@@ -183,20 +187,22 @@ TEST(TimeTicks, TimerPerformance) {
   };
   // Cheating a bit here:  assumes sizeof(TimeTicks) == sizeof(Time)
   // in order to create a single test case list.
-  COMPILE_ASSERT(sizeof(TimeTicks) == sizeof(Time),
-                 test_only_works_with_same_sizes);
-  TestCase cases[] = {
-    { reinterpret_cast<TestFunc>(&Time::Now), "Time::Now" },
-    { &TimeTicks::Now, "TimeTicks::Now" },
-    { reinterpret_cast<TestFunc>(&TraceTicks::Now), "TraceTicks::Now" },
-    { NULL, "" }
-  };
+  static_assert(sizeof(TimeTicks) == sizeof(Time),
+                "TimeTicks and Time must be the same size");
+  std::vector<TestCase> cases;
+  cases.push_back({reinterpret_cast<TestFunc>(&Time::Now), "Time::Now"});
+  cases.push_back({&TimeTicks::Now, "TimeTicks::Now"});
 
-  int test_case = 0;
-  while (cases[test_case].func) {
+  if (ThreadTicks::IsSupported()) {
+    ThreadTicks::WaitUntilInitialized();
+    cases.push_back(
+        {reinterpret_cast<TestFunc>(&ThreadTicks::Now), "ThreadTicks::Now"});
+  }
+
+  for (const auto& test_case : cases) {
     TimeTicks start = TimeTicks::Now();
     for (int index = 0; index < kLoops; index++)
-      cases[test_case].func();
+      test_case.func();
     TimeTicks stop = TimeTicks::Now();
     // Turning off the check for acceptible delays.  Without this check,
     // the test really doesn't do much other than measure.  But the
@@ -206,9 +212,29 @@ TEST(TimeTicks, TimerPerformance) {
     // slow, and there is really no value for checking against a max timer.
     //const int kMaxTime = 35;  // Maximum acceptible milliseconds for test.
     //EXPECT_LT((stop - start).InMilliseconds(), kMaxTime);
-    printf("%s: %1.2fus per call\n", cases[test_case].description,
-      (stop - start).InMillisecondsF() * 1000 / kLoops);
-    test_case++;
+    printf("%s: %1.2fus per call\n", test_case.description,
+           (stop - start).InMillisecondsF() * 1000 / kLoops);
+  }
+}
+
+TEST(TimeTicks, TSCTicksPerSecond) {
+  if (ThreadTicks::IsSupported()) {
+    ThreadTicks::WaitUntilInitialized();
+
+    // Read the CPU frequency from the registry.
+    base::win::RegKey processor_key(
+        HKEY_LOCAL_MACHINE,
+        L"Hardware\\Description\\System\\CentralProcessor\\0", KEY_QUERY_VALUE);
+    ASSERT_TRUE(processor_key.Valid());
+    DWORD processor_mhz_from_registry;
+    ASSERT_EQ(ERROR_SUCCESS,
+              processor_key.ReadValueDW(L"~MHz", &processor_mhz_from_registry));
+
+    // Expect the measured TSC frequency to be similar to the processor
+    // frequency from the registry (0.5% error).
+    double tsc_mhz_measured = ThreadTicks::TSCTicksPerSecond() / 1e6;
+    EXPECT_NEAR(tsc_mhz_measured, processor_mhz_from_registry,
+                0.005 * processor_mhz_from_registry);
   }
 }
 
@@ -266,3 +292,5 @@ TEST(TimeTicks, FromQPCValue) {
         << (ticks < Time::kQPCOverflowThreshold ? "FAST" : "SAFE");
   }
 }
+
+}  // namespace base

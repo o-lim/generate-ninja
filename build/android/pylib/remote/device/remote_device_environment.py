@@ -124,6 +124,8 @@ class RemoteDeviceEnvironment(environment.Environment):
         self._runner_package, args.runner_package, 'runner_package')
     self._runner_type = command_line_override(
         self._runner_type, args.runner_type, 'runner_type')
+    self._timeouts["in-progress"] = command_line_override(
+        self._timeouts["in-progress"], args.test_timeout, 'test_timeout')
 
     if args.api_key_file:
       with open(args.api_key_file) as api_key_file:
@@ -328,11 +330,6 @@ class RemoteDeviceEnvironment(environment.Environment):
   @property
   def network_config(self):
     return self._network_config
-
-  @property
-  def only_output_failures(self): # pylint: disable=no-self-use
-    # TODO(jbudorick): Remove this once b/18981674 is fixed.
-    return True
 
   @property
   def results_path(self):

@@ -64,6 +64,10 @@ void PrintUsage() {
           "    for debugging a specific test in a debugger.\n"
           "\n"
           " Other flags:\n"
+          "  --test-launcher-filter-file=PATH\n"
+          "    Like --gtest_filter, but read the test filter from PATH.\n"
+          "    One pattern per line; lines starting with '-' are exclusions.\n"
+          "\n"
           "  --test-launcher-batch-limit=N\n"
           "    Sets the limit of test batch to run in a single process to N.\n"
           "\n"
@@ -113,9 +117,19 @@ class DefaultUnitTestPlatformDelegate : public UnitTestPlatformDelegate {
       const base::FilePath& output_file) override {
     CommandLine new_cmd_line(*CommandLine::ForCurrentProcess());
 
+    CHECK(temp_dir_.IsValid() || temp_dir_.CreateUniqueTempDir());
+    FilePath temp_file;
+    CHECK(CreateTemporaryFileInDir(temp_dir_.path(), &temp_file));
+    std::string long_flags(
+        std::string("--") + kGTestFilterFlag + "=" +
+        JoinString(test_names, ":"));
+    CHECK_EQ(static_cast<int>(long_flags.size()),
+             WriteFile(temp_file,
+                       long_flags.data(),
+                       static_cast<int>(long_flags.size())));
+
     new_cmd_line.AppendSwitchPath(switches::kTestLauncherOutput, output_file);
-    new_cmd_line.AppendSwitchASCII(kGTestFilterFlag,
-                                   JoinString(test_names, ":"));
+    new_cmd_line.AppendSwitchPath(kGTestFlagfileFlag, temp_file);
     new_cmd_line.AppendSwitch(kSingleProcessTestsFlag);
 
     return new_cmd_line;
@@ -137,6 +151,8 @@ class DefaultUnitTestPlatformDelegate : public UnitTestPlatformDelegate {
     }
   }
 
+  ScopedTempDir temp_dir_;
+
   DISALLOW_COPY_AND_ASSIGN(DefaultUnitTestPlatformDelegate);
 };
 
@@ -146,7 +162,7 @@ bool GetSwitchValueAsInt(const std::string& switch_name, int* result) {
 
   std::string switch_value =
       CommandLine::ForCurrentProcess()->GetSwitchValueASCII(switch_name);
-  if (!StringToInt(switch_value, result) || *result < 1) {
+  if (!StringToInt(switch_value, result) || *result < 0) {
     LOG(ERROR) << "Invalid value for " << switch_name << ": " << switch_value;
     return false;
   }
@@ -156,6 +172,7 @@ bool GetSwitchValueAsInt(const std::string& switch_name, int* result) {
 
 int LaunchUnitTestsInternal(const RunTestSuiteCallback& run_test_suite,
                             int default_jobs,
+                            int default_batch_limit,
                             bool use_job_objects,
                             const Closure& gtest_init) {
 #if defined(OS_ANDROID)
@@ -198,7 +215,7 @@ int LaunchUnitTestsInternal(const RunTestSuiteCallback& run_test_suite,
   gtest_init.Run();
   TestTimeouts::Initialize();
 
-  int batch_limit = kDefaultTestBatchLimit;
+  int batch_limit = default_batch_limit;
   if (!GetSwitchValueAsInt(switches::kTestLauncherBatchLimit, &batch_limit))
     return 1;
 
@@ -423,16 +440,40 @@ int LaunchUnitTests(int argc,
                     char** argv,
                     const RunTestSuiteCallback& run_test_suite) {
   CommandLine::Init(argc, argv);
-  return LaunchUnitTestsInternal(run_test_suite, SysInfo::NumberOfProcessors(),
-                                 true, Bind(&InitGoogleTestChar, &argc, argv));
+  return LaunchUnitTestsInternal(
+      run_test_suite,
+      SysInfo::NumberOfProcessors(),
+      kDefaultTestBatchLimit,
+      true,
+      Bind(&InitGoogleTestChar, &argc, argv));
 }
 
 int LaunchUnitTestsSerially(int argc,
                             char** argv,
                             const RunTestSuiteCallback& run_test_suite) {
   CommandLine::Init(argc, argv);
-  return LaunchUnitTestsInternal(run_test_suite, 1, true,
-                                 Bind(&InitGoogleTestChar, &argc, argv));
+  return LaunchUnitTestsInternal(
+      run_test_suite,
+      1,
+      kDefaultTestBatchLimit,
+      true,
+      Bind(&InitGoogleTestChar, &argc, argv));
+}
+
+int LaunchUnitTestsWithOptions(
+    int argc,
+    char** argv,
+    int default_jobs,
+    int default_batch_limit,
+    bool use_job_objects,
+    const RunTestSuiteCallback& run_test_suite) {
+  CommandLine::Init(argc, argv);
+  return LaunchUnitTestsInternal(
+      run_test_suite,
+      default_jobs,
+      default_batch_limit,
+      use_job_objects,
+      Bind(&InitGoogleTestChar, &argc, argv));
 }
 
 #if defined(OS_WIN)
@@ -442,9 +483,12 @@ int LaunchUnitTests(int argc,
                     const RunTestSuiteCallback& run_test_suite) {
   // Windows CommandLine::Init ignores argv anyway.
   CommandLine::Init(argc, NULL);
-  return LaunchUnitTestsInternal(run_test_suite, SysInfo::NumberOfProcessors(),
-                                 use_job_objects,
-                                 Bind(&InitGoogleTestWChar, &argc, argv));
+  return LaunchUnitTestsInternal(
+      run_test_suite,
+      SysInfo::NumberOfProcessors(),
+      kDefaultTestBatchLimit,
+      use_job_objects,
+      Bind(&InitGoogleTestWChar, &argc, argv));
 }
 #endif  // defined(OS_WIN)
 

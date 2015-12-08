@@ -61,10 +61,10 @@
     'jar_path': '<(intermediate_dir)/<(jar_name)',
     'jar_final_path': '<(jar_dir)/<(jar_name)',
     'jar_excluded_classes': [ '*/R.class', '*/R##*.class' ],
-    'instr_stamp': '<(intermediate_dir)/instr.stamp',
+    'emma_instr_stamp': '<(intermediate_dir)/emma_instr.stamp',
     'additional_input_paths': [],
+    'additional_locale_input_paths': [],
     'dex_path': '<(PRODUCT_DIR)/lib.java/<(_target_name).dex.jar',
-    'main_dex_list_path': '<(intermediate_dir)/main_dex_list.txt',
     'generated_src_dirs': ['>@(generated_R_dirs)'],
     'generated_R_dirs': [],
     'has_java_resources%': 0,
@@ -119,7 +119,6 @@
         'variables': {
           'input_jars_paths': ['<(jar_final_path)'],
           'library_dexed_jars_paths': ['<(dex_path)'],
-          'main_dex_list_paths': ['<(main_dex_list_path)'],
         },
       },
     }],
@@ -135,6 +134,7 @@
         'generated_src_dirs': ['<(R_dir)'],
         'additional_input_paths': ['<(resource_zip_path)', ],
 
+        'dependencies_locale_zip_paths': [],
         'dependencies_res_zip_paths': [],
         'resource_zip_path': '<(PRODUCT_DIR)/res.java/<(_target_name).zip',
       },
@@ -166,6 +166,10 @@
             # the list of inputs changes.
             'inputs_list_file': '>|(java_resources.<(_target_name).gypcmd >@(resource_input_paths))',
             'process_resources_options': [],
+            'local_dependencies_res_zip_paths': [
+              '>@(dependencies_res_zip_paths)',
+              '>@(dependencies_locale_zip_paths)'
+            ],
             'conditions': [
               ['res_v14_skip == 1', {
                 'process_resources_options': ['--v14-skip']
@@ -177,7 +181,7 @@
             '<(DEPTH)/build/android/gyp/process_resources.py',
             '<(DEPTH)/build/android/gyp/generate_v14_compatible_resources.py',
             '>@(resource_input_paths)',
-            '>@(dependencies_res_zip_paths)',
+            '>@(local_dependencies_res_zip_paths)',
             '>(inputs_list_file)',
           ],
           'outputs': [
@@ -193,7 +197,7 @@
             '--android-manifest', '<(android_manifest)',
             '--custom-package', '<(R_package)',
 
-            '--dependencies-res-zips', '>(dependencies_res_zip_paths)',
+            '--dependencies-res-zips', '>(local_dependencies_res_zip_paths)',
             '--resource-dirs', '<(res_input_dirs)',
 
             '--R-dir', '<(R_dir)',
@@ -278,6 +282,10 @@
       'action_name': 'javac_<(_target_name)',
       'message': 'Compiling <(_target_name) java sources',
       'variables': {
+        'local_additional_input_paths': [
+          '>@(additional_input_paths)',
+          '>@(additional_locale_input_paths)',
+        ],
         'extra_args': [],
         'extra_inputs': [],
         'java_sources': ['>!@(find >(java_in_dir)>(java_in_dir_suffix) >(additional_src_dirs) -name "*.java")'],
@@ -295,7 +303,7 @@
         '<(DEPTH)/build/android/gyp/javac.py',
         '>@(java_sources)',
         '>@(input_jars_paths)',
-        '>@(additional_input_paths)',
+        '>@(local_additional_input_paths)',
         '<@(extra_inputs)',
       ],
       'outputs': [
@@ -317,21 +325,14 @@
       ]
     },
     {
-      'action_name': 'main_dex_list_for_<(_target_name)',
-      'variables': {
-        'jar_path': '<(javac_jar_path)',
-        'output_path': '<(main_dex_list_path)',
-      },
-      'includes': [ 'android/main_dex_action.gypi' ],
-    },
-    {
-      'action_name': 'instr_jar_<(_target_name)',
+      'action_name': 'emma_instr_jar_<(_target_name)',
       'message': 'Instrumenting <(_target_name) jar',
       'variables': {
         'input_path': '<(jar_path)',
         'output_path': '<(jar_final_path)',
-        'stamp_path': '<(instr_stamp)',
-        'instr_type': 'jar',
+        'coverage_file': '<(jar_dir)/<(_target_name).em',
+        'sources_list_file': '<(jar_dir)/<(_target_name)_sources.txt',
+        'stamp_path': '<(emma_instr_stamp)',
       },
       'outputs': [
         '<(jar_final_path)',
@@ -339,7 +340,7 @@
       'inputs': [
         '<(jar_path)',
       ],
-      'includes': [ 'android/instr_action.gypi' ],
+      'includes': [ 'android/emma_instr_action.gypi' ],
     },
     {
       'variables': {

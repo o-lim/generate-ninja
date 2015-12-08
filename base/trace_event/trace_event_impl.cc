@@ -6,6 +6,7 @@
 
 #include "base/format_macros.h"
 #include "base/json/string_escape.h"
+#include "base/process/process_handle.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -42,8 +43,8 @@ TraceEvent::TraceEvent()
       category_group_enabled_(NULL),
       name_(NULL),
       thread_id_(0),
-      phase_(TRACE_EVENT_PHASE_BEGIN),
-      flags_(0) {
+      flags_(0),
+      phase_(TRACE_EVENT_PHASE_BEGIN) {
   for (int i = 0; i < kTraceMaxNumArgs; ++i)
     arg_names_[i] = NULL;
   memset(arg_values_, 0, sizeof(arg_values_));
@@ -60,7 +61,10 @@ void TraceEvent::CopyFrom(const TraceEvent& other) {
   context_id_ = other.context_id_;
   category_group_enabled_ = other.category_group_enabled_;
   name_ = other.name_;
-  thread_id_ = other.thread_id_;
+  if (other.flags_ & TRACE_EVENT_FLAG_HAS_PROCESS_ID)
+    process_id_ = other.process_id_;
+  else
+    thread_id_ = other.thread_id_;
   phase_ = other.phase_;
   flags_ = other.flags_;
   parameter_copy_storage_ = other.parameter_copy_storage_;
@@ -75,7 +79,7 @@ void TraceEvent::CopyFrom(const TraceEvent& other) {
 
 void TraceEvent::Initialize(
     int thread_id,
-    TraceTicks timestamp,
+    TimeTicks timestamp,
     ThreadTicks thread_timestamp,
     char phase,
     const unsigned char* category_group_enabled,
@@ -173,11 +177,15 @@ void TraceEvent::Reset() {
     convertable_values_[i] = NULL;
 }
 
-void TraceEvent::UpdateDuration(const TraceTicks& now,
+void TraceEvent::UpdateDuration(const TimeTicks& now,
                                 const ThreadTicks& thread_now) {
   DCHECK_EQ(duration_.ToInternalValue(), -1);
   duration_ = now - timestamp_;
-  thread_duration_ = thread_now - thread_timestamp_;
+
+  // |thread_timestamp_| can be empty if the thread ticks clock wasn't
+  // initialized when it was recorded.
+  if (thread_timestamp_ != ThreadTicks())
+    thread_duration_ = thread_now - thread_timestamp_;
 }
 
 void TraceEvent::EstimateTraceMemoryOverhead(
@@ -266,7 +274,16 @@ void TraceEvent::AppendAsJSON(
     std::string* out,
     const ArgumentFilterPredicate& argument_filter_predicate) const {
   int64 time_int64 = timestamp_.ToInternalValue();
-  int process_id = TraceLog::GetInstance()->process_id();
+  int process_id;
+  int thread_id;
+  if ((flags_ & TRACE_EVENT_FLAG_HAS_PROCESS_ID) &&
+      process_id_ != kNullProcessId) {
+    process_id = process_id_;
+    thread_id = -1;
+  } else {
+    process_id = TraceLog::GetInstance()->process_id();
+    thread_id = thread_id_;
+  }
   const char* category_group_name =
       TraceLog::GetCategoryGroupName(category_group_enabled_);
 
@@ -275,12 +292,18 @@ void TraceEvent::AppendAsJSON(
   StringAppendF(out, "{\"pid\":%i,\"tid\":%i,\"ts\":%" PRId64
                      ","
                      "\"ph\":\"%c\",\"cat\":\"%s\",\"name\":\"%s\",\"args\":",
-                process_id, thread_id_, time_int64, phase_, category_group_name,
+                process_id, thread_id, time_int64, phase_, category_group_name,
                 name_);
 
   // Output argument names and values, stop at first NULL argument name.
-  bool strip_args = arg_names_[0] && !argument_filter_predicate.is_null() &&
-                    !argument_filter_predicate.Run(category_group_name, name_);
+  // TODO(oysteine): The dual predicates here is a bit ugly; if the filtering
+  // capabilities need to grow even more precise we should rethink this
+  // approach
+  ArgumentNameFilterPredicate argument_name_filter_predicate;
+  bool strip_args =
+      arg_names_[0] && !argument_filter_predicate.is_null() &&
+      !argument_filter_predicate.Run(category_group_name, name_,
+                                     &argument_name_filter_predicate);
 
   if (strip_args) {
     *out += "\"__stripped__\"";
@@ -294,10 +317,15 @@ void TraceEvent::AppendAsJSON(
       *out += arg_names_[i];
       *out += "\":";
 
-      if (arg_types_[i] == TRACE_VALUE_TYPE_CONVERTABLE)
-        convertable_values_[i]->AppendAsTraceFormat(out);
-      else
-        AppendValueAsJSON(arg_types_[i], arg_values_[i], out);
+      if (argument_name_filter_predicate.is_null() ||
+          argument_name_filter_predicate.Run(arg_names_[i])) {
+        if (arg_types_[i] == TRACE_VALUE_TYPE_CONVERTABLE)
+          convertable_values_[i]->AppendAsTraceFormat(out);
+        else
+          AppendValueAsJSON(arg_types_[i], arg_values_[i], out);
+      } else {
+        *out += "\"__stripped__\"";
+      }
     }
 
     *out += "}";

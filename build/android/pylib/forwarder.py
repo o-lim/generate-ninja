@@ -9,9 +9,10 @@ import logging
 import os
 import psutil
 
+from devil import devil_env
+from devil.android.valgrind_tools import base_tool
 from devil.utils import cmd_helper
 from pylib import constants
-from pylib import valgrind_tools
 
 
 def _GetProcessStartTime(pid):
@@ -70,14 +71,14 @@ class Forwarder(object):
       Exception on failure to forward the port.
     """
     if not tool:
-      tool = valgrind_tools.CreateTool(None, device)
+      tool = base_tool.BaseTool()
     with _FileLock(Forwarder._LOCK_PATH):
       instance = Forwarder._GetInstanceLocked(tool)
       instance._InitDeviceLocked(device, tool)
 
       device_serial = str(device)
       redirection_commands = [
-          ['--adb=' + constants.GetAdbPath(),
+          ['--adb=' + devil_env.config.FetchPath('adb'),
            '--serial-id=' + device_serial,
            '--map', str(device_port), str(host_port)]
           for device_port, host_port in port_pairs]
@@ -145,7 +146,7 @@ class Forwarder(object):
         if adb_serial == device_serial:
           Forwarder._UnmapDevicePortLocked(device_port, device)
       # There are no more ports mapped, kill the device_forwarder.
-      tool = valgrind_tools.CreateTool(None, device)
+      tool = base_tool.BaseTool()
       Forwarder._KillDeviceLocked(device, tool)
 
   @staticmethod
@@ -197,11 +198,8 @@ class Forwarder(object):
     self._initialized_devices = set()
     self._device_to_host_port_map = dict()
     self._host_to_device_port_map = dict()
-    self._host_forwarder_path = os.path.join(
-        constants.GetOutDirectory(), 'host_forwarder')
+    self._host_forwarder_path = devil_env.config.FetchPath('forwarder_host')
     assert os.path.exists(self._host_forwarder_path), 'Please build forwarder2'
-    self._device_forwarder_path_on_host = os.path.join(
-        constants.GetOutDirectory(), 'forwarder_dist')
     self._InitHostLocked()
 
   @staticmethod
@@ -216,7 +214,7 @@ class Forwarder(object):
     if not serial_with_port in instance._device_to_host_port_map:
       logging.error('Trying to unmap non-forwarded port %d', device_port)
       return
-    redirection_command = ['--adb=' + constants.GetAdbPath(),
+    redirection_command = ['--adb=' + devil_env.config.FetchPath('adb'),
                            '--serial-id=' + serial,
                            '--unmap', str(device_port)]
     logging.info('Undo forwarding using command: %s', redirection_command)
@@ -279,9 +277,16 @@ class Forwarder(object):
     if device_serial in self._initialized_devices:
       return
     Forwarder._KillDeviceLocked(device, tool)
+    forwarder_device_path_on_host = devil_env.config.FetchPath(
+        'forwarder_device', device=device)
+    forwarder_device_path_on_device = (
+        Forwarder._DEVICE_FORWARDER_FOLDER
+        if os.path.isdir(forwarder_device_path_on_host)
+        else Forwarder._DEVICE_FORWARDER_PATH)
     device.PushChangedFiles([(
-        self._device_forwarder_path_on_host,
-        Forwarder._DEVICE_FORWARDER_FOLDER)])
+        forwarder_device_path_on_host,
+        forwarder_device_path_on_device)])
+
     cmd = '%s %s' % (tool.GetUtilWrapper(), Forwarder._DEVICE_FORWARDER_PATH)
     device.RunShellCommand(
         cmd, env={'LD_LIBRARY_PATH': Forwarder._DEVICE_FORWARDER_FOLDER},

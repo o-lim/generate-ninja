@@ -59,8 +59,13 @@
 // off to other task runners, e.g. to use to post tasks back to object on the
 // bound sequence.
 //
-// Invalidating the factory's WeakPtrs un-binds it from the sequence, allowing
-// it to be passed for a different sequence to use or delete it.
+// If all WeakPtr objects are destroyed or invalidated then the factory is
+// unbound from the SequencedTaskRunner/Thread. The WeakPtrFactory may then be
+// destroyed, or new WeakPtr objects may be used, from a different sequence.
+//
+// Thus, at least one WeakPtr object must exist and have been dereferenced on
+// the correct thread to enforce that other WeakPtr objects will enforce they
+// are used on the desired thread.
 
 #ifndef BASE_MEMORY_WEAK_PTR_H_
 #define BASE_MEMORY_WEAK_PTR_H_
@@ -156,8 +161,8 @@ class SupportsWeakPtrBase {
   static WeakPtr<Derived> StaticAsWeakPtr(Derived* t) {
     typedef
         is_convertible<Derived, internal::SupportsWeakPtrBase&> convertible;
-    COMPILE_ASSERT(convertible::value,
-                   AsWeakPtr_argument_inherits_from_SupportsWeakPtr);
+    static_assert(convertible::value,
+                  "AsWeakPtr argument must inherit from SupportsWeakPtr");
     return AsWeakPtrImpl<Derived>(t, *t);
   }
 

@@ -165,7 +165,7 @@ const char kCurrentToolchain_Help[] =
     "  use this to make toolchain-related decisions in the build. See also\n"
     "  \"default_toolchain\".\n"
     "\n"
-    "Example:\n"
+    "Example\n"
     "\n"
     "  if (current_toolchain == \"//build:64_bit_toolchain\") {\n"
     "    executable(\"output_thats_64_bit_only\") {\n"
@@ -242,7 +242,7 @@ const char kRootOutDir_Help[] =
     "  See also \"target_out_dir\" which is usually a better location for\n"
     "  output files. It will be inside the root output dir.\n"
     "\n"
-    "Example:\n"
+    "Example\n"
     "\n"
     "  action(\"myscript\") {\n"
     "    # Pass the output dir to the script.\n"
@@ -268,7 +268,7 @@ const char kTargetGenDir_Help[] =
     "\n"
     "  See also \"gn help root_gen_dir\".\n"
     "\n"
-    "Example:\n"
+    "Example\n"
     "\n"
     "  action(\"myscript\") {\n"
     "    # Pass the generated output dir to the script.\n"
@@ -294,7 +294,7 @@ const char kTargetOutDir_Help[] =
     "\n"
     "  See also \"gn help root_out_dir\".\n"
     "\n"
-    "Example:\n"
+    "Example\n"
     "\n"
     "  action(\"myscript\") {\n"
     "    # Pass the output dir to the script.\n"
@@ -404,23 +404,24 @@ const char kCommonCflagsHelp[] =
     "\n"
     "  To target one of these variants individually, use \"cflags_c\",\n"
     "  \"cflags_cc\", \"cflags_objc\", and \"cflags_objcc\",\n"
-    "  respectively.\n"
+    "  respectively. These variant-specific versions of cflags* will be\n"
+    "  appended on the compiler command line after \"cflags\".\n"
     "\n"
-    "  These variant-specific versions of cflags* will be appended to the\n"
-    "  \"cflags\".\n"
+    "  See also \"asmflags\" for flags for assembly-language files.\n"
     COMMON_ORDERING_HELP;
 const char* kCflags_Help = kCommonCflagsHelp;
 
 const char kAsmflags[] = "asmflags";
 const char kAsmflags_HelpShort[] =
-    "asmflags: [string list] Flags passed to any assembly compiler.";
+    "asmflags: [string list] Flags passed to the assembler.";
 const char* kAsmflags_Help =
-    "asmflags: Flags passed to any assembly compiler.\n"
+    "asmflags: Flags passed to the assembler.\n"
     "\n"
     "  A list of strings.\n"
     "\n"
     "  \"asmflags\" are passed to any invocation of a tool that takes an\n"
-    "  .asm or .S file as input.\n";
+    "  .asm or .S file as input.\n"
+    COMMON_ORDERING_HELP;
 
 const char kCflagsC[] = "cflags_c";
 const char kCflagsC_HelpShort[] =
@@ -698,7 +699,8 @@ const char kDataDeps_Help[] =
     "\n"
     "  See also \"gn help deps\" and \"gn help data\".\n"
     "\n"
-    "Example:\n"
+    "Example\n"
+    "\n"
     "  executable(\"foo\") {\n"
     "    deps = [ \"//base\" ]\n"
     "    data_deps = [ \"//plugins:my_runtime_plugin\" ]\n"
@@ -716,7 +718,8 @@ const char kDefines_Help[] =
     "  strings may or may not include an \"=\" to assign a value.\n"
     COMMON_ORDERING_HELP
     "\n"
-    "Example:\n"
+    "Example\n"
+    "\n"
     "  defines = [ \"AWESOME_FEATURE\", \"LOG_LEVEL=3\" ]\n";
 
 const char kDepfile[] = "depfile";
@@ -738,7 +741,8 @@ const char kDepfile_Help[] =
     "  The format is that of a Makefile, and all of the paths should be\n"
     "  relative to the root build directory.\n"
     "\n"
-    "Example:\n"
+    "Example\n"
+    "\n"
     "  action_foreach(\"myscript_target\") {\n"
     "    script = \"myscript.py\"\n"
     "    sources = [ ... ]\n"
@@ -759,62 +763,31 @@ const char kDeps_Help[] =
     "\n"
     "  A list of target labels.\n"
     "\n"
-    "  Specifies private dependencies of a target. Shared and dynamic\n"
-    "  libraries will be linked into the current target.\n"
+    "  Specifies private dependencies of a target. Private dependencies are\n"
+    "  propagated up the dependency tree and linked to dependant targets, but\n"
+    "  do not grant the ability to include headers from the dependency.\n"
+    "  Public configs are not forwarded.\n"
     "\n"
-    "  These dependencies are private in that it does not grant dependent\n"
-    "  targets the ability to include headers from the dependency, and direct\n"
-    "  dependent configs are not forwarded.\n"
+    "Details of dependency propagation\n"
     "\n"
-    "  See also \"public_deps\" and \"data_deps\".\n";
-
-// TODO(brettw) remove this, deprecated.
-const char kForwardDependentConfigsFrom[] = "forward_dependent_configs_from";
-const char kForwardDependentConfigsFrom_HelpShort[] =
-    "forward_dependent_configs_from: [label list] DEPRECATED.";
-const char kForwardDependentConfigsFrom_Help[] =
-    "forward_dependent_configs_from\n"
+    "  Source sets, shared libraries, and non-complete static libraries\n"
+    "  will be propagated up the dependency tree across groups, non-complete\n"
+    "  static libraries and source sets.\n"
     "\n"
-    "  A list of target labels.\n"
+    "  Executables, shared libraries, and complete static libraries will\n"
+    "  link all propagated targets and stop propagation. Actions and copy\n"
+    "  steps also stop propagation, allowing them to take a library as an\n"
+    "  input but not force dependants to link to it.\n"
     "\n"
-    "  DEPRECATED. Use public_deps instead which will have the same effect.\n"
+    "  Propagation of all_dependent_configs and public_configs happens\n"
+    "  independently of target type. all_dependent_configs are always\n"
+    "  propagated across all types of targets, and public_configs\n"
+    "  are always propagated across public deps of all types of targets.\n"
     "\n"
-    "  Exposes the public_configs from a private dependent target as\n"
-    "  public_configs of the current one. Each label in this list\n"
-    "  must also be in the deps.\n"
+    "  Data dependencies are propagated differently. See\n"
+    "  \"gn help data_deps\" and \"gn help runtime_deps\".\n"
     "\n"
-    "  Generally you should use public_deps instead of this variable to\n"
-    "  express the concept of exposing a dependency as part of a target's\n"
-    "  public API. We're considering removing this variable.\n"
-    "\n"
-    "Discussion\n"
-    "\n"
-    "  Sometimes you depend on a child library that exports some necessary\n"
-    "  configuration via public_configs. If your target in turn exposes the\n"
-    "  child library's headers in its public headers, it might mean that\n"
-    "  targets that depend on you won't work: they'll be seeing the child\n"
-    "  library's code but not the necessary configuration. This list\n"
-    "  specifies which of your deps' direct dependent configs to expose as\n"
-    "  your own.\n"
-    "\n"
-    "Examples\n"
-    "\n"
-    "  If we use a given library \"a\" from our public headers:\n"
-    "\n"
-    "    deps = [ \":a\", \":b\", ... ]\n"
-    "    forward_dependent_configs_from = [ \":a\" ]\n"
-    "\n"
-    "  This example makes a \"transparent\" target that forwards a dependency\n"
-    "  to another:\n"
-    "\n"
-    "    group(\"frob\") {\n"
-    "      if (use_system_frob) {\n"
-    "        deps = \":system_frob\"\n"
-    "      } else {\n"
-    "        deps = \"//third_party/fallback_frob\"\n"
-    "      }\n"
-    "      forward_dependent_configs_from = deps\n"
-    "    }\n";
+    "  See also \"public_deps\".\n";
 
 const char kIncludeDirs[] = "include_dirs";
 const char kIncludeDirs_HelpShort[] =
@@ -828,7 +801,8 @@ const char kIncludeDirs_Help[] =
     "  the files in the affected target.\n"
     COMMON_ORDERING_HELP
     "\n"
-    "Example:\n"
+    "Example\n"
+    "\n"
     "  include_dirs = [ \"src/include\", \"//third_party/foo\" ]\n";
 
 const char kInputs[] = "inputs";
@@ -850,10 +824,10 @@ const char kInputs_Help[] =
     "  uses via imports (the main script itself will be an implcit dependency\n"
     "  of the action so need not be listed).\n"
     "\n"
-    "  For action targets, inputs should be the entire set of inputs the\n"
-    "  script needs. For action_foreach targets, inputs should be the set of\n"
-    "  dependencies that don't change. These will be applied to each script\n"
-    "  invocation over the sources.\n"
+    "  For action targets, inputs and sources are treated the same, but from\n"
+    "  a style perspective, it's recommended to follow the same rule as\n"
+    "  action_foreach and put helper files in the inputs, and the data used\n"
+    "  by the script (if any) in sources.\n"
     "\n"
     "  Note that another way to declare input dependencies from an action\n"
     "  is to have the action write a depfile (see \"gn help depfile\"). This\n"
@@ -862,12 +836,37 @@ const char kInputs_Help[] =
     "  efficient than doing processing while running GN to determine the\n"
     "  inputs, and is easier to keep in-sync than hardcoding the list.\n"
     "\n"
+    "Script input gotchas\n"
+    "\n"
+    "  It may be tempting to write a script that enumerates all files in a\n"
+    "  directory as inputs. Don't do this! Even if you specify all the files\n"
+    "  in the inputs or sources in the GN target (or worse, enumerate the\n"
+    "  files in an exec_script call when running GN, which will be slow), the\n"
+    "  dependencies will be broken.\n"
+    "\n"
+    "  The problem happens if a file is ever removed because the inputs are\n"
+    "  not listed on the command line to the script. Because the script\n"
+    "  hasn't changed and all inputs are up-to-date, the script will not\n"
+    "  re-run and you will get a stale build. Instead, either list all\n"
+    "  inputs on the command line to the script, or if there are many, create\n"
+    "  a separate list file that the script reads. As long as this file is\n"
+    "  listed in the inputs, the build will detect when it has changed in any\n"
+    "  way and the action will re-run.\n"
+    "\n"
     "Inputs for binary targets\n"
     "\n"
     "  Any input dependencies will be resolved before compiling any sources.\n"
     "  Normally, all actions that a target depends on will be run before any\n"
     "  files in a target are compiled. So if you depend on generated headers,\n"
     "  you do not typically need to list them in the inputs section.\n"
+    "\n"
+    "  Inputs for binary targets will be treated as order-only dependencies,\n"
+    "  meaning that they will be forced up-to-date before compiling or\n"
+    "  any files in the target, but changes in the inputs will not\n"
+    "  necessarily force the target to compile. This is because it is\n"
+    "  expected that the compiler will report the precise list of input\n"
+    "  dependencies required to recompile each file once the initial build\n"
+    "  is done.\n"
     "\n"
     "Example\n"
     "\n"
@@ -916,7 +915,8 @@ const char kLibDirs_Help[] =
     COMMON_LIB_INHERITANCE_HELP
     COMMON_ORDERING_HELP
     "\n"
-    "Example:\n"
+    "Example\n"
+    "\n"
     "  lib_dirs = [ \"/usr/lib/foo\", \"lib/doom_melon\" ]\n";
 
 const char kLibs[] = "libs";
@@ -938,13 +938,17 @@ const char kLibs_Help[] =
     "  When constructing the linker command, the \"lib_prefix\" attribute of\n"
     "  the linker tool in the current toolchain will be prepended to each\n"
     "  library. So your BUILD file should not specify the switch prefix\n"
-    "  (like \"-l\"). On Mac, libraries ending in \".framework\" will be\n"
-    "  special-cased: the switch \"-framework\" will be prepended instead of\n"
-    "  the lib_prefix, and the \".framework\" suffix will be trimmed.\n"
+    "  (like \"-l\").\n"
+    "\n"
+    "  Libraries ending in \".framework\" will be special-cased: the switch\n"
+    "  \"-framework\" will be prepended instead of the lib_prefix, and the\n"
+    "  \".framework\" suffix will be trimmed. This is to support the way Mac\n"
+    "  links framework dependencies.\n"
     COMMON_LIB_INHERITANCE_HELP
     COMMON_ORDERING_HELP
     "\n"
-    "Examples:\n"
+    "Examples\n"
+    "\n"
     "  On Windows:\n"
     "    libs = [ \"ctl3d.lib\" ]\n"
     "  On Linux:\n"
@@ -959,7 +963,32 @@ const char kOutputExtension_Help[] =
     "  Normally the file extension for a target is based on the target\n"
     "  type and the operating system, but in rare cases you will need to\n"
     "  override the name (for example to use \"libfreetype.so.6\" instead\n"
-    "  of libfreetype.so on Linux).";
+    "  of libfreetype.so on Linux).\n"
+    "\n"
+    "  This value should not include a leading dot. If undefined or empty,\n"
+    "  the default_output_extension specified on the tool will be used.\n"
+    "  The output_extension will be used in the \"{{output_extension}}\"\n"
+    "  expansion which the linker tool will generally use to specify the\n"
+    "  output file name. See \"gn help tool\".\n"
+    "\n"
+    "Example\n"
+    "\n"
+    "  shared_library(\"freetype\") {\n"
+    "    if (is_linux) {\n"
+    "      # Call the output \"libfreetype.so.6\"\n"
+    "      output_extension = \"so.6\"\n"
+    "    }\n"
+    "    ...\n"
+    "  }\n"
+    "\n"
+    "  # On Windows, generate a \"mysettings.cpl\" control panel applet.\n"
+    "  # Control panel applets are actually special shared libraries.\n"
+    "  if (is_win) {\n"
+    "    shared_library(\"mysettings\") {\n"
+    "      output_extension = \"cpl\"\n"
+    "      ...\n"
+    "    }\n"
+    "  }\n";
 
 const char kOutputName[] = "output_name";
 const char kOutputName_HelpShort[] =
@@ -976,11 +1005,15 @@ const char kOutputName_Help[] =
     "\n"
     "  The output name should have no extension or prefixes, these will be\n"
     "  added using the default system rules. For example, on Linux an output\n"
-    "  name of \"foo\" will produce a shared library \"libfoo.so\".\n"
+    "  name of \"foo\" will produce a shared library \"libfoo.so\". There\n"
+    "  is no way to override the output prefix of a linker tool on a per-\n"
+    "  target basis. If you need more flexibility, create a copy target\n"
+    "  to produce the file you want.\n"
     "\n"
     "  This variable is valid for all binary output target types.\n"
     "\n"
-    "Example:\n"
+    "Example\n"
+    "\n"
     "  static_library(\"doom_melon\") {\n"
     "    output_name = \"fluffy_bunny\"\n"
     "  }\n";
@@ -992,13 +1025,26 @@ const char kOutputs_Help[] =
     "outputs: Output files for actions and copy targets.\n"
     "\n"
     "  Outputs is valid for \"copy\", \"action\", and \"action_foreach\"\n"
-    "  target types and indicates the resulting files. The values may contain\n"
-    "  source expansions to generate the output names from the sources (see\n"
-    "  \"gn help source_expansion\").\n"
+    "  target types and indicates the resulting files. Outputs must always\n"
+    "  refer to files in the build directory.\n"
     "\n"
-    "  For copy targets, the outputs is the destination for the copied\n"
-    "  file(s). For actions, the outputs should be the list of files\n"
-    "  generated by the script.\n";
+    "  copy\n"
+    "    Copy targets should have exactly one entry in the outputs list. If\n"
+    "    there is exactly one source, this can be a literal file name or a\n"
+    "    source expansion. If there is more than one source, this must\n"
+    "    contain a source expansion to map a single input name to a single\n"
+    "    output name. See \"gn help copy\".\n"
+    "\n"
+    "  action_foreach\n"
+    "    Action_foreach targets must always use source expansions to map\n"
+    "    input files to output files. There can be more than one output,\n"
+    "    which means that each invocation of the script will produce a set of\n"
+    "    files (presumably based on the name of the input file). See\n"
+    "    \"gn help action_foreach\".\n"
+    "\n"
+    "  action\n"
+    "    Action targets (excluding action_foreach) must list literal output\n"
+    "    file(s) with no source expansions. See \"gn help action\".\n";
 
 const char kPrecompiledHeader[] = "precompiled_header";
 const char kPrecompiledHeader_HelpShort[] =
@@ -1098,7 +1144,8 @@ const char kPublic_Help[] =
     "  sections of targets. If a file is included that is not known to the\n"
     "  build, it will be allowed.\n"
     "\n"
-    "Examples:\n"
+    "Examples\n"
+    "\n"
     "  These exact files are public:\n"
     "    public = [ \"foo.h\", \"bar.h\" ]\n"
     "\n"
@@ -1133,9 +1180,9 @@ const char kPublicDeps_HelpShort[] =
 const char kPublicDeps_Help[] =
     "public_deps: Declare public dependencies.\n"
     "\n"
-    "  Public dependencies are like private dependencies (\"deps\") but\n"
-    "  additionally express that the current target exposes the listed deps\n"
-    "  as part of its public API.\n"
+    "  Public dependencies are like private dependencies (see\n"
+    "  \"gn help deps\") but additionally express that the current target\n"
+    "  exposes the listed deps as part of its public API.\n"
     "\n"
     "  This has several ramifications:\n"
     "\n"
@@ -1196,6 +1243,45 @@ const char kDescription_Help[] =
     "  What to print when then action is run"
     "  gn help action\" and \"gn help action_foreach\").\n";
 
+const char kResponseFileContents[] = "response_file_contents";
+const char kResponseFileContents_HelpShort[] =
+    "response_file_contents: [string list] Contents of .rsp file for actions.";
+const char kResponseFileContents_Help[] =
+    "response_file_contents: Contents of a response file for actions.\n"
+    "\n"
+    "  Sometimes the arguments passed to a script can be too long for the\n"
+    "  system's command-line capabilities. This is especially the case on\n"
+    "  Windows where the maximum command-line length is less than 8K. A\n"
+    "  response file allows you to pass an unlimited amount of data to a\n"
+    "  script in a temporary file for an action or action_foreach target.\n"
+    "\n"
+    "  If the response_file_contents variable is defined and non-empty, the\n"
+    "  list will be treated as script args (including possibly substitution\n"
+    "  patterns) that will be written to a temporary file at build time.\n"
+    "  The name of the temporary file will be substituted for\n"
+    "  \"{{response_file_name}}\" in the script args.\n"
+    "\n"
+    "  The response file contents will always be quoted and escaped\n"
+    "  according to Unix shell rules. To parse the response file, the Python\n"
+    "  script should use \"shlex.split(file_contents)\".\n"
+    "\n"
+    "Example\n"
+    "\n"
+    "  action(\"process_lots_of_files\") {\n"
+    "    script = \"process.py\",\n"
+    "    inputs = [ ... huge list of files ... ]\n"
+    "\n"
+    "    # Write all the inputs to a response file for the script. Also,\n"
+    "    # make the paths relative to the script working directory.\n"
+    "    response_file_contents = rebase_path(inputs, root_build_dir)\n"
+    "\n"
+    "    # The script expects the name of the response file in --file-list.\n"
+    "    args = [\n"
+    "      \"--enable-foo\",\n"
+    "      \"--file-list={{response_file_name}}\",\n"
+    "    ]\n"
+    "  }\n";
+
 const char kScript[] = "script";
 const char kScript_HelpShort[] =
     "script: [file name] Script file for actions.";
@@ -1212,7 +1298,37 @@ const char kSources_HelpShort[] =
 const char kSources_Help[] =
     "sources: Source files for a target\n"
     "\n"
-    "  A list of files relative to the current buildfile.\n";
+    "  A list of files. Non-absolute paths will be resolved relative to the\n"
+    "  current build file.\n"
+    "\n"
+    "Sources for binary targets\n"
+    "\n"
+    "  For binary targets (source sets, executables, and libraries), the\n"
+    "  known file types will be compiled with the associated tools. Unknown\n"
+    "  file types and headers will be skipped. However, you should still\n"
+    "  list all C/C+ header files so GN knows about the existance of those\n"
+    "  files for the purposes of include checking.\n"
+    "\n"
+    "  As a special case, a file ending in \".def\" will be treated as a\n"
+    "  Windows module definition file. It will be appended to the link\n"
+    "  line with a preceeding \"/DEF:\" string. There must be at most one\n"
+    "  .def file in a target and they do not cross dependency boundaries\n"
+    "  (so specifying a .def file in a static library or source set will have\n"
+    "  no effect on the executable or shared library they're linked into).\n"
+    "\n"
+    "Sources for non-binary targets\n"
+    "\n"
+    "  action_foreach\n"
+    "    The sources are the set of files that the script will be executed\n"
+    "    over. The script will run once per file.\n"
+    "\n"
+    "  action\n"
+    "    The sources will be treated the same as inputs. See "
+         "\"gn help inputs\"\n"
+    "    for more information and usage advice.\n"
+    "\n"
+    "  copy\n"
+    "    The source are the source files to copy.\n";
 
 const char kTestonly[] = "testonly";
 const char kTestonly_HelpShort[] =
@@ -1333,6 +1449,7 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(AllDependentConfigs)
     INSERT_VARIABLE(AllowCircularIncludesFrom)
     INSERT_VARIABLE(Args)
+    INSERT_VARIABLE(Asmflags)
     INSERT_VARIABLE(Cflags)
     INSERT_VARIABLE(CflagsC)
     INSERT_VARIABLE(CflagsCC)
@@ -1352,7 +1469,6 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(Defines)
     INSERT_VARIABLE(Depfile)
     INSERT_VARIABLE(Deps)
-    INSERT_VARIABLE(ForwardDependentConfigsFrom)
     INSERT_VARIABLE(IncludeDirs)
     INSERT_VARIABLE(Inputs)
     INSERT_VARIABLE(Ldflags)
@@ -1366,6 +1482,7 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(Public)
     INSERT_VARIABLE(PublicConfigs)
     INSERT_VARIABLE(PublicDeps)
+    INSERT_VARIABLE(ResponseFileContents)
     INSERT_VARIABLE(Script)
     INSERT_VARIABLE(Command)
     INSERT_VARIABLE(Description)

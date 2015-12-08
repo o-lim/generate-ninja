@@ -12,6 +12,7 @@
 #include "tools/gn/filesystem_utils.h"
 #include "tools/gn/scheduler.h"
 #include "tools/gn/substitution_writer.h"
+#include "tools/gn/trace.h"
 
 namespace {
 
@@ -125,6 +126,8 @@ const char* Target::GetStringForOutputType(OutputType type) {
       return "Group";
     case EXECUTABLE:
       return "Executable";
+    case LOADABLE_MODULE:
+      return "Loadable module";
     case SHARED_LIBRARY:
       return "Shared library";
     case STATIC_LIBRARY:
@@ -154,6 +157,9 @@ bool Target::OnResolved(Err* err) {
   DCHECK(output_type_ != UNKNOWN);
   DCHECK(toolchain_) << "Toolchain should have been set before resolving.";
 
+  ScopedTrace trace(TraceItem::TRACE_ON_RESOLVED, label());
+  trace.SetToolchain(settings()->toolchain_label());
+
   // Copy our own dependent configs to the list of configs applying to us.
   configs_.Append(all_dependent_configs_.begin(), all_dependent_configs_.end());
   MergePublicConfigsFrom(this, &configs_);
@@ -168,7 +174,7 @@ bool Target::OnResolved(Err* err) {
   }
 
   PullDependentTargets();
-  PullForwardedDependentConfigs();
+  PullPublicConfigs();
   PullRecursiveHardDeps();
   if (!ResolvePrecompiledHeaders(err))
     return false;
@@ -193,7 +199,12 @@ bool Target::IsLinkable() const {
 }
 
 bool Target::IsFinal() const {
-  return output_type_ == EXECUTABLE || output_type_ == SHARED_LIBRARY ||
+  return output_type_ == EXECUTABLE ||
+         output_type_ == SHARED_LIBRARY ||
+         output_type_ == LOADABLE_MODULE ||
+         output_type_ == ACTION ||
+         output_type_ == ACTION_FOREACH ||
+         output_type_ == COPY_FILES ||
          (output_type_ == STATIC_LIBRARY && complete_static_lib_);
 }
 
@@ -277,7 +288,7 @@ void Target::PullDependentTarget(const Target* dep, bool is_public) {
     //
     // However, if the dependency is private:
     //   EXE -> INTERMEDIATE_SHLIB --[private]--> FINAL_SHLIB
-    // the dependency will not be propogated because INTERMEDIATE_SHLIB is
+    // the dependency will not be propagated because INTERMEDIATE_SHLIB is
     // not granting permission to call functiosn from FINAL_SHLIB. If EXE
     // wants to use functions (and link to) FINAL_SHLIB, it will need to do
     // so explicitly.
@@ -305,47 +316,26 @@ void Target::PullDependentTargets() {
     PullDependentTarget(dep.ptr, false);
 }
 
-void Target::PullForwardedDependentConfigs() {
+void Target::PullPublicConfigs() {
   // Pull public configs from each of our dependency's public deps.
   for (const auto& dep : public_deps_)
-    PullForwardedDependentConfigsFrom(dep.ptr);
-
-  // Forward public configs if explicitly requested.
-  for (const auto& dep : forward_dependent_configs_) {
-    const Target* from_target = dep.ptr;
-
-    // The forward_dependent_configs_ must be in the deps (public or private)
-    // already, so we don't need to bother copying to our configs, only
-    // forwarding.
-    DCHECK(std::find_if(private_deps_.begin(), private_deps_.end(),
-                        LabelPtrPtrEquals<Target>(from_target)) !=
-               private_deps_.end() ||
-           std::find_if(public_deps_.begin(), public_deps_.end(),
-                        LabelPtrPtrEquals<Target>(from_target)) !=
-               public_deps_.end());
-
-    PullForwardedDependentConfigsFrom(from_target);
-  }
+    PullPublicConfigsFrom(dep.ptr);
 }
 
-void Target::PullForwardedDependentConfigsFrom(const Target* from) {
+void Target::PullPublicConfigsFrom(const Target* from) {
   public_configs_.Append(from->public_configs().begin(),
                          from->public_configs().end());
 }
 
 void Target::PullRecursiveHardDeps() {
   for (const auto& pair : GetDeps(DEPS_LINKED)) {
+    // Direct hard dependencies.
     if (pair.ptr->hard_dep())
       recursive_hard_deps_.insert(pair.ptr);
 
-    // Android STL doesn't like insert(begin, end) so do it manually.
-    // TODO(brettw) this can be changed to
-    // insert(iter.target()->begin(), iter.target()->end())
-    // when Android uses a better STL.
-    for (std::set<const Target*>::const_iterator cur =
-             pair.ptr->recursive_hard_deps().begin();
-         cur != pair.ptr->recursive_hard_deps().end(); ++cur)
-      recursive_hard_deps_.insert(*cur);
+    // Recursive hard dependencies of all dependencies.
+    recursive_hard_deps_.insert(pair.ptr->recursive_hard_deps().begin(),
+                                pair.ptr->recursive_hard_deps().end());
   }
 }
 
@@ -367,8 +357,9 @@ void Target::FillOutputFiles() {
       break;
     }
     case EXECUTABLE:
-      // Executables don't get linked to, but the first output is used for
-      // dependency management.
+    case LOADABLE_MODULE:
+      // Executables and loadable modules don't get linked to, but the first
+      // output is used for dependency management.
       CHECK_GE(tool->outputs().list().size(), 1u);
       check_tool_outputs = true;
       dependency_output_file_ =

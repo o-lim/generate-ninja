@@ -24,22 +24,31 @@ import shutil
 import subprocess
 import sys
 
-
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.join(SCRIPT_DIR))))
+import detect_host_arch
+import gyp_chromium
+import gyp_environment
+
+
+# Its existence signifies an Android checkout.
+ANDROID_ONLY_DIR = os.path.join(SCRIPT_DIR, os.pardir, os.pardir, os.pardir,
+                                'third_party', 'android_tools')
+
 URL_PREFIX = 'http://storage.googleapis.com'
 URL_PATH = 'chrome-linux-sysroot/toolchain'
-REVISION_AMD64 = 'a2d45701cb21244b9514e420950ba6ba687fb655'
-REVISION_ARM = 'a2d45701cb21244b9514e420950ba6ba687fb655'
-REVISION_I386 = 'a2d45701cb21244b9514e420950ba6ba687fb655'
-REVISION_MIPS = '7749d2957387abf225b6d45154c3ddad142148dc'
+REVISION_AMD64 = '402274e42cb72fde4f48a4bb01664d0ad4533c69'
+REVISION_ARM = '402274e42cb72fde4f48a4bb01664d0ad4533c69'
+REVISION_I386 = '402274e42cb72fde4f48a4bb01664d0ad4533c69'
+REVISION_MIPS = '402274e42cb72fde4f48a4bb01664d0ad4533c69'
 TARBALL_AMD64 = 'debian_wheezy_amd64_sysroot.tgz'
 TARBALL_ARM = 'debian_wheezy_arm_sysroot.tgz'
 TARBALL_I386 = 'debian_wheezy_i386_sysroot.tgz'
 TARBALL_MIPS = 'debian_wheezy_mips_sysroot.tgz'
-TARBALL_AMD64_SHA1SUM = '601216c0f980e798e7131635f3dd8171b3dcbcde'
-TARBALL_ARM_SHA1SUM = '6289593b36616526562a4d85ae9c92b694b8ce7e'
-TARBALL_I386_SHA1SUM = '0090e5a4b56ab9ffb5d557da6a520195ab59b446'
-TARBALL_MIPS_SHA1SUM = '3b4d782a237db4aac185a638572a7747c1a21825'
+TARBALL_AMD64_SHA1SUM = '546f211d47a6544994bb6f7cf9800c3a73a12d3a'
+TARBALL_ARM_SHA1SUM = '457ee7165526846a8bef08f64c58db994481f159'
+TARBALL_I386_SHA1SUM = '8d00eb9e60009ec23e7cb47c6ecbcf85b319e09e'
+TARBALL_MIPS_SHA1SUM = '358d8fe133575c41354fa7fe5d9c591d199f6033'
 SYSROOT_DIR_AMD64 = 'debian_wheezy_amd64-sysroot'
 SYSROOT_DIR_ARM = 'debian_wheezy_arm-sysroot'
 SYSROOT_DIR_I386 = 'debian_wheezy_i386-sysroot'
@@ -64,21 +73,22 @@ def DetectArch(gyp_defines):
   # Check for optional target_arch and only install for that architecture.
   # If target_arch is not specified, then only install for the host
   # architecture.
-  if 'target_arch=x64' in gyp_defines:
+  target_arch = gyp_defines.get('target_arch')
+  if target_arch == 'x64':
     return 'amd64'
-  elif 'target_arch=ia32' in gyp_defines:
+  elif target_arch == 'ia32':
     return 'i386'
-  elif 'target_arch=arm' in gyp_defines:
+  elif target_arch == 'arm':
     return 'arm'
-  elif 'target_arch=mipsel' in gyp_defines:
+  elif target_arch == 'arm64':
+    return 'arm64'
+  elif target_arch == 'mipsel':
     return 'mips'
+  elif target_arch:
+    raise Exception('Unrecognized target_arch: %s' % target_arch)
 
   # Figure out host arch using build/detect_host_arch.py and
   # set target_arch to host arch
-  build_dir = os.path.dirname(os.path.dirname(os.path.join(SCRIPT_DIR)))
-  sys.path.append(build_dir)
-  import detect_host_arch
-
   detected_host_arch = detect_host_arch.HostArch()
   if detected_host_arch == 'x64':
     return 'amd64'
@@ -94,44 +104,36 @@ def DetectArch(gyp_defines):
   return None
 
 
-def UsingSysroot(target_arch, gyp_defines):
-  # ChromeOS uses a chroot, so doesn't need a sysroot
-  if 'chromeos=1' in gyp_defines:
-    return False
-
-  # When cross-compiling we always use a sysroot
-  if target_arch in ('arm', 'mips', 'i386'):
-    return True
-
-  # Setting use_sysroot=1 GYP_DEFINES forces the use of the sysroot even
-  # when not cross compiling
-  if 'use_sysroot=1' in gyp_defines:
-    return True
-
-  # Official builds always use the sysroot.
-  if 'branding=Chrome' in gyp_defines and 'buildtype=Official' in gyp_defines:
-    return True
-
-  return False
-
-
 def main():
   if options.running_as_hook and not sys.platform.startswith('linux'):
     return 0
 
-  gyp_defines = os.environ.get('GYP_DEFINES', '')
+  # TODO(agrieve): Make this script not depend on GYP_DEFINES so that it works
+  #     with GN as well.
+  gyp_environment.SetEnvironment()
+  supplemental_includes = gyp_chromium.GetSupplementalFiles()
+  gyp_defines = gyp_chromium.GetGypVars(supplemental_includes)
 
   if options.arch:
     target_arch = options.arch
+  elif os.path.exists(ANDROID_ONLY_DIR):
+    # 32-bit Android builds (the default for target_os="android") require a
+    # 32-bit host sysroot for the v8 snapshot, and a 64-bit sysroot for host
+    # tools.
+    ret = _InstallSysroot('i386')
+    if ret:
+      return ret
+    target_arch = 'amd64'
   else:
     target_arch = DetectArch(gyp_defines)
     if not target_arch:
-      print 'Unable to detect host architecture'
+      print 'Unable to detect target architecture'
       return 1
 
-  if options.running_as_hook and not UsingSysroot(target_arch, gyp_defines):
-    return 0
+  return _InstallSysroot(target_arch)
 
+
+def _InstallSysroot(target_arch):
   # The sysroot directory should match the one specified in build/common.gypi.
   # TODO(thestig) Consider putting this else where to avoid having to recreate
   # it on every build.

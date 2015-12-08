@@ -4,79 +4,64 @@
 
 #include "base/profiler/win32_stack_frame_unwinder.h"
 
-#include "base/containers/hash_tables.h"
-#include "base/memory/singleton.h"
-#include "base/stl_util.h"
+#include <windows.h>
+#include <utility>
 
 namespace base {
 
-// LeafUnwindBlacklist --------------------------------------------------------
+// Win32UnwindFunctions -------------------------------------------------------
+
+const HMODULE ModuleHandleTraits::kNonNullModuleForTesting =
+    reinterpret_cast<HMODULE>(static_cast<uintptr_t>(-1));
+
+// static
+bool ModuleHandleTraits::CloseHandle(HMODULE handle) {
+  if (handle == kNonNullModuleForTesting)
+    return true;
+
+  return ::FreeLibrary(handle) != 0;
+}
+
+// static
+bool ModuleHandleTraits::IsHandleValid(HMODULE handle) {
+  return handle != nullptr;
+}
+
+// static
+HMODULE ModuleHandleTraits::NullHandle() {
+  return nullptr;
+}
 
 namespace {
 
-// Records modules that are known to have functions that violate the Microsoft
-// x64 calling convention and would be dangerous to manually unwind if
-// encountered as the last frame on the call stack. Functions like these have
-// been observed in injected third party modules that either do not provide
-// function unwind information, or do not provide the required function prologue
-// and epilogue. The former case was observed in several AV products and the
-// latter in a WndProc function associated with Actual Window
-// Manager/aimemb64.dll. See https://crbug.com/476422.
-class LeafUnwindBlacklist {
- public:
-  static LeafUnwindBlacklist* GetInstance();
+// Implements the UnwindFunctions interface for the corresponding Win32
+// functions.
+class Win32UnwindFunctions : public Win32StackFrameUnwinder::UnwindFunctions {
+public:
+  Win32UnwindFunctions();
+  ~Win32UnwindFunctions() override;
 
-  // This function does not allocate memory and is safe to call between
-  // SuspendThread and ResumeThread.
-  bool IsBlacklisted(const void* module) const;
+  PRUNTIME_FUNCTION LookupFunctionEntry(DWORD64 program_counter,
+                                        PDWORD64 image_base) override;
 
-  // Allocates memory. Must be invoked only after ResumeThread, otherwise we
-  // risk deadlocking on a heap lock held by a suspended thread.
-  void AddModuleToBlacklist(const void* module);
+  void VirtualUnwind(DWORD64 image_base,
+                     DWORD64 program_counter,
+                     PRUNTIME_FUNCTION runtime_function,
+                     CONTEXT* context) override;
 
- private:
-  friend struct DefaultSingletonTraits<LeafUnwindBlacklist>;
+  ScopedModuleHandle GetModuleForProgramCounter(
+      DWORD64 program_counter) override;
 
-  LeafUnwindBlacklist();
-  ~LeafUnwindBlacklist();
-
-  // The set of modules known to have functions that violate the Microsoft x64
-  // calling convention.
-  base::hash_set<const void*> blacklisted_modules_;
-
-  DISALLOW_COPY_AND_ASSIGN(LeafUnwindBlacklist);
+private:
+  DISALLOW_COPY_AND_ASSIGN(Win32UnwindFunctions);
 };
 
-// static
-LeafUnwindBlacklist* LeafUnwindBlacklist::GetInstance() {
-  // Leaky for shutdown performance.
-  return Singleton<LeafUnwindBlacklist,
-                   LeakySingletonTraits<LeafUnwindBlacklist>>::get();
-}
+Win32UnwindFunctions::Win32UnwindFunctions() {}
+Win32UnwindFunctions::~Win32UnwindFunctions() {}
 
-bool LeafUnwindBlacklist::IsBlacklisted(const void* module) const {
-  return ContainsKey(blacklisted_modules_, module);
-}
-
-void LeafUnwindBlacklist::AddModuleToBlacklist(const void* module) {
-  CHECK(module);
-  blacklisted_modules_.insert(module);
-}
-
-LeafUnwindBlacklist::LeafUnwindBlacklist() {}
-LeafUnwindBlacklist::~LeafUnwindBlacklist() {}
-
-}  // namespace
-
-// Win32StackFrameUnwinder ----------------------------------------------------
-
-Win32StackFrameUnwinder::UnwindFunctions::~UnwindFunctions() {}
-Win32StackFrameUnwinder::UnwindFunctions::UnwindFunctions() {}
-
-Win32StackFrameUnwinder::Win32UnwindFunctions::Win32UnwindFunctions() {}
-
-PRUNTIME_FUNCTION Win32StackFrameUnwinder::Win32UnwindFunctions::
-LookupFunctionEntry(DWORD64 program_counter, PDWORD64 image_base) {
+PRUNTIME_FUNCTION Win32UnwindFunctions::LookupFunctionEntry(
+    DWORD64 program_counter,
+    PDWORD64 image_base) {
 #ifdef _WIN64
   return RtlLookupFunctionEntry(program_counter, image_base, nullptr);
 #else
@@ -85,38 +70,70 @@ LookupFunctionEntry(DWORD64 program_counter, PDWORD64 image_base) {
 #endif
 }
 
-void Win32StackFrameUnwinder::Win32UnwindFunctions::VirtualUnwind(
-    DWORD64 image_base,
-    DWORD64 program_counter,
-    PRUNTIME_FUNCTION runtime_function,
-    CONTEXT* context) {
+void Win32UnwindFunctions::VirtualUnwind(DWORD64 image_base,
+                                         DWORD64 program_counter,
+                                         PRUNTIME_FUNCTION runtime_function,
+                                         CONTEXT* context) {
 #ifdef _WIN64
   void* handler_data;
   ULONG64 establisher_frame;
   KNONVOLATILE_CONTEXT_POINTERS nvcontext = {};
-  RtlVirtualUnwind(0, image_base, program_counter, runtime_function,
-                   context, &handler_data, &establisher_frame, &nvcontext);
+  RtlVirtualUnwind(UNW_FLAG_NHANDLER, image_base, program_counter,
+                   runtime_function, context, &handler_data,
+                   &establisher_frame, &nvcontext);
 #else
   NOTREACHED();
 #endif
 }
 
+ScopedModuleHandle Win32UnwindFunctions::GetModuleForProgramCounter(
+    DWORD64 program_counter) {
+  HMODULE module_handle = nullptr;
+  // GetModuleHandleEx() increments the module reference count, which is then
+  // managed and ultimately decremented by ScopedModuleHandle.
+  if (!::GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                           reinterpret_cast<LPCTSTR>(program_counter),
+                           &module_handle)) {
+    const DWORD error = ::GetLastError();
+    DCHECK_EQ(ERROR_MOD_NOT_FOUND, static_cast<int>(error));
+  }
+  return ScopedModuleHandle(module_handle);
+}
+
+}  // namespace
+
+// Win32StackFrameUnwinder ----------------------------------------------------
+
+Win32StackFrameUnwinder::UnwindFunctions::~UnwindFunctions() {}
+Win32StackFrameUnwinder::UnwindFunctions::UnwindFunctions() {}
 
 Win32StackFrameUnwinder::Win32StackFrameUnwinder()
-    : Win32StackFrameUnwinder(&win32_unwind_functions_) {
+    : Win32StackFrameUnwinder(make_scoped_ptr(new Win32UnwindFunctions)) {
 }
 
-Win32StackFrameUnwinder::~Win32StackFrameUnwinder() {
-  if (pending_blacklisted_module_) {
-    LeafUnwindBlacklist::GetInstance()->AddModuleToBlacklist(
-        pending_blacklisted_module_);
-  }
-}
+Win32StackFrameUnwinder::~Win32StackFrameUnwinder() {}
 
-bool Win32StackFrameUnwinder::TryUnwind(CONTEXT* context) {
+bool Win32StackFrameUnwinder::TryUnwind(CONTEXT* context,
+                                        ScopedModuleHandle* module) {
 #ifdef _WIN64
-  CHECK(!at_top_frame_ || unwind_info_present_for_all_frames_);
-  CHECK(!pending_blacklisted_module_);
+  ScopedModuleHandle frame_module =
+      unwind_functions_->GetModuleForProgramCounter(context->Rip);
+  if (!frame_module.IsValid()) {
+    // There's no loaded module containing the instruction pointer. This can be
+    // due to executing code that is not in a module. In particular,
+    // runtime-generated code associated with third-party injected DLLs
+    // typically is not in a module. It can also be due to the the module having
+    // been unloaded since we recorded the stack.  In the latter case the
+    // function unwind information was part of the unloaded module, so it's not
+    // possible to unwind further.
+    //
+    // If a module was found, it's still theoretically possible for the detected
+    // module module to be different than the one that was loaded when the stack
+    // was copied (i.e. if the module was unloaded and a different module loaded
+    // in overlapping memory). This likely would cause a crash, but has not been
+    // observed in practice.
+    return false;
+  }
 
   ULONG64 image_base;
   // Try to look up unwind metadata for the current function.
@@ -128,72 +145,30 @@ bool Win32StackFrameUnwinder::TryUnwind(CONTEXT* context) {
                                      context);
     at_top_frame_ = false;
   } else {
-    // RtlLookupFunctionEntry didn't find unwind information. This could mean
-    // the code at the instruction pointer is in:
-    //
-    // 1. a true leaf function (i.e. a function that neither calls a function,
-    //    nor allocates any stack space itself) in which case the return
-    //    address is at RSP, or
-    //
-    // 2. a function that doesn't adhere to the Microsoft x64 calling
-    //    convention, either by not providing the required unwind information,
-    //    or by not having the prologue or epilogue required for unwinding;
-    //    this case has been observed in crash data in injected third party
-    //    DLLs.
-    //
-    // In valid code, case 1 can only occur (by definition) as the last frame
-    // on the stack. This happens in about 5% of observed stacks and can
-    // easily be unwound by popping RSP and using it as the next frame's
-    // instruction pointer.
-    //
-    // Case 2 can occur anywhere on the stack, and attempting to unwind the
-    // stack will result in treating whatever value happens to be on the stack
-    // at RSP as the next frame's instruction pointer. This is certainly wrong
-    // and very likely to lead to crashing by deferencing invalid pointers in
-    // the next RtlVirtualUnwind call.
-    //
-    // If we see case 2 at a location not the last frame, and all the previous
-    // frame had valid unwind information, then this is definitely bad code.
-    // We blacklist the module as untrustable for unwinding if we encounter a
-    // function in it that doesn't have unwind information.
-
     if (at_top_frame_) {
       at_top_frame_ = false;
 
-      // We are at the end of the stack. It's very likely that we're in case 1
-      // since the vast majority of code adheres to the Microsoft x64 calling
-      // convention. But there's a small chance we might be unlucky and be in
-      // case 2. If this module is known to have bad code according to the
-      // leaf unwind blacklist, stop here, otherwise manually unwind.
-      if (LeafUnwindBlacklist::GetInstance()->IsBlacklisted(
-              reinterpret_cast<const void*>(image_base))) {
-        return false;
-      }
-
-      context->Rip = context->Rsp;
+      // This is a leaf function (i.e. a function that neither calls a function,
+      // nor allocates any stack space itself) so the return address is at RSP.
+      context->Rip = *reinterpret_cast<DWORD64*>(context->Rsp);
       context->Rsp += 8;
-      unwind_info_present_for_all_frames_ = false;
     } else {
-      // We're not at the end of the stack. This frame is untrustworthy and we
-      // can't safely unwind from here.
-      if (unwind_info_present_for_all_frames_) {
-        // Unwind information was present for all previous frames, so we can
-        // be confident this is case 2. Record the module to be blacklisted.
-        pending_blacklisted_module_ =
-            reinterpret_cast<const void *>(image_base);
-      } else {
-        // We started off on a function without unwind information. It's very
-        // likely that all frames up to this point have been good, and this
-        // frame is case 2. But it's possible that the initial frame was case
-        // 2 but hadn't been blacklisted yet, and we've started to go off into
-        // the weeds. Since we can't be sure, just bail out without
-        // blacklisting the module; chances are we'll later encounter the same
-        // function on a stack with full unwind information.
-      }
+      // In theory we shouldn't get here, as it means we've encountered a
+      // function without unwind information below the top of the stack, which
+      // is forbidden by the Microsoft x64 calling convention.
+      //
+      // The one known case in Chrome code that executes this path occurs
+      // because of BoringSSL unwind information inconsistent with the actual
+      // function code. See https://crbug.com/542919.
+      //
+      // Note that dodgy third-party generated code that otherwise would enter
+      // this path should be caught by the module check above, since the code
+      // typically is located outside of a module.
       return false;
     }
   }
 
+  module->Set(frame_module.Take());
   return true;
 #else
   NOTREACHED();
@@ -202,11 +177,8 @@ bool Win32StackFrameUnwinder::TryUnwind(CONTEXT* context) {
 }
 
 Win32StackFrameUnwinder::Win32StackFrameUnwinder(
-    UnwindFunctions* unwind_functions)
+    scoped_ptr<UnwindFunctions> unwind_functions)
     : at_top_frame_(true),
-      unwind_info_present_for_all_frames_(true),
-      pending_blacklisted_module_(nullptr),
-      unwind_functions_(unwind_functions) {
-}
+      unwind_functions_(std::move(unwind_functions)) {}
 
 }  // namespace base

@@ -16,7 +16,7 @@
 #define DEPENDENT_CONFIG_VARS \
     "  Dependent configs: all_dependent_configs, public_configs\n"
 #define DEPS_VARS \
-    "  Deps: data_deps, deps, forward_dependent_configs_from, public_deps\n"
+    "  Deps: data_deps, deps, public_deps\n"
 #define GENERAL_TARGET_VARS \
     "  General: check_includes, configs, data, inputs, output_name,\n" \
     "           output_extension, public, sources, testonly, visibility\n"
@@ -108,6 +108,9 @@ const char kAction_Help[] =
     "  if an input file changes) by writing a depfile when the script is run\n"
     "  (see \"gn help depfile\"). This is more flexible than \"inputs\".\n"
     "\n"
+    "  If the command line length is very long, you can use response files\n"
+    "  to pass args to your script. See \"gn help response_file_contents\".\n"
+    "\n"
     "  It is recommended you put inputs to your script in the \"sources\"\n"
     "  variable, and stuff like other Python files required to run your\n"
     "  script in the \"inputs\" variable.\n"
@@ -127,8 +130,8 @@ const char kAction_Help[] =
     "\n"
     "Variables\n"
     "\n"
-    "  args, console, data, data_deps, depfile, deps, outputs*, script*,\n"
-    "  inputs, sources\n"
+    "  args, console, data, data_deps, depfile, deps, inputs, outputs*,\n"
+    "  response_file_contents, script*, sources\n"
     "  * = required\n"
     "\n"
     "Example\n"
@@ -182,6 +185,9 @@ const char kActionForEach_Help[] =
     "  listed in the \"inputs\" variable. These files are treated as\n"
     "  dependencies of each script invocation.\n"
     "\n"
+    "  If the command line length is very long, you can use response files\n"
+    "  to pass args to your script. See \"gn help response_file_contents\".\n"
+    "\n"
     "  You can dynamically write input dependencies (for incremental rebuilds\n"
     "  if an input file changes) by writing a depfile when the script is run\n"
     "  (see \"gn help depfile\"). This is more flexible than \"inputs\".\n"
@@ -198,8 +204,8 @@ const char kActionForEach_Help[] =
     "\n"
     "Variables\n"
     "\n"
-    "  args, console, data, data_deps, depfile, deps, outputs*, script*,\n"
-    "  inputs, sources*\n"
+    "  args, console, data, data_deps, depfile, deps, inputs, outputs*,\n"
+    "  response_file_contents, script*, sources*\n"
     "  * = required\n"
     "\n"
     "Example\n"
@@ -330,9 +336,7 @@ const char kGroup_Help[] =
     "  specify configs that apply to their dependents.\n"
     "\n"
     "  Depending on a group is exactly like depending directly on that\n"
-    "  group's deps. Direct dependent configs will get automatically\n"
-    "  forwarded through the group so you shouldn't need to use\n"
-    "  \"forward_dependent_configs_from.\n"
+    "  group's deps. \n"
     "\n"
     "Variables\n"
     "\n"
@@ -357,6 +361,38 @@ Value RunGroup(Scope* scope,
                               block, err);
 }
 
+// loadable_module -------------------------------------------------------------
+
+const char kLoadableModule[] = "loadable_module";
+const char kLoadableModule_HelpShort[] =
+    "loadable_module: Declare a loadable module target.";
+const char kLoadableModule_Help[] =
+    "loadable_module: Declare a loadable module target.\n"
+    "\n"
+    "  This target type allows you to create an object file that is (and can\n"
+    "  only be) loaded and unloaded at runtime.\n"
+    "\n"
+    "  A loadable module will be specified on the linker line for targets\n"
+    "  listing the loadable module in its \"deps\". If you don't want this\n"
+    "  (if you don't need to dynamically load the library at runtime), then\n"
+    "  you should use a \"shared_library\" target type instead.\n"
+    "\n"
+    "Variables\n"
+    "\n"
+    CONFIG_VALUES_VARS_HELP
+    DEPS_VARS
+    DEPENDENT_CONFIG_VARS
+    GENERAL_TARGET_VARS;
+
+Value RunLoadableModule(Scope* scope,
+                       const FunctionCallNode* function,
+                       const std::vector<Value>& args,
+                       BlockNode* block,
+                       Err* err) {
+  return ExecuteGenericTarget(functions::kLoadableModule, scope, function, args,
+                              block, err);
+}
+
 // shared_library --------------------------------------------------------------
 
 const char kSharedLibrary[] = "shared_library";
@@ -368,7 +404,8 @@ const char kSharedLibrary_Help[] =
     "  A shared library will be specified on the linker line for targets\n"
     "  listing the shared library in its \"deps\". If you don't want this\n"
     "  (say you dynamically load the library at runtime), then you should\n"
-    "  depend on the shared library via \"data_deps\" instead.\n"
+    "  depend on the shared library via \"data_deps\" or, on Darwin\n"
+    "  platforms, use a \"loadable_module\" target type instead.\n"
     "\n"
     "Variables\n"
     "\n"
@@ -503,8 +540,7 @@ Value RunTarget(Scope* scope,
                 BlockNode* block,
                 Err* err) {
   if (args.size() != 2) {
-    *err = Err(function, "Expected two arguments.",
-               "Dude, try \"gn help target\".");
+    *err = Err(function, "Expected two arguments.", "Try \"gn help target\".");
     return Value();
   }
 

@@ -128,10 +128,6 @@ char kTSanDefaultSuppressions[] =
 // http://crbug.com/272095
 "race:base::g_top_manager\n"
 
-// http://crbug.com/273047
-"race:base::*::g_lazy_tls_ptr\n"
-"race:IPC::SyncChannel::ReceivedSyncMsgQueue::lazy_tls_ptr_\n"
-
 // http://crbug.com/280466
 "race:content::WebRtcAudioCapturer::SetCapturerSource\n"
 
@@ -143,9 +139,6 @@ char kTSanDefaultSuppressions[] =
 
 // http://crbug.com/310851
 "race:net::ProxyResolverV8Tracing::Job::~Job\n"
-
-// http://crbug.com/313726
-"race:CallbackWasCalled\n"
 
 // http://crbug.com/327330
 "race:PrepareTextureMailbox\n"
@@ -163,9 +156,6 @@ char kTSanDefaultSuppressions[] =
 
 // http://crbug.com/329225
 "race:blink::currentTimeFunction\n"
-
-// http://crbug.com/329460
-"race:extensions::InfoMap::AddExtension\n"
 
 // http://crbug.com/333244
 "race:content::"
@@ -246,11 +236,6 @@ char kTSanDefaultSuppressions[] =
 "race:SkFontConfigInterface::GetSingletonDirectInterface\n"
 "race:FcStrStaticName\n"
 
-// http://crbug.com/372807
-"deadlock:net::X509Certificate::CreateCertificateListFromBytes\n"
-"deadlock:net::X509Certificate::CreateFromBytes\n"
-"deadlock:net::SSLClientSocketNSS::Core::DoHandshakeLoop\n"
-
 // http://crbug.com/374135
 "race:media::AlsaWrapper::PcmWritei\n"
 
@@ -265,9 +250,6 @@ char kTSanDefaultSuppressions[] =
 
 // http://crbug.com/388730
 "race:g_next_user_script_id\n"
-
-// http://crbug.com/389098
-"race:webrtc::voe::TransmitMixer::EnableStereoChannelSwapping\n"
 
 // http://crbug.com/397022
 "deadlock:"
@@ -292,6 +274,7 @@ char kTSanDefaultSuppressions[] =
 // https://crbug.com/448203
 "race:blink::RemoteFrame::detach\n"
 
+// Lock inversion in third party code, won't fix.
 // https://crbug.com/455638
 "deadlock:dbus::Bus::ShutdownAndBlock\n"
 
@@ -304,6 +287,9 @@ char kTSanDefaultSuppressions[] =
 
 // https://crbug.com/454655
 "race:content::BrowserTestBase::PostTaskToInProcessRendererAndWait\n"
+
+// https://crbug.com/539315
+"race:MojoCreateMessagePipe\n"
 
 // End of suppressions.
 ;  // Please keep this semicolon.

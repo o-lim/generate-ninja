@@ -5,6 +5,7 @@
 #include "base/profiler/stack_sampling_profiler.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -113,11 +114,10 @@ StackSamplingProfiler::SamplingThread::SamplingThread(
     scoped_ptr<NativeStackSampler> native_sampler,
     const SamplingParams& params,
     const CompletedCallback& completed_callback)
-    : native_sampler_(native_sampler.Pass()),
+    : native_sampler_(std::move(native_sampler)),
       params_(params),
       stop_event_(false, false),
-      completed_callback_(completed_callback) {
-}
+      completed_callback_(completed_callback) {}
 
 StackSamplingProfiler::SamplingThread::~SamplingThread() {}
 
@@ -217,10 +217,20 @@ StackSamplingProfiler::SamplingParams::SamplingParams()
       sampling_interval(TimeDelta::FromMilliseconds(100)) {
 }
 
-StackSamplingProfiler::StackSamplingProfiler(PlatformThreadId thread_id,
-                                             const SamplingParams& params,
-                                             const CompletedCallback& callback)
-    : thread_id_(thread_id), params_(params), completed_callback_(callback) {}
+StackSamplingProfiler::StackSamplingProfiler(
+    PlatformThreadId thread_id,
+    const SamplingParams& params,
+    const CompletedCallback& callback)
+    : StackSamplingProfiler(thread_id, params, callback, nullptr) {}
+
+StackSamplingProfiler::StackSamplingProfiler(
+    PlatformThreadId thread_id,
+    const SamplingParams& params,
+    const CompletedCallback& callback,
+    NativeStackSamplerTestDelegate* test_delegate)
+    : thread_id_(thread_id), params_(params), completed_callback_(callback),
+      test_delegate_(test_delegate) {
+}
 
 StackSamplingProfiler::~StackSamplingProfiler() {
   Stop();
@@ -242,12 +252,12 @@ void StackSamplingProfiler::Start() {
     return;
 
   scoped_ptr<NativeStackSampler> native_sampler =
-      NativeStackSampler::Create(thread_id_);
+      NativeStackSampler::Create(thread_id_, test_delegate_);
   if (!native_sampler)
     return;
 
-  sampling_thread_.reset(
-      new SamplingThread(native_sampler.Pass(), params_, completed_callback_));
+  sampling_thread_.reset(new SamplingThread(std::move(native_sampler), params_,
+                                            completed_callback_));
   if (!PlatformThread::Create(0, sampling_thread_.get(),
                               &sampling_thread_handle_))
     sampling_thread_.reset();

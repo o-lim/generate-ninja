@@ -28,20 +28,44 @@ import os
 import subprocess
 import sys
 
-def main():
+
+def _ResolvePath(path):
   script_directory = os.path.dirname(__file__)
+  return os.path.abspath(os.path.join(script_directory, path))
 
-  def resolve_path(path):
-    return os.path.abspath(os.path.join(script_directory, path))
 
-  cmd_path = resolve_path({cmd_path})
-  cmd_args = [cmd_path] + {cmd_args}
-  cmd_path_args = {cmd_path_args}
-  for arg, path in cmd_path_args:
-    if arg:
-      cmd_args.append(arg)
-    cmd_args.append(resolve_path(path))
+# Exported to allow test runner to be able to install incremental apks.
+def GetInstallParameters():
+  apk_path = {apk_path}
+  native_libs = {native_libs}
+  dex_files = {dex_files}
+  splits = {splits}
+  show_proguard_warning = {show_proguard_warning}
 
+  return dict(apk_path=_ResolvePath(apk_path),
+              dex_files=[_ResolvePath(p) for p in dex_files],
+              native_libs=[_ResolvePath(p) for p in native_libs],
+              show_proguard_warning=show_proguard_warning,
+              splits=[_ResolvePath(p) for p in splits])
+
+
+def main():
+  output_directory = {output_directory}
+  cmd_path = {cmd_path}
+  params = GetInstallParameters()
+  cmd_args = [
+      _ResolvePath(cmd_path),
+      '--output-directory', _ResolvePath(output_directory),
+  ]
+  for native_lib in params['native_libs']:
+    cmd_args.extend(('--native_lib', native_lib))
+  for dex_path in params['dex_files']:
+    cmd_args.extend(('--dex-file', dex_path))
+  for split in params['splits']:
+    cmd_args.extend(('--split', split))
+  cmd_args.append(params['apk_path'])
+  if params['show_proguard_warning']:
+    cmd_args.append('--show-proguard-warning')
   return subprocess.call(cmd_args + sys.argv[1:])
 
 if __name__ == '__main__':
@@ -68,8 +92,11 @@ def _ParseArgs(args):
                       default=[],
                       help='A glob matching the apk splits. '
                            'Can be specified multiple times.')
-  parser.add_argument('--lib-dir',
-                      help='Path to native libraries directory.')
+  parser.add_argument('--native-libs',
+                      action='append',
+                      default=[],
+                      help='GYP-list of paths to native libraries. Can be '
+                      'repeated.')
   parser.add_argument('--dex-file',
                       action='append',
                       default=[],
@@ -77,9 +104,17 @@ def _ParseArgs(args):
                       help='List of dex files to include.')
   parser.add_argument('--dex-file-list',
                       help='GYP-list of dex files.')
+  parser.add_argument('--show-proguard-warning',
+                      action='store_true',
+                      default=False,
+                      help='Print a warning about proguard being disabled')
 
   options = parser.parse_args(args)
   options.dex_files += build_utils.ParseGypList(options.dex_file_list)
+  all_libs = []
+  for gyp_list in options.native_libs:
+    all_libs.extend(build_utils.ParseGypList(gyp_list))
+  options.native_libs = all_libs
   return options
 
 
@@ -87,32 +122,24 @@ def main(args):
   options = _ParseArgs(args)
 
   def relativize(path):
-    return os.path.relpath(path, os.path.dirname(options.script_output_path))
+    script_dir = os.path.dirname(options.script_output_path)
+    return path and os.path.relpath(path, script_dir)
 
   installer_path = os.path.join(constants.DIR_SOURCE_ROOT, 'build', 'android',
                                 'incremental_install', 'installer.py')
-  installer_path = relativize(installer_path)
-
-  path_args = [
-      ('--output-directory', relativize(options.output_directory)),
-      (None, relativize(options.apk_path)),
-  ]
-
-  if options.lib_dir:
-    path_args.append(('--lib-dir', relativize(options.lib_dir)))
-
-  if options.dex_files:
-    for dex_file in options.dex_files:
-      path_args.append(('--dex-file', relativize(dex_file)))
-
-  for split_arg in options.splits:
-    path_args.append(('--split', relativize(split_arg)))
+  pformat = pprint.pformat
+  template_args = {
+      'cmd_path': pformat(relativize(installer_path)),
+      'apk_path': pformat(relativize(options.apk_path)),
+      'output_directory': pformat(relativize(options.output_directory)),
+      'native_libs': pformat([relativize(p) for p in options.native_libs]),
+      'dex_files': pformat([relativize(p) for p in options.dex_files]),
+      'show_proguard_warning': pformat(options.show_proguard_warning),
+      'splits': pformat([relativize(p) for p in options.splits]),
+  }
 
   with open(options.script_output_path, 'w') as script:
-    script.write(SCRIPT_TEMPLATE.format(
-        cmd_path=pprint.pformat(installer_path),
-        cmd_args='[]',
-        cmd_path_args=pprint.pformat(path_args)))
+    script.write(SCRIPT_TEMPLATE.format(**template_args))
 
   os.chmod(options.script_output_path, 0750)
 

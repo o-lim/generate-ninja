@@ -21,15 +21,12 @@
 #include "base/files/file_path.h"
 #include "base/files/file_tracing.h"
 #include "base/files/scoped_file.h"
-#include "base/gtest_prod_util.h"
 #include "base/move.h"
 #include "base/time/time.h"
 
 #if defined(OS_WIN)
 #include "base/win/scoped_handle.h"
 #endif
-
-FORWARD_DECLARE_TEST(FileTest, MemoryCorruption);
 
 namespace base {
 
@@ -56,7 +53,7 @@ typedef struct stat64 stat_wrapper_t;
 // to the OS is not considered const, even if there is no apparent change to
 // member variables.
 class BASE_EXPORT File {
-  MOVE_ONLY_TYPE_FOR_CPP_03(File, RValue)
+  MOVE_ONLY_TYPE_FOR_CPP_03(File)
 
  public:
   // FLAG_(OPEN|CREATE).* are mutually exclusive. You should specify exactly one
@@ -88,6 +85,7 @@ class BASE_EXPORT File {
     FLAG_TERMINAL_DEVICE = 1 << 16,   // Serial port flags.
     FLAG_BACKUP_SEMANTICS = 1 << 17,  // Used on Windows only.
     FLAG_EXECUTE = 1 << 18,           // Used on Windows only.
+    FLAG_SEQUENTIAL_SCAN = 1 << 19,   // Used on Windows only.
   };
 
   // This enum has been recorded in multiple histograms. If the order of the
@@ -171,20 +169,21 @@ class BASE_EXPORT File {
   // Creates an object with a specific error_details code.
   explicit File(Error error_details);
 
-  // Move constructor for C++03 move emulation of this type.
-  File(RValue other);
+  File(File&& other);
 
   ~File();
 
   // Takes ownership of |platform_file|.
   static File CreateForAsyncHandle(PlatformFile platform_file);
 
-  // Move operator= for C++03 move emulation of this type.
-  File& operator=(RValue other);
+  File& operator=(File&& other);
 
   // Creates or opens the given file.
   void Initialize(const FilePath& path, uint32 flags);
 
+  // Returns |true| if the handle / fd wrapped by this object is valid.  This
+  // method doesn't interact with the file system (and is safe to be called from
+  // ThreadRestrictions::SetIOAllowed(false) threads).
   bool IsValid() const;
 
   // Returns true if a new file was created (or an old one truncated to zero
@@ -306,54 +305,7 @@ class BASE_EXPORT File {
   static std::string ErrorToString(Error error);
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(::FileTest, MemoryCorruption);
-
   friend class FileTracing::ScopedTrace;
-
-#if defined(OS_POSIX)
-  // Encloses a single ScopedFD, saving a cheap tamper resistent memory checksum
-  // alongside it. This checksum is validated at every access, allowing early
-  // detection of memory corruption.
-
-  // TODO(gavinp): This is in place temporarily to help us debug
-  // https://crbug.com/424562 , which can't be reproduced in valgrind. Remove
-  // this code after we have fixed this issue.
-  class MemoryCheckingScopedFD {
-   public:
-    MemoryCheckingScopedFD();
-    MemoryCheckingScopedFD(int fd);
-    ~MemoryCheckingScopedFD();
-
-    bool is_valid() const { Check(); return file_.is_valid(); }
-    int get() const { Check(); return file_.get(); }
-
-    void reset() { Check(); file_.reset(); UpdateChecksum(); }
-    void reset(int fd) { Check(); file_.reset(fd); UpdateChecksum(); }
-    int release() {
-      Check();
-      int fd = file_.release();
-      UpdateChecksum();
-      return fd;
-    }
-
-   private:
-    FRIEND_TEST_ALL_PREFIXES(::FileTest, MemoryCorruption);
-
-    // Computes the checksum for the current value of |file_|. Returns via an
-    // out parameter to guard against implicit conversions of unsigned integral
-    // types.
-    void ComputeMemoryChecksum(unsigned int* out_checksum) const;
-
-    // Confirms that the current |file_| and |file_memory_checksum_| agree,
-    // failing a CHECK if they do not.
-    void Check() const;
-
-    void UpdateChecksum();
-
-    ScopedFD file_;
-    unsigned int file_memory_checksum_;
-  };
-#endif
 
   // Creates or opens the given file. Only called if |path| has no
   // traversal ('..') components.
@@ -368,7 +320,7 @@ class BASE_EXPORT File {
 #if defined(OS_WIN)
   win::ScopedHandle file_;
 #elif defined(OS_POSIX)
-  MemoryCheckingScopedFD file_;
+  ScopedFD file_;
 #endif
 
   // A path to use for tracing purposes. Set if file tracing is enabled during
@@ -386,3 +338,4 @@ class BASE_EXPORT File {
 }  // namespace base
 
 #endif  // BASE_FILES_FILE_H_
+

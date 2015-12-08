@@ -22,19 +22,19 @@
 namespace base {
 
 // Make sure our Whence mappings match the system headers.
-COMPILE_ASSERT(File::FROM_BEGIN   == SEEK_SET &&
-               File::FROM_CURRENT == SEEK_CUR &&
-               File::FROM_END     == SEEK_END, whence_matches_system);
+static_assert(File::FROM_BEGIN == SEEK_SET && File::FROM_CURRENT == SEEK_CUR &&
+                  File::FROM_END == SEEK_END,
+              "whence mapping must match the system headers");
 
 namespace {
 
 #if defined(OS_BSD) || defined(OS_MACOSX) || defined(OS_NACL)
-static int CallFstat(int fd, stat_wrapper_t *sb) {
+int CallFstat(int fd, stat_wrapper_t *sb) {
   ThreadRestrictions::AssertIOAllowed();
   return fstat(fd, sb);
 }
 #else
-static int CallFstat(int fd, stat_wrapper_t *sb) {
+int CallFstat(int fd, stat_wrapper_t *sb) {
   ThreadRestrictions::AssertIOAllowed();
   return fstat64(fd, sb);
 }
@@ -43,15 +43,15 @@ static int CallFstat(int fd, stat_wrapper_t *sb) {
 // NaCl doesn't provide the following system calls, so either simulate them or
 // wrap them in order to minimize the number of #ifdef's in this file.
 #if !defined(OS_NACL)
-static bool IsOpenAppend(PlatformFile file) {
+bool IsOpenAppend(PlatformFile file) {
   return (fcntl(file, F_GETFL) & O_APPEND) != 0;
 }
 
-static int CallFtruncate(PlatformFile file, int64 length) {
+int CallFtruncate(PlatformFile file, int64 length) {
   return HANDLE_EINTR(ftruncate(file, length));
 }
 
-static int CallFutimes(PlatformFile file, const struct timeval times[2]) {
+int CallFutimes(PlatformFile file, const struct timeval times[2]) {
 #ifdef __USE_XOPEN2K8
   // futimens should be available, but futimes might not be
   // http://pubs.opengroup.org/onlinepubs/9699919799/
@@ -68,7 +68,7 @@ static int CallFutimes(PlatformFile file, const struct timeval times[2]) {
 #endif
 }
 
-static File::Error CallFctnlFlock(PlatformFile file, bool do_lock) {
+File::Error CallFcntlFlock(PlatformFile file, bool do_lock) {
   struct flock lock;
   lock.l_type = F_WRLCK;
   lock.l_whence = SEEK_SET;
@@ -80,24 +80,24 @@ static File::Error CallFctnlFlock(PlatformFile file, bool do_lock) {
 }
 #else  // defined(OS_NACL)
 
-static bool IsOpenAppend(PlatformFile file) {
+bool IsOpenAppend(PlatformFile file) {
   // NaCl doesn't implement fcntl. Since NaCl's write conforms to the POSIX
   // standard and always appends if the file is opened with O_APPEND, just
   // return false here.
   return false;
 }
 
-static int CallFtruncate(PlatformFile file, int64 length) {
+int CallFtruncate(PlatformFile file, int64 length) {
   NOTIMPLEMENTED();  // NaCl doesn't implement ftruncate.
   return 0;
 }
 
-static int CallFutimes(PlatformFile file, const struct timeval times[2]) {
+int CallFutimes(PlatformFile file, const struct timeval times[2]) {
   NOTIMPLEMENTED();  // NaCl doesn't implement futimes.
   return 0;
 }
 
-static File::Error CallFctnlFlock(PlatformFile file, bool do_lock) {
+File::Error CallFcntlFlock(PlatformFile file, bool do_lock) {
   NOTIMPLEMENTED();  // NaCl doesn't implement flock struct.
   return File::FILE_ERROR_INVALID_OPERATION;
 }
@@ -184,11 +184,11 @@ int64 File::Seek(Whence whence, int64 offset) {
   SCOPED_FILE_TRACE_WITH_SIZE("Seek", offset);
 
 #if defined(OS_ANDROID)
-  COMPILE_ASSERT(sizeof(int64) == sizeof(off64_t), off64_t_64_bit);
+  static_assert(sizeof(int64) == sizeof(off64_t), "off64_t must be 64 bits");
   return lseek64(file_.get(), static_cast<off64_t>(offset),
                  static_cast<int>(whence));
 #else
-  COMPILE_ASSERT(sizeof(int64) == sizeof(off_t), off_t_64_bit);
+  static_assert(sizeof(int64) == sizeof(off_t), "off_t must be 64 bits");
   return lseek(file_.get(), static_cast<off_t>(offset),
                static_cast<int>(whence));
 #endif
@@ -360,12 +360,12 @@ bool File::GetInfo(Info* info) {
 
 File::Error File::Lock() {
   SCOPED_FILE_TRACE("Lock");
-  return CallFctnlFlock(file_.get(), true);
+  return CallFcntlFlock(file_.get(), true);
 }
 
 File::Error File::Unlock() {
   SCOPED_FILE_TRACE("Unlock");
-  return CallFctnlFlock(file_.get(), false);
+  return CallFcntlFlock(file_.get(), false);
 }
 
 File File::Duplicate() {
@@ -420,49 +420,6 @@ File::Error File::OSErrorToFileError(int saved_errno) {
   }
 }
 
-File::MemoryCheckingScopedFD::MemoryCheckingScopedFD() {
-  UpdateChecksum();
-}
-
-File::MemoryCheckingScopedFD::MemoryCheckingScopedFD(int fd) : file_(fd) {
-  UpdateChecksum();
-}
-
-File::MemoryCheckingScopedFD::~MemoryCheckingScopedFD() {}
-
-// static
-void File::MemoryCheckingScopedFD::ComputeMemoryChecksum(
-    unsigned int* out_checksum) const {
-  // Use a single iteration of a linear congruentional generator (lcg) to
-  // provide a cheap checksum unlikely to be accidentally matched by a random
-  // memory corruption.
-
-  // By choosing constants that satisfy the Hull-Duebell Theorem on lcg cycle
-  // length, we insure that each distinct fd value maps to a distinct checksum,
-  // which maximises the utility of our checksum.
-
-  // This code uses "unsigned int" throughout for its defined modular semantics,
-  // which implicitly gives us a divisor that is a power of two.
-
-  const unsigned int kMultiplier = 13035 * 4 + 1;
-  COMPILE_ASSERT(((kMultiplier - 1) & 3) == 0, pred_must_be_multiple_of_four);
-  const unsigned int kIncrement = 1595649551;
-  COMPILE_ASSERT(kIncrement & 1, must_be_coprime_to_powers_of_two);
-
-  *out_checksum =
-      static_cast<unsigned int>(file_.get()) * kMultiplier + kIncrement;
-}
-
-void File::MemoryCheckingScopedFD::Check() const {
-  unsigned int computed_checksum;
-  ComputeMemoryChecksum(&computed_checksum);
-  CHECK_EQ(file_memory_checksum_, computed_checksum) << "corrupted fd memory";
-}
-
-void File::MemoryCheckingScopedFD::UpdateChecksum() {
-  ComputeMemoryChecksum(&file_memory_checksum_);
-}
-
 // NaCl doesn't implement system calls to open files directly.
 #if !defined(OS_NACL)
 // TODO(erikkay): does it make sense to support FLAG_EXCLUSIVE_* here?
@@ -514,7 +471,7 @@ void File::DoInitialize(const FilePath& path, uint32 flags) {
   else if (flags & FLAG_APPEND)
     open_flags |= O_APPEND | O_WRONLY;
 
-  COMPILE_ASSERT(O_RDONLY == 0, O_RDONLY_must_equal_zero);
+  static_assert(O_RDONLY == 0, "O_RDONLY must equal zero");
 
   int mode = S_IRUSR | S_IWUSR;
 #if defined(OS_CHROMEOS)
