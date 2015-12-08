@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import collections
+import copy
 import logging
 import os
 import pickle
@@ -25,9 +27,12 @@ import unittest_util # pylint: disable=import-error
 _ACTIVITY_RESULT_CANCELED = 0
 _ACTIVITY_RESULT_OK = -1
 
+_COMMAND_LINE_PARAMETER = 'cmdlinearg-parameter'
 _DEFAULT_ANNOTATIONS = [
     'Smoke', 'SmallTest', 'MediumTest', 'LargeTest',
     'EnormousTest', 'IntegrationTest']
+_EXCLUDE_UNLESS_REQUESTED_ANNOTATIONS = [
+    'DisabledTest', 'FlakyTest']
 _EXTRA_ENABLE_HTTP_SERVER = (
     'org.chromium.chrome.test.ChromeInstrumentationTestRunner.'
         + 'EnableTestHttpServer')
@@ -39,6 +44,8 @@ _EXTRA_DRIVER_TARGET_PACKAGE = (
     'org.chromium.test.driver.OnDeviceInstrumentationDriver.TargetPackage')
 _EXTRA_DRIVER_TARGET_CLASS = (
     'org.chromium.test.driver.OnDeviceInstrumentationDriver.TargetClass')
+_PARAMETERIZED_TEST_ANNOTATION = 'ParameterizedTest'
+_PARAMETERIZED_TEST_SET_ANNOTATION = 'ParameterizedTest$Set'
 _NATIVE_CRASH_RE = re.compile('native crash', re.IGNORECASE)
 _PICKLE_FORMAT_VERSION = 10
 
@@ -132,11 +139,62 @@ def GenerateTestResults(
   return results
 
 
+def ParseCommandLineFlagParameters(annotations):
+  """Determines whether the test is parameterized to be run with different
+     command-line flags.
+
+  Args:
+    annotations: The annotations of the test.
+
+  Returns:
+    If the test is parameterized, returns a list of named tuples
+    with lists of flags, e.g.:
+
+      [(add=['--flag-to-add']), (remove=['--flag-to-remove']), ()]
+
+    That means, the test must be run three times, the first time with
+    "--flag-to-add" added to command-line, the second time with
+    "--flag-to-remove" to be removed from command-line, and the third time
+    with default command-line args. If the same flag is listed both for adding
+    and for removing, it is left unchanged.
+
+    If the test is not parametrized, returns None.
+
+  """
+  ParamsTuple = collections.namedtuple('ParamsTuple', ['add', 'remove'])
+  parameterized_tests = []
+  if _PARAMETERIZED_TEST_SET_ANNOTATION in annotations:
+    if annotations[_PARAMETERIZED_TEST_SET_ANNOTATION]:
+      parameterized_tests = annotations[
+        _PARAMETERIZED_TEST_SET_ANNOTATION].get('tests', [])
+  elif _PARAMETERIZED_TEST_ANNOTATION in annotations:
+    parameterized_tests = [annotations[_PARAMETERIZED_TEST_ANNOTATION]]
+  else:
+    return None
+
+  result = []
+  for pt in parameterized_tests:
+    if not pt:
+      continue
+    for p in pt['parameters']:
+      if p['tag'] == _COMMAND_LINE_PARAMETER:
+        to_add = []
+        to_remove = []
+        for a in p.get('arguments', []):
+          if a['name'] == 'add':
+            to_add = ['--%s' % f for f in a['stringArray']]
+          elif a['name'] == 'remove':
+            to_remove = ['--%s' % f for f in a['stringArray']]
+        result.append(ParamsTuple(to_add, to_remove))
+  return result if result else None
+
+
 class InstrumentationTestInstance(test_instance.TestInstance):
 
   def __init__(self, args, isolate_delegate, error_func):
     super(InstrumentationTestInstance, self).__init__()
 
+    self._additional_apks = []
     self._apk_under_test = None
     self._apk_under_test_permissions = None
     self._package_info = None
@@ -168,6 +226,9 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     self._driver_package = None
     self._driver_name = None
     self._initializeDriverAttributes()
+
+    self._timeout_scale = None
+    self._initializeTestControlAttributes(args)
 
   def _initializeApkAttributes(self, args, error_func):
     if args.apk_under_test.endswith('.apk'):
@@ -216,6 +277,11 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     if not self._package_info:
       logging.warning('Unable to find package info for %s', self._test_package)
 
+    for apk in args.additional_apks:
+      if not os.path.exists(apk):
+        error_func('Unable to find additional APK: %s' % apk)
+    self._additional_apks = args.additional_apks
+
   def _initializeDataDependencyAttributes(self, args, isolate_delegate):
     self._data_deps = []
     if args.isolate_file_path:
@@ -262,6 +328,12 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     else:
       self._excluded_annotations = {}
 
+    self._excluded_annotations.update(
+        {
+          a: None for a in _EXCLUDE_UNLESS_REQUESTED_ANNOTATIONS
+          if a not in self._annotations
+        })
+
   def _initializeFlagAttributes(self, args):
     self._flags = ['--disable-fre', '--enable-test-intents']
     # TODO(jbudorick): Transition "--device-flags" to "--device-flags-file"
@@ -284,6 +356,13 @@ class InstrumentationTestInstance(test_instance.TestInstance):
       self._driver_name = driver_apk.GetInstrumentationName()
     else:
       self._driver_apk = None
+
+  def _initializeTestControlAttributes(self, args):
+    self._timeout_scale = args.timeout_scale or 1
+
+  @property
+  def additional_apks(self):
+    return self._additional_apks
 
   @property
   def apk_under_test(self):
@@ -341,6 +420,10 @@ class InstrumentationTestInstance(test_instance.TestInstance):
   def test_runner(self):
     return self._test_runner
 
+  @property
+  def timeout_scale(self):
+    return self._timeout_scale
+
   #override
   def TestType(self):
     return 'instrumentation'
@@ -351,7 +434,7 @@ class InstrumentationTestInstance(test_instance.TestInstance):
       self._isolate_delegate.Remap(
           self._isolate_abs_path, self._isolated_abs_path)
       self._isolate_delegate.MoveOutputDeps()
-      self._data_deps.extend([(constants.ISOLATE_DEPS_DIR, None)])
+      self._data_deps.extend([(self._isolate_delegate.isolate_deps_dir, None)])
 
     # TODO(jbudorick): Convert existing tests that depend on the --test-data
     # mechanism to isolate, then remove this.
@@ -374,7 +457,8 @@ class InstrumentationTestInstance(test_instance.TestInstance):
       logging.info('Getting tests from JAR via proguard. (%s)', str(e))
       tests = self._GetTestsFromProguard(self.test_jar)
       self._SaveTestsToPickle(pickle_path, self.test_jar, tests)
-    return self._InflateTests(self._FilterTests(tests))
+    return self._ParametrizeTestsWithFlags(
+        self._InflateTests(self._FilterTests(tests)))
 
   class ProguardPickleException(Exception):
     pass
@@ -498,6 +582,18 @@ class InstrumentationTestInstance(test_instance.TestInstance):
             'annotations': a,
         })
     return inflated_tests
+
+  def _ParametrizeTestsWithFlags(self, tests):
+    new_tests = []
+    for t in tests:
+      parameters = ParseCommandLineFlagParameters(t['annotations'])
+      if parameters:
+        t['flags'] = parameters[0]
+        for p in parameters[1:]:
+          parameterized_t = copy.copy(t)
+          parameterized_t['flags'] = p
+          new_tests.append(parameterized_t)
+    return tests + new_tests
 
   @staticmethod
   def GetHttpServerEnvironmentVars():

@@ -83,7 +83,7 @@ int64_t ComputeThreadTicks() {
   }
 
   kern_return_t kr = thread_info(
-      thread,
+      thread.get(),
       THREAD_BASIC_INFO,
       reinterpret_cast<thread_info_t>(&thread_info_data),
       &thread_info_count);
@@ -135,8 +135,8 @@ Time Time::Now() {
 
 // static
 Time Time::FromCFAbsoluteTime(CFAbsoluteTime t) {
-  COMPILE_ASSERT(std::numeric_limits<CFAbsoluteTime>::has_infinity,
-                 numeric_limits_infinity_is_undefined_when_not_has_infinity);
+  static_assert(std::numeric_limits<CFAbsoluteTime>::has_infinity,
+                "CFAbsoluteTime must have an infinity value");
   if (t == 0)
     return Time();  // Consider 0 as a null Time.
   if (t == std::numeric_limits<CFAbsoluteTime>::infinity())
@@ -147,8 +147,8 @@ Time Time::FromCFAbsoluteTime(CFAbsoluteTime t) {
 }
 
 CFAbsoluteTime Time::ToCFAbsoluteTime() const {
-  COMPILE_ASSERT(std::numeric_limits<CFAbsoluteTime>::has_infinity,
-                 numeric_limits_infinity_is_undefined_when_not_has_infinity);
+  static_assert(std::numeric_limits<CFAbsoluteTime>::has_infinity,
+                "CFAbsoluteTime must have an infinity value");
   if (is_null())
     return 0;  // Consider 0 as a null Time.
   if (is_max())
@@ -229,11 +229,6 @@ bool TimeTicks::IsHighResolution() {
 // static
 ThreadTicks ThreadTicks::Now() {
   return ThreadTicks(ComputeThreadTicks());
-}
-
-// static
-TraceTicks TraceTicks::Now() {
-  return TraceTicks(ComputeCurrentTicks());
 }
 
 }  // namespace base

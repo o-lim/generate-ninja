@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import fnmatch
+import functools
 import logging
 
 from devil.android import device_errors
@@ -18,19 +20,37 @@ def handle_shard_failures(f):
     f: the function being decorated. The function must take at least one
       argument, and that argument must be the device.
   """
-  def wrapper(dev, *args, **kwargs):
-    try:
-      return f(dev, *args, **kwargs)
-    except device_errors.CommandFailedError:
-      logging.exception('Shard failed: %s(%s)', f.__name__, str(dev))
-    except device_errors.CommandTimeoutError:
-      logging.exception('Shard timed out: %s(%s)', f.__name__, str(dev))
-    except device_errors.DeviceUnreachableError:
-      logging.exception('Shard died: %s(%s)', f.__name__, str(dev))
-    return None
+  return handle_shard_failures_with(None)(f)
 
-  wrapper.__name__ = f.__name__
-  return wrapper
+
+def handle_shard_failures_with(on_failure):
+  """A decorator that handles device failures for per-device functions.
+
+  This calls on_failure in the event of a failure.
+
+  Args:
+    f: the function being decorated. The function must take at least one
+      argument, and that argument must be the device.
+    on_failure: A binary function to call on failure.
+  """
+  def decorator(f):
+    @functools.wraps(f)
+    def wrapper(dev, *args, **kwargs):
+      try:
+        return f(dev, *args, **kwargs)
+      except device_errors.CommandFailedError:
+        logging.exception('Shard failed: %s(%s)', f.__name__, str(dev))
+      except device_errors.CommandTimeoutError:
+        logging.exception('Shard timed out: %s(%s)', f.__name__, str(dev))
+      except device_errors.DeviceUnreachableError:
+        logging.exception('Shard died: %s(%s)', f.__name__, str(dev))
+      if on_failure:
+        on_failure(dev, f.__name__)
+      return None
+
+    return wrapper
+
+  return decorator
 
 
 class LocalDeviceTestRun(test_run.TestRun):
@@ -95,7 +115,15 @@ class LocalDeviceTestRun(test_run.TestRun):
           all_fail_results[result.GetName()] = result
 
       results_names = set(r.GetName() for r in results.GetAll())
-      tests = [t for t in tests if self._GetTestName(t) not in results_names]
+
+      def has_test_result(name):
+        # When specifying a test filter, names can contain trailing wildcards.
+        # See local_device_gtest_run._ExtractTestsFromFilter()
+        if name.endswith('*'):
+          return any(fnmatch.fnmatch(n, name) for n in results_names)
+        return name in results_names
+
+      tests = [t for t in tests if not has_test_result(self._GetTestName(t))]
       tries += 1
       logging.info('FINISHED TRY #%d/%d', tries, self._env.max_tries)
       if tests:

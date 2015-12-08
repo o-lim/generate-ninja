@@ -22,6 +22,7 @@ import org.chromium.base.test.util.parameter.ParameterizedTest;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -33,19 +34,21 @@ import java.util.Map.Entry;
  * A test result that can skip tests.
  */
 public class BaseTestResult extends TestResult {
-    private static final String TAG = "cr.base.test";
+    private static final String TAG = "base_test";
 
     private static final int SLEEP_INTERVAL_MS = 50;
     private static final int WAIT_DURATION_MS = 5000;
 
     private final Instrumentation mInstrumentation;
     private final List<SkipCheck> mSkipChecks;
+    private final List<PreTestHook> mPreTestHooks;
 
     /**
      * Creates an instance of BaseTestResult.
      */
     public BaseTestResult(Instrumentation instrumentation) {
         mSkipChecks = new ArrayList<>();
+        mPreTestHooks = new ArrayList<>();
         mInstrumentation = instrumentation;
     }
 
@@ -64,6 +67,19 @@ public class BaseTestResult extends TestResult {
     }
 
     /**
+     * An interface for classes that have some code to run before a test. They run after
+     * {@link SkipCheck}s. Provides access to the test method (and the annotations defined for it)
+     * and the instrumentation context.
+     */
+    public interface PreTestHook {
+        /**
+         * @param targetContext the instrumentation context that will be used during the test.
+         * @param testMethod the test method to be run.
+         */
+        public void run(Context targetContext, Method testMethod);
+    }
+
+    /**
      * Adds a check for whether a test should run.
      *
      * @param skipCheck The check to add.
@@ -72,11 +88,33 @@ public class BaseTestResult extends TestResult {
         mSkipChecks.add(skipCheck);
     }
 
+    /**
+     * Adds hooks that will be executed before each test that runs.
+     *
+     * @param preTestHook The hook to add.
+     */
+    public void addPreTestHook(PreTestHook preTestHook) {
+        mPreTestHooks.add(preTestHook);
+    }
+
     protected boolean shouldSkip(TestCase test) {
         for (SkipCheck s : mSkipChecks) {
             if (s.shouldSkip(test)) return true;
         }
         return false;
+    }
+
+    private void runPreTestHooks(TestCase test) {
+        try {
+            Method testMethod = test.getClass().getMethod(test.getName());
+            Context targetContext = getTargetContext();
+
+            for (PreTestHook hook : mPreTestHooks) {
+                hook.run(targetContext, testMethod);
+            }
+        } catch (NoSuchMethodException e) {
+            Log.e(TAG, "Unable to run pre test hooks.", e);
+        }
     }
 
     @Override
@@ -92,13 +130,7 @@ public class BaseTestResult extends TestResult {
 
             endTest(test);
         } else {
-            try {
-                CommandLineFlags.setUp(
-                        getTargetContext(),
-                        test.getClass().getMethod(test.getName()));
-            } catch (NoSuchMethodException e) {
-                Log.e(TAG, "Unable to set up CommandLineFlags", e);
-            }
+            runPreTestHooks(test);
 
             if (test instanceof Parameterizable) {
                 try {
@@ -124,6 +156,19 @@ public class BaseTestResult extends TestResult {
         List<ParameterError> errors = new ArrayList<>();
         List<ParameterError> failures = new ArrayList<>();
         Map<String, BaseParameter> availableParameters = testCase.getAvailableParameters();
+
+        // Remove all @ParameterizedTests that contain CommandLineFlags.Parameter -- those
+        // are handled in test_runner.py as it is needed to re-launch the whole test activity
+        // to apply command-line args correctly. Note that this way we will also ignore any
+        // other parameters that may present in these @ParameterizedTests.
+        for (Iterator<ParameterizedTest> iter = parameterizedTests.iterator(); iter.hasNext();) {
+            ParameterizedTest paramTest = iter.next();
+            for (Parameter p: paramTest.parameters()) {
+                if (CommandLineFlags.Parameter.PARAMETER_TAG.equals(p.tag())) {
+                    iter.remove();
+                }
+            }
+        }
 
         if (parameterizedTests.isEmpty()) {
             super.run(test);

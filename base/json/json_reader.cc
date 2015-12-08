@@ -11,8 +11,8 @@
 namespace base {
 
 // Values 1000 and above are used by JSONFileValueSerializer::JsonFileError.
-COMPILE_ASSERT(JSONReader::JSON_PARSE_ERROR_COUNT < 1000,
-               json_reader_error_out_of_bounds);
+static_assert(JSONReader::JSON_PARSE_ERROR_COUNT < 1000,
+              "JSONReader error out of bounds");
 
 const char JSONReader::kInvalidEscape[] =
     "Invalid escape sequence.";
@@ -43,19 +43,9 @@ JSONReader::~JSONReader() {
 }
 
 // static
-Value* JSONReader::DeprecatedRead(const StringPiece& json) {
-  return Read(json).release();
-}
-
-// static
 scoped_ptr<Value> JSONReader::Read(const StringPiece& json) {
   internal::JSONParser parser(JSON_PARSE_RFC);
   return make_scoped_ptr(parser.Parse(json));
-}
-
-// static
-Value* JSONReader::DeprecatedRead(const StringPiece& json, int options) {
-  return Read(json, options).release();
 }
 
 // static
@@ -64,14 +54,6 @@ scoped_ptr<Value> JSONReader::Read(const StringPiece& json, int options) {
   return make_scoped_ptr(parser.Parse(json));
 }
 
-// static
-Value* JSONReader::DeprecatedReadAndReturnError(const StringPiece& json,
-                                                int options,
-                                                int* error_code_out,
-                                                std::string* error_msg_out) {
-  return ReadAndReturnError(json, options, error_code_out, error_msg_out)
-      .release();
-}
 
 // static
 scoped_ptr<Value> JSONReader::ReadAndReturnError(const StringPiece& json,

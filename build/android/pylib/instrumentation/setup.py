@@ -31,7 +31,8 @@ def _PushExtraSuiteDataDeps(device, test_apk):
   Args:
     test_apk: The test suite basename for which to return file paths.
   """
-  if test_apk in ['ChromeTest', 'ContentShellTest']:
+  if test_apk in ['ChromeTest', 'ContentShellTest',
+                  'CronetTestInstrumentation']:
     test_files = 'net/data/ssl/certificates'
     host_device_file_tuple = [
         (os.path.join(constants.DIR_SOURCE_ROOT, test_files),
@@ -90,17 +91,16 @@ def Setup(test_options, devices):
         _PushDataDeps, test_options)
 
   if test_options.isolate_file_path:
-    i = base_setup.GenerateDepsDirUsingIsolate(test_options.test_apk,
-                                           test_options.isolate_file_path,
-                                           ISOLATE_FILE_PATHS,
-                                           DEPS_EXCLUSION_LIST)
+    isolator = base_setup.GenerateDepsDirUsingIsolate(
+        test_options.test_apk, test_options.isolate_file_path,
+        ISOLATE_FILE_PATHS, DEPS_EXCLUSION_LIST)
     def push_data_deps_to_device_dir(device):
-      base_setup.PushDataDeps(device, device.GetExternalStoragePath(),
-                              test_options)
+      base_setup.PushDataDeps(device, isolator.isolate_deps_dir,
+                              device.GetExternalStoragePath(), test_options)
     device_utils.DeviceUtils.parallel(devices).pMap(
         push_data_deps_to_device_dir)
-    if i:
-      i.Clear()
+    if isolator:
+      isolator.Clear()
 
   device_utils.DeviceUtils.parallel(devices).pMap(
       _PushExtraSuiteDataDeps, test_options.test_apk)

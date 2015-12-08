@@ -4,6 +4,21 @@
 
 source_set("trace_event") {
   sources = [
+    "common/trace_event_common.h",
+    "heap_profiler_allocation_context.cc",
+    "heap_profiler_allocation_context.h",
+    "heap_profiler_allocation_context_tracker.cc",
+    "heap_profiler_allocation_context_tracker.h",
+    "heap_profiler_allocation_register.cc",
+    "heap_profiler_allocation_register.h",
+    "heap_profiler_allocation_register_posix.cc",
+    "heap_profiler_allocation_register_win.cc",
+    "heap_profiler_heap_dump_writer.cc",
+    "heap_profiler_heap_dump_writer.h",
+    "heap_profiler_stack_frame_deduplicator.cc",
+    "heap_profiler_stack_frame_deduplicator.h",
+    "heap_profiler_type_name_deduplicator.cc",
+    "heap_profiler_type_name_deduplicator.h",
     "java_heap_dump_provider_android.cc",
     "java_heap_dump_provider_android.h",
     "memory_allocator_dump.cc",
@@ -17,13 +32,10 @@ source_set("trace_event") {
     "memory_dump_request_args.h",
     "memory_dump_session_state.cc",
     "memory_dump_session_state.h",
-    "memory_profiler_allocation_context.cc",
-    "memory_profiler_allocation_context.h",
     "process_memory_dump.cc",
     "process_memory_dump.h",
     "process_memory_maps.cc",
     "process_memory_maps.h",
-    "process_memory_maps_dump_provider.cc",
     "process_memory_maps_dump_provider.h",
     "process_memory_totals.cc",
     "process_memory_totals.h",
@@ -37,21 +49,16 @@ source_set("trace_event") {
     "trace_event_android.cc",
     "trace_event_argument.cc",
     "trace_event_argument.h",
-    "trace_event_common.h",
     "trace_event_etw_export_win.cc",
     "trace_event_etw_export_win.h",
     "trace_event_impl.cc",
     "trace_event_impl.h",
-    "trace_event_memory.cc",
-    "trace_event_memory.h",
     "trace_event_memory_overhead.cc",
     "trace_event_memory_overhead.h",
     "trace_event_synthetic_delay.cc",
     "trace_event_synthetic_delay.h",
     "trace_event_system_stats_monitor.cc",
     "trace_event_system_stats_monitor.h",
-    "trace_event_win.cc",
-    "trace_event_win.h",
     "trace_log.cc",
     "trace_log.h",
     "trace_log_constants.cc",
@@ -60,20 +67,6 @@ source_set("trace_event") {
     "winheap_dump_provider_win.cc",
     "winheap_dump_provider_win.h",
   ]
-
-  if (is_nacl) {
-    sources -= [
-      "process_memory_totals_dump_provider.cc",
-      "trace_event_system_stats_monitor.cc",
-    ]
-  }
-
-  if (is_linux || is_android) {
-    sources += [
-      "malloc_dump_provider.cc",
-      "malloc_dump_provider.h",
-    ]
-  }
 
   configs += [ "//base:base_implementation" ]
 
@@ -85,6 +78,23 @@ source_set("trace_event") {
     "//base/third_party/dynamic_annotations",
   ]
 
+  if (is_nacl) {
+    sources -= [
+      "process_memory_totals_dump_provider.cc",
+      "trace_event_system_stats_monitor.cc",
+    ]
+  }
+
+  if (is_linux || is_android || is_mac) {
+    sources += [
+      "malloc_dump_provider.cc",
+      "malloc_dump_provider.h",
+    ]
+  }
+
+  if (is_linux || is_android) {
+    sources += [ "process_memory_maps_dump_provider.cc" ]
+  }
   if (is_win) {
     deps += [ "//base/trace_event/etw_manifest:chrome_events_win" ]
   }
@@ -101,23 +111,32 @@ source_set("trace_event") {
 source_set("trace_event_unittests") {
   testonly = true
   sources = [
+    "heap_profiler_allocation_context_tracker_unittest.cc",
+    "heap_profiler_allocation_register_unittest.cc",
+    "heap_profiler_heap_dump_writer_unittest.cc",
+    "heap_profiler_stack_frame_deduplicator_unittest.cc",
+    "heap_profiler_type_name_deduplicator_unittest.cc",
     "java_heap_dump_provider_android_unittest.cc",
     "memory_allocator_dump_unittest.cc",
     "memory_dump_manager_unittest.cc",
-    "memory_profiler_allocation_context_unittest.cc",
     "process_memory_dump_unittest.cc",
-    "process_memory_maps_dump_provider_unittest.cc",
     "process_memory_totals_dump_provider_unittest.cc",
     "trace_config_memory_test_util.h",
     "trace_config_unittest.cc",
     "trace_event_argument_unittest.cc",
-    "trace_event_memory_unittest.cc",
     "trace_event_synthetic_delay_unittest.cc",
     "trace_event_system_stats_monitor_unittest.cc",
     "trace_event_unittest.cc",
-    "trace_event_win_unittest.cc",
     "winheap_dump_provider_win_unittest.cc",
   ]
+
+  if (is_linux || is_android) {
+    sources += [ "process_memory_maps_dump_provider_unittest.cc" ]
+  }
+
+  if (is_android) {
+    sources += [ "trace_event_android_unittest.cc" ]
+  }
 
   deps = [
     "//base/test:test_support",

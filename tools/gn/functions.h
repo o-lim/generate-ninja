@@ -195,6 +195,15 @@ Value RunImport(Scope* scope,
                 const std::vector<Value>& args,
                 Err* err);
 
+extern const char kLoadableModule[];
+extern const char kLoadableModule_HelpShort[];
+extern const char kLoadableModule_Help[];
+Value RunLoadableModule(Scope* scope,
+                        const FunctionCallNode* function,
+                        const std::vector<Value>& args,
+                        BlockNode* block,
+                        Err* err);
+
 extern const char kPrint[];
 extern const char kPrint_HelpShort[];
 extern const char kPrint_Help[];
@@ -435,14 +444,6 @@ Label MakeLabelForScope(const Scope* scope,
 // there is already another non-nestable block on the stack.
 class NonNestableBlock {
  public:
-  enum Type {
-    CONFIG,
-    DECLARE_ARGS,
-    TARGET,
-    TEMPLATE,
-    TOOLCHAIN,
-  };
-
   // type_description is a string that will be used in error messages
   // describing the type of the block, for example, "template" or "config".
   NonNestableBlock(Scope* scope,

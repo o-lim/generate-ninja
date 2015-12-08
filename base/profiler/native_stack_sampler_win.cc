@@ -4,11 +4,17 @@
 
 #include <objbase.h>
 #include <windows.h>
+#include <winternl.h>
 
+#include <cstdlib>
 #include <map>
 #include <utility>
+#include <vector>
 
+#include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/macros.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/profiler/native_stack_sampler.h"
 #include "base/profiler/win32_stack_frame_unwinder.h"
 #include "base/strings/string_util.h"
@@ -24,52 +30,139 @@ namespace base {
 
 namespace {
 
-// Walks the stack represented by |context| from the current frame downwards,
-// recording the instruction pointers for each frame in |instruction_pointers|.
-int RecordStack(CONTEXT* context,
-                int max_stack_size,
-                const void* instruction_pointers[],
-                Win32StackFrameUnwinder* frame_unwinder) {
-#ifdef _WIN64
-  int i = 0;
-  for (; (i < max_stack_size) && context->Rip; ++i) {
-    instruction_pointers[i] = reinterpret_cast<const void*>(context->Rip);
-    if (!frame_unwinder->TryUnwind(context))
-      return i + 1;
+// The thread environment block internal type.
+struct TEB {
+  NT_TIB Tib;
+  // Rest of struct is ignored.
+};
+
+// Returns the thread environment block pointer for |thread_handle|.
+const TEB* GetThreadEnvironmentBlock(HANDLE thread_handle) {
+  // Define the internal types we need to invoke NtQueryInformationThread.
+  enum THREAD_INFORMATION_CLASS { ThreadBasicInformation };
+
+  struct CLIENT_ID {
+    HANDLE UniqueProcess;
+    HANDLE UniqueThread;
+  };
+
+  struct THREAD_BASIC_INFORMATION {
+    NTSTATUS ExitStatus;
+    TEB* Teb;
+    CLIENT_ID ClientId;
+    KAFFINITY AffinityMask;
+    LONG Priority;
+    LONG BasePriority;
+  };
+
+  using NtQueryInformationThreadFunction =
+      NTSTATUS (WINAPI*)(HANDLE, THREAD_INFORMATION_CLASS, PVOID, ULONG,
+                         PULONG);
+
+  const NtQueryInformationThreadFunction nt_query_information_thread =
+      reinterpret_cast<NtQueryInformationThreadFunction>(
+          ::GetProcAddress(::GetModuleHandle(L"ntdll.dll"),
+                           "NtQueryInformationThread"));
+  if (!nt_query_information_thread)
+    return nullptr;
+
+  THREAD_BASIC_INFORMATION basic_info = {0};
+  NTSTATUS status =
+      nt_query_information_thread(thread_handle, ThreadBasicInformation,
+                                  &basic_info, sizeof(THREAD_BASIC_INFORMATION),
+                                  nullptr);
+  if (status != 0)
+    return nullptr;
+
+  return basic_info.Teb;
+}
+
+#if defined(_WIN64)
+// If the value at |pointer| points to the original stack, rewrite it to point
+// to the corresponding location in the copied stack.
+void RewritePointerIfInOriginalStack(uintptr_t top, uintptr_t bottom,
+                                     void* stack_copy, const void** pointer) {
+  const uintptr_t value = reinterpret_cast<uintptr_t>(*pointer);
+  if (value >= bottom && value < top) {
+    *pointer = reinterpret_cast<const void*>(
+        static_cast<unsigned char*>(stack_copy) + (value - bottom));
   }
-  return i;
-#else
-  return 0;
+}
+#endif
+
+// Rewrites possible pointers to locations within the stack to point to the
+// corresponding locations in the copy, and rewrites the non-volatile registers
+// in |context| likewise. This is necessary to handle stack frames with dynamic
+// stack allocation, where a pointer to the beginning of the dynamic allocation
+// area is stored on the stack and/or in a non-volatile register.
+//
+// Eager rewriting of anything that looks like a pointer to the stack, as done
+// in this function, does not adversely affect the stack unwinding. The only
+// other values on the stack the unwinding depends on are return addresses,
+// which should not point within the stack memory. The rewriting is guaranteed
+// to catch all pointers because the stacks are guaranteed by the ABI to be
+// sizeof(void*) aligned.
+//
+// Note: this function must not access memory in the original stack as it may
+// have been changed or deallocated by this point. This is why |top| and
+// |bottom| are passed as uintptr_t.
+void RewritePointersToStackMemory(uintptr_t top, uintptr_t bottom,
+                                  CONTEXT* context, void* stack_copy) {
+#if defined(_WIN64)
+  DWORD64 CONTEXT::* const nonvolatile_registers[] = {
+    &CONTEXT::R12,
+    &CONTEXT::R13,
+    &CONTEXT::R14,
+    &CONTEXT::R15,
+    &CONTEXT::Rdi,
+    &CONTEXT::Rsi,
+    &CONTEXT::Rbx,
+    &CONTEXT::Rbp,
+    &CONTEXT::Rsp
+  };
+
+  // Rewrite pointers in the context.
+  for (size_t i = 0; i < arraysize(nonvolatile_registers); ++i) {
+    DWORD64* const reg = &(context->*nonvolatile_registers[i]);
+    RewritePointerIfInOriginalStack(top, bottom, stack_copy,
+                                    reinterpret_cast<const void**>(reg));
+  }
+
+  // Rewrite pointers on the stack.
+  const void** start = reinterpret_cast<const void**>(stack_copy);
+  const void** end = reinterpret_cast<const void**>(
+      reinterpret_cast<char*>(stack_copy) + (top - bottom));
+  for (const void** loc = start; loc < end; ++loc)
+    RewritePointerIfInOriginalStack(top, bottom, stack_copy, loc);
 #endif
 }
 
-// Fills in |module_handles| corresponding to the pointers to code in
-// |addresses|. The module handles are returned with reference counts
-// incremented and should be freed with FreeModuleHandles. See note in
-// SuspendThreadAndRecordStack for why |addresses| and |module_handles| are
-// arrays.
-void FindModuleHandlesForAddresses(const void* const addresses[],
-                                   HMODULE module_handles[], int stack_depth) {
-  for (int i = 0; i < stack_depth; ++i) {
-    HMODULE module_handle = NULL;
-    if (GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                          reinterpret_cast<LPCTSTR>(addresses[i]),
-                          &module_handle)) {
-      // HMODULE actually represents the base address of the module, so we can
-      // use it directly as an address.
-      DCHECK_LE(reinterpret_cast<const void*>(module_handle), addresses[i]);
-      module_handles[i] = module_handle;
-    }
-  }
-}
+// Walks the stack represented by |context| from the current frame downwards,
+// recording the instruction pointers for each frame in |instruction_pointers|
+// and associated modules in |modules|.
+void RecordStack(CONTEXT* context,
+                 std::vector<const void*>* instruction_pointers,
+                 std::vector<ScopedModuleHandle>* modules) {
+#ifdef _WIN64
+  DCHECK(instruction_pointers->empty());
+  DCHECK(modules->empty());
 
-// Frees the modules handles returned by FindModuleHandlesForAddresses. See note
-// in SuspendThreadAndRecordStack for why |module_handles| is an array.
-void FreeModuleHandles(int stack_depth, HMODULE module_handles[]) {
-  for (int i = 0; i < stack_depth; ++i) {
-    if (module_handles[i])
-      ::FreeLibrary(module_handles[i]);
+  // Reserve enough memory for most stacks, to avoid repeated
+  // allocations. Approximately 99.5% of recorded stacks are 64 frames or fewer.
+  instruction_pointers->reserve(64);
+  modules->reserve(64);
+
+  Win32StackFrameUnwinder frame_unwinder;
+  while (context->Rip) {
+    const void* instruction_pointer =
+        reinterpret_cast<const void*>(context->Rip);
+    ScopedModuleHandle module;
+    if (!frame_unwinder.TryUnwind(context, &module))
+      return;
+    instruction_pointers->push_back(instruction_pointer);
+    modules->push_back(std::move(module));
   }
+#endif
 }
 
 // Gets the unique build ID for a module. Windows build IDs are created by a
@@ -133,29 +226,31 @@ ScopedDisablePriorityBoost::~ScopedDisablePriorityBoost() {
     ::SetThreadPriorityBoost(thread_handle_, boost_state_was_disabled_);
 }
 
-// Suspends the thread with |thread_handle|, records the stack into
-// |instruction_pointers|, then resumes the thread. Returns the size of the
-// stack.
-//
-// IMPORTANT NOTE: No heap allocations may occur between SuspendThread and
-// ResumeThread. Otherwise this code can deadlock on heap locks acquired by the
-// target thread before it was suspended. This is why we pass instruction
-// pointers and module handles as preallocated arrays rather than vectors, since
-// vectors make it too easy to subtly allocate memory.
-int SuspendThreadAndRecordStack(HANDLE thread_handle, int max_stack_size,
-                                const void* instruction_pointers[]) {
-  Win32StackFrameUnwinder frame_unwinder;
+// ScopedSuspendThread --------------------------------------------------------
 
-  if (::SuspendThread(thread_handle) == -1)
-    return 0;
+// Suspends a thread for the lifetime of the object.
+class ScopedSuspendThread {
+ public:
+  ScopedSuspendThread(HANDLE thread_handle);
+  ~ScopedSuspendThread();
 
-  int stack_depth = 0;
-  CONTEXT thread_context = {0};
-  thread_context.ContextFlags = CONTEXT_FULL;
-  if (::GetThreadContext(thread_handle, &thread_context)) {
-    stack_depth = RecordStack(&thread_context, max_stack_size,
-                              instruction_pointers, &frame_unwinder);
-  }
+  bool was_successful() const { return was_successful_; }
+
+ private:
+  HANDLE thread_handle_;
+  bool was_successful_;
+
+  DISALLOW_COPY_AND_ASSIGN(ScopedSuspendThread);
+};
+
+ScopedSuspendThread::ScopedSuspendThread(HANDLE thread_handle)
+    : thread_handle_(thread_handle),
+      was_successful_(::SuspendThread(thread_handle) != -1) {
+}
+
+ScopedSuspendThread::~ScopedSuspendThread() {
+  if (!was_successful_)
+    return;
 
   // Disable the priority boost that the thread would otherwise receive on
   // resume. We do this to avoid artificially altering the dynamics of the
@@ -167,18 +262,73 @@ int SuspendThreadAndRecordStack(HANDLE thread_handle, int max_stack_size,
   // conditions at the time of SuspendThread and those conditions are satisfied
   // before priority boost is reenabled. The measured length of this window is
   // ~100us, so this should occur fairly rarely.
-  ScopedDisablePriorityBoost disable_priority_boost(thread_handle);
-  bool resume_thread_succeeded = ::ResumeThread(thread_handle) != -1;
+  ScopedDisablePriorityBoost disable_priority_boost(thread_handle_);
+  bool resume_thread_succeeded = ::ResumeThread(thread_handle_) != -1;
   CHECK(resume_thread_succeeded) << "ResumeThread failed: " << GetLastError();
+}
 
-  return stack_depth;
+// Suspends the thread with |thread_handle|, copies its stack and resumes the
+// thread, then records the stack into |instruction_pointers| and associated
+// modules into |modules|.
+//
+// IMPORTANT NOTE: No allocations from the default heap may occur in the
+// ScopedSuspendThread scope, including indirectly via use of DCHECK/CHECK or
+// other logging statements. Otherwise this code can deadlock on heap locks in
+// the default heap acquired by the target thread before it was suspended.
+void SuspendThreadAndRecordStack(
+    HANDLE thread_handle,
+    const void* base_address,
+    void* stack_copy_buffer,
+    size_t stack_copy_buffer_size,
+    std::vector<const void*>* instruction_pointers,
+    std::vector<ScopedModuleHandle>* modules,
+    NativeStackSamplerTestDelegate* test_delegate) {
+  DCHECK(instruction_pointers->empty());
+  DCHECK(modules->empty());
+
+  CONTEXT thread_context = {0};
+  thread_context.ContextFlags = CONTEXT_FULL;
+  // The stack bounds are saved to uintptr_ts for use outside
+  // ScopedSuspendThread, as the thread's memory is not safe to dereference
+  // beyond that point.
+  const uintptr_t top = reinterpret_cast<uintptr_t>(base_address);
+  uintptr_t bottom = 0u;
+
+  {
+    ScopedSuspendThread suspend_thread(thread_handle);
+
+    if (!suspend_thread.was_successful())
+      return;
+
+    if (!::GetThreadContext(thread_handle, &thread_context))
+      return;
+#if defined(_WIN64)
+    bottom = thread_context.Rsp;
+#else
+    bottom = thread_context.Esp;
+#endif
+
+    if ((top - bottom) > stack_copy_buffer_size)
+      return;
+
+    std::memcpy(stack_copy_buffer, reinterpret_cast<const void*>(bottom),
+                top - bottom);
+  }
+
+  if (test_delegate)
+    test_delegate->OnPreStackWalk();
+
+  RewritePointersToStackMemory(top, bottom, &thread_context, stack_copy_buffer);
+
+  RecordStack(&thread_context, instruction_pointers, modules);
 }
 
 // NativeStackSamplerWin ------------------------------------------------------
 
 class NativeStackSamplerWin : public NativeStackSampler {
  public:
-  explicit NativeStackSamplerWin(win::ScopedHandle thread_handle);
+  NativeStackSamplerWin(win::ScopedHandle thread_handle,
+                        NativeStackSamplerTestDelegate* test_delegate);
   ~NativeStackSamplerWin() override;
 
   // StackSamplingProfiler::NativeStackSampler:
@@ -188,6 +338,15 @@ class NativeStackSamplerWin : public NativeStackSampler {
   void ProfileRecordingStopped() override;
 
  private:
+  enum {
+    // Intended to hold the largest stack used by Chrome. The default Win32
+    // reserved stack size is 1 MB and Chrome Windows threads currently always
+    // use the default, but this allows for expansion if it occurs. The size
+    // beyond the actual stack size consists of unallocated virtual memory pages
+    // so carries little cost (just a bit of wated address space).
+    kStackCopyBufferSize = 2 * 1024 * 1024
+  };
+
   // Attempts to query the module filename, base address, and id for
   // |module_handle|, and store them in |module|. Returns true if it succeeded.
   static bool GetModuleForHandle(HMODULE module_handle,
@@ -202,16 +361,26 @@ class NativeStackSamplerWin : public NativeStackSampler {
 
   // Copies the stack information represented by |instruction_pointers| into
   // |sample| and |modules|.
-  void CopyToSample(const void* const instruction_pointers[],
-                    const HMODULE module_handles[],
-                    int stack_depth,
+  void CopyToSample(const std::vector<const void*>& instruction_pointers,
+                    const std::vector<ScopedModuleHandle>& module_handles,
                     StackSamplingProfiler::Sample* sample,
                     std::vector<StackSamplingProfiler::Module>* modules);
 
   win::ScopedHandle thread_handle_;
+
+  NativeStackSamplerTestDelegate* const test_delegate_;
+
+  // The stack base address corresponding to |thread_handle_|.
+  const void* const thread_stack_base_address_;
+
+  // Buffer to use for copies of the stack. We use the same buffer for all the
+  // samples to avoid the overhead of multiple allocations and frees.
+  const scoped_ptr<unsigned char[]> stack_copy_buffer_;
+
   // Weak. Points to the modules associated with the profile being recorded
   // between ProfileRecordingStarting() and ProfileRecordingStopped().
   std::vector<StackSamplingProfiler::Module>* current_modules_;
+
   // Maps a module handle to the corresponding Module's index within
   // current_modules_.
   std::map<HMODULE, size_t> profile_module_index_;
@@ -219,8 +388,13 @@ class NativeStackSamplerWin : public NativeStackSampler {
   DISALLOW_COPY_AND_ASSIGN(NativeStackSamplerWin);
 };
 
-NativeStackSamplerWin::NativeStackSamplerWin(win::ScopedHandle thread_handle)
-    : thread_handle_(thread_handle.Take()) {
+NativeStackSamplerWin::NativeStackSamplerWin(
+    win::ScopedHandle thread_handle,
+    NativeStackSamplerTestDelegate* test_delegate)
+    : thread_handle_(thread_handle.Take()), test_delegate_(test_delegate),
+      thread_stack_base_address_(
+          GetThreadEnvironmentBlock(thread_handle_.Get())->Tib.StackBase),
+      stack_copy_buffer_(new unsigned char[kStackCopyBufferSize]) {
 }
 
 NativeStackSamplerWin::~NativeStackSamplerWin() {
@@ -236,18 +410,15 @@ void NativeStackSamplerWin::RecordStackSample(
     StackSamplingProfiler::Sample* sample) {
   DCHECK(current_modules_);
 
-  const int max_stack_size = 64;
-  const void* instruction_pointers[max_stack_size] = {0};
-  HMODULE module_handles[max_stack_size] = {0};
+  if (!stack_copy_buffer_)
+    return;
 
-  int stack_depth = SuspendThreadAndRecordStack(thread_handle_.Get(),
-                                                max_stack_size,
-                                                instruction_pointers);
-  FindModuleHandlesForAddresses(instruction_pointers, module_handles,
-                                stack_depth);
-  CopyToSample(instruction_pointers, module_handles, stack_depth, sample,
-               current_modules_);
-  FreeModuleHandles(stack_depth, module_handles);
+  std::vector<const void*> instruction_pointers;
+  std::vector<ScopedModuleHandle> modules;
+  SuspendThreadAndRecordStack(thread_handle_.Get(), thread_stack_base_address_,
+                              stack_copy_buffer_.get(), kStackCopyBufferSize,
+                              &instruction_pointers, &modules, test_delegate_);
+  CopyToSample(instruction_pointers, modules, sample, current_modules_);
 }
 
 void NativeStackSamplerWin::ProfileRecordingStopped() {
@@ -295,25 +466,26 @@ size_t NativeStackSamplerWin::GetModuleIndex(
 }
 
 void NativeStackSamplerWin::CopyToSample(
-    const void* const instruction_pointers[],
-    const HMODULE module_handles[],
-    int stack_depth,
+    const std::vector<const void*>& instruction_pointers,
+    const std::vector<ScopedModuleHandle>& module_handles,
     StackSamplingProfiler::Sample* sample,
-    std::vector<StackSamplingProfiler::Module>* module) {
+    std::vector<StackSamplingProfiler::Module>* modules) {
+  DCHECK_EQ(instruction_pointers.size(), module_handles.size());
   sample->clear();
-  sample->reserve(stack_depth);
+  sample->reserve(instruction_pointers.size());
 
-  for (int i = 0; i < stack_depth; ++i) {
+  for (size_t i = 0; i < instruction_pointers.size(); ++i) {
     sample->push_back(StackSamplingProfiler::Frame(
         reinterpret_cast<uintptr_t>(instruction_pointers[i]),
-        GetModuleIndex(module_handles[i], module)));
+        GetModuleIndex(module_handles[i].Get(), modules)));
   }
 }
 
 }  // namespace
 
 scoped_ptr<NativeStackSampler> NativeStackSampler::Create(
-    PlatformThreadId thread_id) {
+    PlatformThreadId thread_id,
+    NativeStackSamplerTestDelegate* test_delegate) {
 #if _WIN64
   // Get the thread's handle.
   HANDLE thread_handle = ::OpenThread(
@@ -323,7 +495,8 @@ scoped_ptr<NativeStackSampler> NativeStackSampler::Create(
 
   if (thread_handle) {
     return scoped_ptr<NativeStackSampler>(new NativeStackSamplerWin(
-        win::ScopedHandle(thread_handle)));
+        win::ScopedHandle(thread_handle),
+        test_delegate));
   }
 #endif
   return scoped_ptr<NativeStackSampler>();

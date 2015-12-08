@@ -49,7 +49,7 @@ hw.trackBall=no
 hw.device.name=Galaxy Nexus
 hw.battery=yes
 hw.sensors.proximity=yes
-image.sysdir.1=system-images/android-{api.level}/{abi.type}/
+image.sysdir.1=system-images/android-{api.level}/default/{abi.type}/
 hw.sensors.orientation=yes
 hw.audioInput=yes
 hw.camera.front=none
@@ -79,7 +79,7 @@ class EmulatorLaunchException(Exception):
   """Emulator failed to launch."""
   pass
 
-def _KillAllEmulators():
+def KillAllEmulators():
   """Kill all running emulators that look like ones we started.
 
   There are odd 'sticky' cases where there can be no emulator process
@@ -234,7 +234,7 @@ class Emulator(object):
       avd_name: name of the AVD to create
       abi: target platform for emulator being created, defaults to x86
     """
-    android_sdk_root = os.path.join(constants.EMULATOR_SDK_ROOT, 'sdk')
+    android_sdk_root = constants.ANDROID_SDK_ROOT
     self.emulator = os.path.join(android_sdk_root, 'tools', 'emulator')
     self.android = os.path.join(android_sdk_root, 'tools', 'android')
     self.popen = None
@@ -334,7 +334,7 @@ class Emulator(object):
     If fails, an exception will be raised.
     """
     if kill_all_emulators:
-      _KillAllEmulators()  # just to be sure
+      KillAllEmulators()  # just to be sure
     self._AggressiveImageCleanup()
     (self.device_serial, port) = self._DeviceName()
     emulator_command = [

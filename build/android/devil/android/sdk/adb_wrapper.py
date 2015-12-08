@@ -14,11 +14,15 @@ import logging
 import os
 import re
 
+from devil import devil_env
 from devil.android import decorators
 from devil.android import device_errors
 from devil.utils import cmd_helper
+from devil.utils import lazy
 from devil.utils import timeout_retry
-from pylib import constants
+
+with devil_env.SysPath(devil_env.CATAPULT_BASE_PATH):
+  from catapult_base import dependency_manager # pylint: disable=import-error
 
 
 _DEFAULT_TIMEOUT = 30
@@ -29,7 +33,7 @@ _EMULATOR_RE = re.compile(r'^emulator-[0-9]+$')
 _READY_STATE = 'device'
 
 
-def _VerifyLocalFileExists(path):
+def VerifyLocalFileExists(path):
   """Verifies a local file exists.
 
   Args:
@@ -42,12 +46,32 @@ def _VerifyLocalFileExists(path):
     raise IOError(errno.ENOENT, os.strerror(errno.ENOENT), path)
 
 
+def _FindAdb():
+  try:
+    return devil_env.config.LocalPath('adb')
+  except dependency_manager.NoPathFoundError:
+    pass
+
+  try:
+    return os.path.join(devil_env.config.LocalPath('android_sdk'),
+                        'platform-tools', 'adb')
+  except dependency_manager.NoPathFoundError:
+    pass
+
+  try:
+    return devil_env.config.FetchPath('adb')
+  except dependency_manager.NoPathFoundError:
+    raise device_errors.NoAdbError()
+
+
 DeviceStat = collections.namedtuple('DeviceStat',
                                     ['st_mode', 'st_size', 'st_time'])
 
 
 class AdbWrapper(object):
   """A wrapper around a local Android Debug Bridge executable."""
+
+  _adb_path = lazy.WeakConstant(_FindAdb)
 
   def __init__(self, device_serial):
     """Initializes the AdbWrapper.
@@ -59,19 +83,21 @@ class AdbWrapper(object):
       raise ValueError('A device serial must be specified')
     self._device_serial = str(device_serial)
 
-  # pylint: disable=unused-argument
+  @classmethod
+  def GetAdbPath(cls):
+    return cls._adb_path.read()
+
   @classmethod
   def _BuildAdbCmd(cls, args, device_serial, cpu_affinity=None):
     if cpu_affinity is not None:
       cmd = ['taskset', '-c', str(cpu_affinity)]
     else:
       cmd = []
-    cmd.append(constants.GetAdbPath())
+    cmd.append(cls.GetAdbPath())
     if device_serial is not None:
       cmd.extend(['-s', device_serial])
     cmd.extend(args)
     return cmd
-  # pylint: enable=unused-argument
 
   # pylint: disable=unused-argument
   @classmethod
@@ -81,7 +107,7 @@ class AdbWrapper(object):
     # pylint: disable=no-member
     status, output = cmd_helper.GetCmdStatusAndOutputWithTimeout(
         cls._BuildAdbCmd(args, device_serial, cpu_affinity=cpu_affinity),
-        timeout_retry.CurrentTimeoutThread().GetRemainingTime())
+        timeout_retry.CurrentTimeoutThreadGroup().GetRemainingTime())
     if status != 0:
       raise device_errors.AdbCommandFailedError(
           args, output, status, device_serial)
@@ -226,7 +252,7 @@ class AdbWrapper(object):
       timeout: (optional) Timeout per try in seconds.
       retries: (optional) Number of retries to attempt.
     """
-    _VerifyLocalFileExists(local)
+    VerifyLocalFileExists(local)
     self._RunDeviceAdbCmd(['push', local, remote], timeout, retries)
 
   def Pull(self, remote, local, timeout=60*5, retries=_DEFAULT_RETRIES):
@@ -241,7 +267,7 @@ class AdbWrapper(object):
     cmd = ['pull', remote, local]
     self._RunDeviceAdbCmd(cmd, timeout, retries)
     try:
-      _VerifyLocalFileExists(local)
+      VerifyLocalFileExists(local)
     except IOError:
       raise device_errors.AdbCommandFailedError(
           cmd, 'File not found on host: %s' % local, device_serial=str(self))
@@ -267,7 +293,7 @@ class AdbWrapper(object):
     if expect_status is None:
       args = ['shell', command]
     else:
-      args = ['shell', '(%s);echo %%$?' % command.rstrip()]
+      args = ['shell', '( %s );echo %%$?' % command.rstrip()]
     output = self._RunDeviceAdbCmd(args, timeout, retries, check_error=False)
     if expect_status is not None:
       output_end = output.rfind('%')
@@ -450,7 +476,7 @@ class AdbWrapper(object):
       timeout: (optional) Timeout per try in seconds.
       retries: (optional) Number of retries to attempt.
     """
-    _VerifyLocalFileExists(apk_path)
+    VerifyLocalFileExists(apk_path)
     cmd = ['install']
     if forward_lock:
       cmd.append('-l')
@@ -480,7 +506,7 @@ class AdbWrapper(object):
       partial: (optional) Package ID if apk_paths doesn't include all .apks.
     """
     for path in apk_paths:
-      _VerifyLocalFileExists(path)
+      VerifyLocalFileExists(path)
     cmd = ['install-multiple']
     if forward_lock:
       cmd.append('-l')
@@ -547,7 +573,7 @@ class AdbWrapper(object):
     assert bool(packages) ^ bool(include_all), (
         'Provide \'packages\' or set \'include_all\' but not both.')
     ret = self._RunDeviceAdbCmd(cmd, timeout, retries)
-    _VerifyLocalFileExists(path)
+    VerifyLocalFileExists(path)
     return ret
 
   def Restore(self, path, timeout=_DEFAULT_TIMEOUT, retries=_DEFAULT_RETRIES):
@@ -558,7 +584,7 @@ class AdbWrapper(object):
       timeout: (optional) Timeout per try in seconds.
       retries: (optional) Number of retries to attempt.
     """
-    _VerifyLocalFileExists(path)
+    VerifyLocalFileExists(path)
     self._RunDeviceAdbCmd(['restore'] + [path], timeout, retries)
 
   def WaitForDevice(self, timeout=60*5, retries=_DEFAULT_RETRIES):

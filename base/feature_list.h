@@ -7,14 +7,18 @@
 
 #include <map>
 #include <string>
+#include <vector>
 
 #include "base/base_export.h"
 #include "base/basictypes.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/strings/string_piece.h"
 #include "base/synchronization/lock.h"
 
 namespace base {
+
+class FieldTrial;
 
 // Specifies whether a given feature is enabled or disabled by default.
 enum FeatureState {
@@ -42,7 +46,7 @@ struct BASE_EXPORT Feature {
 // The basic use case is for any feature that can be toggled (e.g. through
 // command-line or an experiment) to have a defined Feature struct, e.g.:
 //
-//   struct base::Feature kMyGreatFeature {
+//   const base::Feature kMyGreatFeature {
 //     "MyGreatFeature", base::FEATURE_ENABLED_BY_DEFAULT
 //   };
 //
@@ -78,16 +82,67 @@ class BASE_EXPORT FeatureList {
   // Initializes feature overrides via command-line flags |enable_features| and
   // |disable_features|, each of which is a comma-separated list of features to
   // enable or disable, respectively. If a feature appears on both lists, then
-  // it will be disabled. Must only be invoked during the initialization phase
-  // (before FinalizeInitialization() has been called).
+  // it will be disabled. If a list entry has the format "FeatureName<TrialName"
+  // then this initialization will also associate the feature state override
+  // with the named field trial, if it exists. Must only be invoked during the
+  // initialization phase (before FinalizeInitialization() has been called).
   void InitializeFromCommandLine(const std::string& enable_features,
                                  const std::string& disable_features);
+
+  // Specifies whether a feature override enables or disables the feature.
+  enum OverrideState {
+    OVERRIDE_DISABLE_FEATURE,
+    OVERRIDE_ENABLE_FEATURE,
+  };
+
+  // Returns true if the state of |feature_name| has been overridden via
+  // |InitializeFromCommandLine()|.
+  bool IsFeatureOverriddenFromCommandLine(const std::string& feature_name,
+                                          OverrideState state) const;
+
+  // Associates a field trial for reporting purposes corresponding to the
+  // command-line setting the feature state to |for_overridden_state|. The trial
+  // will be activated when the state of the feature is first queried. This
+  // should be called during registration, after InitializeFromCommandLine() has
+  // been called but before the instance is registered via SetInstance().
+  void AssociateReportingFieldTrial(const std::string& feature_name,
+                                    OverrideState for_overridden_state,
+                                    FieldTrial* field_trial);
+
+  // Registers a field trial to override the enabled state of the specified
+  // feature to |override_state|. Command-line overrides still take precedence
+  // over field trials, so this will have no effect if the feature is being
+  // overridden from the command-line. The associated field trial will be
+  // activated when the feature state for this feature is queried. This should
+  // be called during registration, after InitializeFromCommandLine() has been
+  // called but before the instance is registered via SetInstance().
+  void RegisterFieldTrialOverride(const std::string& feature_name,
+                                  OverrideState override_state,
+                                  FieldTrial* field_trial);
+
+  // Returns comma-separated lists of feature names (in the same format that is
+  // accepted by InitializeFromCommandLine()) corresponding to features that
+  // have been overridden - either through command-line or via FieldTrials. For
+  // those features that have an associated FieldTrial, the output entry will be
+  // of the format "FeatureName<TrialName", where "TrialName" is the name of the
+  // FieldTrial. Must be called only after the instance has been initialized and
+  // registered.
+  void GetFeatureOverrides(std::string* enable_overrides,
+                           std::string* disable_overrides);
 
   // Returns whether the given |feature| is enabled. Must only be called after
   // the singleton instance has been registered via SetInstance(). Additionally,
   // a feature with a given name must only have a single corresponding Feature
   // struct, which is checked in builds with DCHECKs enabled.
   static bool IsEnabled(const Feature& feature);
+
+  // Splits a comma-separated string containing feature names into a vector.
+  static std::vector<std::string> SplitFeatureListString(
+      const std::string& input);
+
+  // Initializes and sets a default instance of FeatureList if one has not yet
+  // already been set. No-op otherwise.
+  static void InitializeInstance();
 
   // Returns the singleton instance of FeatureList. Will return null until an
   // instance is registered via SetInstance().
@@ -103,10 +158,27 @@ class BASE_EXPORT FeatureList {
  private:
   FRIEND_TEST_ALL_PREFIXES(FeatureListTest, CheckFeatureIdentity);
 
-  // Specifies whether a feature override enables or disables the feature.
-  enum OverrideState {
-    OVERRIDE_DISABLE_FEATURE,
-    OVERRIDE_ENABLE_FEATURE,
+  struct OverrideEntry {
+    // The overridden enable (on/off) state of the feature.
+    const OverrideState overridden_state;
+
+    // An optional associated field trial, which will be activated when the
+    // state of the feature is queried for the first time. Weak pointer to the
+    // FieldTrial object that is owned by the FieldTrialList singleton.
+    base::FieldTrial* field_trial;
+
+    // Specifies whether the feature's state is overridden by |field_trial|.
+    // If it's not, and |field_trial| is not null, it means it is simply an
+    // associated field trial for reporting purposes (and |overridden_state|
+    // came from the command-line).
+    const bool overridden_by_field_trial;
+
+    // TODO(asvitkine): Expand this as more support is added.
+
+    // Constructs an OverrideEntry for the given |overridden_state|. If
+    // |field_trial| is not null, it implies that |overridden_state| comes from
+    // the trial, so |overridden_by_field_trial| will be set to true.
+    OverrideEntry(OverrideState overridden_state, FieldTrial* field_trial);
   };
 
   // Finalizes the initialization state of the FeatureList, so that no further
@@ -119,11 +191,23 @@ class BASE_EXPORT FeatureList {
   // Requires the FeatureList to have already been fully initialized.
   bool IsFeatureEnabled(const Feature& feature);
 
+  // For each feature name in comma-separated list of strings |feature_list|,
+  // registers an override with the specified |overridden_state|. Also, will
+  // associate an optional named field trial if the entry is of the format
+  // "FeatureName<TrialName".
+  void RegisterOverridesFromCommandLine(const std::string& feature_list,
+                                        OverrideState overridden_state);
+
   // Registers an override for feature |feature_name|. The override specifies
   // whether the feature should be on or off (via |overridden_state|), which
-  // will take precedence over the feature's default state.
-  void RegisterOverride(const std::string& feature_name,
-                        OverrideState overridden_state);
+  // will take precedence over the feature's default state. If |field_trial| is
+  // not null, registers the specified field trial object to be associated with
+  // the feature, which will activate the field trial when the feature state is
+  // queried. If an override is already registered for the given feature, it
+  // will not be changed.
+  void RegisterOverride(StringPiece feature_name,
+                        OverrideState overridden_state,
+                        FieldTrial* field_trial);
 
   // Verifies that there's only a single definition of a Feature struct for a
   // given feature name. Keeps track of the first seen Feature struct for each
@@ -132,14 +216,6 @@ class BASE_EXPORT FeatureList {
   // DCHECKs and tests.
   bool CheckFeatureIdentity(const Feature& feature);
 
-  struct OverrideEntry {
-    // The overridden enable (on/off) state of the feature.
-    const OverrideState overridden_state;
-
-    // TODO(asvitkine): Expand this as more support is added.
-
-    explicit OverrideEntry(OverrideState overridden_state);
-  };
   // Map from feature name to an OverrideEntry struct for the feature, if it
   // exists.
   std::map<std::string, OverrideEntry> overrides_;

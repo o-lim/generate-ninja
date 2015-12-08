@@ -5,6 +5,9 @@
 # This file contains common system config stuff for the Android build.
 
 if (is_android) {
+  assert(rebase_path("//", root_build_dir) == "../../",
+         "Android output directory must be nested 2 levels within src/ (" +
+             "e.g.: out-gn/Debug). http://crbug.com/412935")
   has_chrome_android_internal =
       exec_script("//build/dir_exists.py",
                   [ rebase_path("//clank", root_build_dir) ],
@@ -17,7 +20,7 @@ if (is_android) {
   if (!defined(default_android_sdk_root)) {
     default_android_sdk_root = "//third_party/android_tools/sdk"
     default_android_sdk_version = "23"
-    default_android_sdk_build_tools_version = "23.0.0"
+    default_android_sdk_build_tools_version = "23.0.1"
   }
 
   if (!defined(default_android_keystore_path)) {
@@ -41,6 +44,12 @@ if (is_android) {
     android_sdk_root = default_android_sdk_root
     android_sdk_version = default_android_sdk_version
     android_sdk_build_tools_version = default_android_sdk_build_tools_version
+
+    # Android versionCode for android_apk()s that don't expclitly set one.
+    android_default_version_code = "1"
+
+    # Android versionName for android_apk()s that don't expclitly set one.
+    android_default_version_name = "Developer Build"
 
     # The path to the keystore to use for signing builds.
     android_keystore_path = default_android_keystore_path
@@ -66,15 +75,34 @@ if (is_android) {
     # Set to true to enable the Errorprone compiler
     use_errorprone_java_compiler = false
 
+    # Enables EMMA Java code coverage. Instruments classes during build to
+    # produce .ec files during runtime
+    emma_coverage = false
+
+    # EMMA filter string consisting of a list of inclusion/exclusion patterns
+    # separated with whitespace and/or comma. Only has effect if
+    # emma_coverage==true
+    emma_filter = ""
+
     # Disables process isolation when building _incremental targets.
     # Required for Android M+ due to SELinux policies (stronger sandboxing).
     disable_incremental_isolated_processes = false
 
     # Speed up incremental compiles by compiling only changed files.
-    incremental_javac = false
+    enable_incremental_javac = false
 
     # Speed up dexing using dx --incremental.
-    incremental_dx = true
+    enable_incremental_dx = is_debug
+
+    # Neither of these should ever be used for release builds since they are
+    # somewhat experimental and dx --incremental is known to not produce
+    # byte-for-byte identical output.
+    assert(!(enable_incremental_dx && !is_debug))
+    assert(!(enable_incremental_javac && !is_debug))
+
+    # Adds intrumentation to each function. Writes a file with the order that
+    # functions are called at startup.
+    use_order_profiling = false
   }
 
   # Host stuff -----------------------------------------------------------------
@@ -195,11 +223,6 @@ if (is_android) {
   # Toolchain stuff ------------------------------------------------------------
 
   android_libcpp_root = "$android_ndk_root/sources/cxx-stl/llvm-libc++"
-  if (is_component_build) {
-    android_libcpp_library = "c++_shared"
-  } else {
-    android_libcpp_library = "c++_static"
-  }
 
   # ABI ------------------------------------------------------------------------
 

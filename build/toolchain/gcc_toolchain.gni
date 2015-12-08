@@ -9,7 +9,12 @@ import("//build/toolchain/goma.gni")
 import("//build/toolchain/toolchain.gni")
 
 # This value will be inherited in the toolchain below.
-concurrent_links = exec_script("get_concurrent_links.py", [], "value")
+if (is_cfi) {
+  concurrent_links =
+      exec_script("get_concurrent_links.py", [ "--lto" ], "value")
+} else {
+  concurrent_links = exec_script("get_concurrent_links.py", [], "value")
+}
 
 # This template defines a toolchain for something that works like gcc
 # (including clang).
@@ -60,7 +65,7 @@ concurrent_links = exec_script("get_concurrent_links.py", [], "value")
 #  - strip
 #      Location of the strip executable. When specified, strip will be run on
 #      all shared libraries and executables as they are built. The pre-stripped
-#      artifacts will be put in lib.stripped/ and exe.stripped/.
+#      artifacts will be put in lib.unstripped/ and exe.unstripped/.
 #
 # Optional build argument contols.
 #
@@ -81,6 +86,9 @@ concurrent_links = exec_script("get_concurrent_links.py", [], "value")
 #  - use_goma
 #      Override the global use_goma setting, useful to opt-out of goma in a
 #      particular toolchain by setting use_gome = false in it.
+#  - use_gold
+#      Override the global use_gold setting, useful if the particular
+#      toolchain has a custom link step that is not actually using Gold.
 template("gcc_toolchain") {
   toolchain(target_name) {
     assert(defined(invoker.cc), "gcc_toolchain() must specify a \"cc\" value")
@@ -171,13 +179,16 @@ template("gcc_toolchain") {
     lib_switch = "-l"
     lib_dir_switch = "-L"
 
+    # Object files go in this directory.
+    object_subdir = "{{target_out_dir}}/{{label_name}}"
+
     tool("cc") {
       depfile = "{{output}}.d"
       command = "$cc -MMD -MF $depfile ${rebuild_string}{{defines}} {{include_dirs}} {{cflags}} {{cflags_c}} -c {{source}} -o {{output}}"
       depsformat = "gcc"
       description = "CC {{output}}"
       outputs = [
-        "{{target_out_dir}}/{{target_output_name}}/{{source_name_part}}.o",
+        "$object_subdir/{{source_name_part}}.o",
       ]
     }
 
@@ -187,18 +198,18 @@ template("gcc_toolchain") {
       depsformat = "gcc"
       description = "CXX {{output}}"
       outputs = [
-        "{{target_out_dir}}/{{target_output_name}}/{{source_name_part}}.o",
+        "$object_subdir/{{source_name_part}}.o",
       ]
     }
 
     tool("asm") {
       # For GCC we can just use the C compiler to compile assembly.
       depfile = "{{output}}.d"
-      command = "$cc -MMD -MF $depfile ${rebuild_string}{{defines}} {{include_dirs}} {{cflags}} {{cflags_c}} -c {{source}} -o {{output}}"
+      command = "$cc -MMD -MF $depfile ${rebuild_string}{{defines}} {{include_dirs}} {{asmflags}} -c {{source}} -o {{output}}"
       depsformat = "gcc"
       description = "ASM {{output}}"
       outputs = [
-        "{{target_out_dir}}/{{target_output_name}}/{{source_name_part}}.o",
+        "$object_subdir/{{source_name_part}}.o",
       ]
     }
 
@@ -209,9 +220,15 @@ template("gcc_toolchain") {
         gold_plugin_path = rebase_path(
                 "//third_party/llvm-build/Release+Asserts/lib/LLVMgold.so",
                 root_build_dir)
-        arflags = "--plugin $gold_plugin_path"
+        arflags = "--plugin \"$gold_plugin_path\""
       }
-      command = "rm -f {{output}} && $ar rcs $arflags {{output}} @$rspfile"
+
+      # This needs a Python script to avoid using simple sh features in this
+      # command, in case the host does not use a POSIX shell (e.g. compiling
+      # POSIX-like toolchains such as NaCl on Windows).
+      ar_wrapper =
+          rebase_path("//build/toolchain/gcc_ar_wrapper.py", root_build_dir)
+      command = "$python_path \"$ar_wrapper\" --output={{output}} --ar=\"$ar\" $arflags rcs @\"$rspfile\""
       description = "AR {{output}}"
       rspfile_content = "{{inputs}}"
       outputs = [
@@ -234,25 +251,27 @@ template("gcc_toolchain") {
         unstripped_sofile = "{{root_out_dir}}/lib.unstripped/$soname"
       }
 
-      # These variables are not built into GN but are helpers that implement
-      # (1) linking to produce a .so, (2) extracting the symbols from that file
-      # to a temporary file, (3) if the temporary file has differences from the
-      # existing .TOC file, overwrite it, otherwise, don't change it.
+      # These variables are not built into GN but are helpers that
+      # implement (1) linking to produce a .so, (2) extracting the symbols
+      # from that file (3) if the extracted list differs from the existing
+      # .TOC file, overwrite it, otherwise, don't change it.
       tocfile = sofile + ".TOC"
-      temporary_tocname = sofile + ".tmp"
 
-      link_command = "$ld -shared {{ldflags}} -o $unstripped_sofile -Wl,-soname=$soname @$rspfile"
+      link_command = "$ld -shared {{ldflags}} -o \"$unstripped_sofile\" -Wl,-soname=\"$soname\" @\"$rspfile\""
+
       assert(defined(readelf), "to solink you must have a readelf")
       assert(defined(nm), "to solink you must have an nm")
-      toc_command = "{ $readelf -d $unstripped_sofile | grep SONAME ; $nm -gD -f p $unstripped_sofile | cut -f1-2 -d' '; } > $temporary_tocname"
-      replace_command = "if ! cmp -s $temporary_tocname $tocfile; then mv $temporary_tocname $tocfile; fi"
-
-      command = "$link_command && $toc_command && $replace_command"
+      strip_switch = ""
       if (defined(invoker.strip)) {
-        strip_command =
-            "${invoker.strip} --strip-unneeded -o $sofile $unstripped_sofile"
-        command += " && " + strip_command
+        strip_switch = "--strip=${invoker.strip}"
       }
+
+      # This needs a Python script to avoid using a complex shell command
+      # requiring sh control structures, pipelines, and POSIX utilities.
+      # The host might not have a POSIX shell and utilities (e.g. Windows).
+      solink_wrapper = rebase_path("//build/toolchain/gcc_solink_wrapper.py")
+      command = "$python_path \"$solink_wrapper\" --readelf=\"$readelf\" --nm=\"$nm\" $strip_switch --sofile=\"$unstripped_sofile\" --tocfile=\"$tocfile\" --output=\"$sofile\" -- $link_command"
+
       rspfile_content = "-Wl,--whole-archive {{inputs}} {{solibs}} -Wl,--no-whole-archive $solink_libs_section_prefix {{libs}} $solink_libs_section_postfix"
 
       description = "SOLINK $sofile"
@@ -282,6 +301,48 @@ template("gcc_toolchain") {
       depend_output = tocfile
     }
 
+    tool("solink_module") {
+      soname = "{{target_output_name}}{{output_extension}}"  # e.g. "libfoo.so".
+      sofile = "{{root_out_dir}}/$soname"  # Possibly including toolchain dir.
+      if (shlib_subdir != ".") {
+        sofile = "{{root_out_dir}}/$shlib_subdir/$soname"
+      }
+      rspfile = sofile + ".rsp"
+
+      unstripped_sofile = sofile
+      if (defined(invoker.strip)) {
+        unstripped_sofile = "{{root_out_dir}}/lib.unstripped/$soname"
+      }
+
+      command = "$ld -shared {{ldflags}} -o \"$unstripped_sofile\" -Wl,-soname=\"$soname\" @\"$rspfile\""
+
+      if (defined(invoker.strip)) {
+        strip_command = "${invoker.strip} --strip-unneeded -o \"$sofile\" \"$unstripped_sofile\""
+        command += " && " + strip_command
+      }
+      rspfile_content = "-Wl,--whole-archive {{inputs}} {{solibs}} -Wl,--no-whole-archive $solink_libs_section_prefix {{libs}} $solink_libs_section_postfix"
+
+      description = "SOLINK_MODULE $sofile"
+
+      # Use this for {{output_extension}} expansions unless a target manually
+      # overrides it (in which case {{output_extension}} will be what the target
+      # specifies).
+      if (defined(invoker.loadable_module_extension)) {
+        default_output_extension = invoker.loadable_module_extension
+      } else {
+        default_output_extension = default_shlib_extension
+      }
+
+      output_prefix = "lib"
+
+      outputs = [
+        sofile,
+      ]
+      if (sofile != unstripped_sofile) {
+        outputs += [ unstripped_sofile ]
+      }
+    }
+
     tool("link") {
       exename = "{{target_output_name}}{{output_extension}}"
       outfile = "{{root_out_dir}}/$exename"
@@ -297,14 +358,11 @@ template("gcc_toolchain") {
         unstripped_outfile = "{{root_out_dir}}/exe.unstripped/$exename"
       }
 
-      command = "$ld {{ldflags}} -o $unstripped_outfile -Wl,--start-group @$rspfile {{solibs}} -Wl,--end-group $libs_section_prefix {{libs}} $libs_section_postfix"
+      command = "$ld {{ldflags}} -o \"$unstripped_outfile\" -Wl,--start-group @\"$rspfile\" {{solibs}} -Wl,--end-group $libs_section_prefix {{libs}} $libs_section_postfix"
       if (defined(invoker.strip)) {
-        strip_command =
-            "${invoker.strip} --strip-unneeded -o $outfile $unstripped_outfile"
-        command += " && " + strip_command
-      }
-      if (defined(invoker.postlink)) {
-        command += " && " + invoker.postlink
+        link_wrapper =
+            rebase_path("//build/toolchain/gcc_link_wrapper.py", root_build_dir)
+        command = "$python_path \"$link_wrapper\" --strip=\"${invoker.strip}\" --unstripped-file=\"$unstripped_outfile\" --output=\"$outfile\" -- $command"
       }
       description = "LINK $outfile"
       rspfile_content = "{{inputs}}"
@@ -319,14 +377,16 @@ template("gcc_toolchain") {
       }
     }
 
+    # These two are really entirely generic, but have to be repeated in
+    # each toolchain because GN doesn't allow a template to be used here.
+    # See //build/toolchain/toolchain.gni for details.
     tool("stamp") {
-      command = "touch {{output}}"
-      description = "STAMP {{output}}"
+      command = stamp_command
+      description = stamp_description
     }
-
     tool("copy") {
-      command = "ln -f {{source}} {{output}} 2>/dev/null || (rm -rf {{output}} && cp -af {{source}} {{output}})"
-      description = "COPY {{source}} {{output}}"
+      command = copy_command
+      description = copy_description
     }
 
     # When invoking this toolchain not as the default one, these args will be
@@ -336,6 +396,7 @@ template("gcc_toolchain") {
       current_os = invoker.toolchain_os
 
       # These values need to be passed through unchanged.
+      host_toolchain = host_toolchain
       target_os = target_os
       target_cpu = target_cpu
 
@@ -344,6 +405,8 @@ template("gcc_toolchain") {
                                "is_clang",
                                "is_component_build",
                                "is_nacl_glibc",
+                               "use_gold",
+                               "symbol_level",
                              ])
 
       if (defined(invoker.clear_sanitizers) && invoker.clear_sanitizers) {
@@ -353,9 +416,50 @@ template("gcc_toolchain") {
         is_msan = false
         is_syzyasan = false
         is_tsan = false
+        is_ubsan = false
+        is_ubsan_vptr = false
       }
     }
 
     forward_variables_from(invoker, [ "deps" ])
+  }
+}
+
+# This is a shorthand for gcc_toolchain instances based on the
+# Chromium-built version of Clang.  Only the toolchain_cpu and
+# toolchain_os variables need to be specified by the invoker, and
+# optionally toolprefix if it's a cross-compile case.  Note that for
+# a cross-compile case this toolchain requires a config to pass the
+# appropriate -target option, or else it will actually just be doing
+# a native compile.  The invoker can optionally override use_gold too.
+template("clang_toolchain") {
+  assert(defined(invoker.toolchain_cpu),
+         "clang_toolchain() must specify a \"toolchain_cpu\"")
+  assert(defined(invoker.toolchain_os),
+         "clang_toolchain() must specify a \"toolchain_os\"")
+  if (defined(invoker.toolprefix)) {
+    toolprefix = invoker.toolprefix
+  } else {
+    toolprefix = ""
+  }
+
+  gcc_toolchain(target_name) {
+    prefix = rebase_path("//third_party/llvm-build/Release+Asserts/bin",
+                         root_build_dir)
+    cc = "$prefix/clang"
+    cxx = "$prefix/clang++"
+    ld = cxx
+    is_clang = true
+
+    readelf = "${toolprefix}readelf"
+    ar = "${toolprefix}ar"
+    nm = "${toolprefix}nm"
+
+    forward_variables_from(invoker,
+                           [
+                             "toolchain_cpu",
+                             "toolchain_os",
+                             "use_gold",
+                           ])
   }
 }

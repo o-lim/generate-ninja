@@ -13,9 +13,10 @@
 namespace base {
 
 // Make sure our Whence mappings match the system headers.
-COMPILE_ASSERT(File::FROM_BEGIN   == FILE_BEGIN &&
-               File::FROM_CURRENT == FILE_CURRENT &&
-               File::FROM_END     == FILE_END, whence_matches_system);
+static_assert(File::FROM_BEGIN == FILE_BEGIN &&
+                  File::FROM_CURRENT == FILE_CURRENT &&
+                  File::FROM_END == FILE_END,
+              "whence mapping must match the system headers");
 
 bool File::IsValid() const {
   return file_.IsValid();
@@ -375,6 +376,8 @@ void File::DoInitialize(const FilePath& path, uint32 flags) {
     create_flags |= FILE_FLAG_DELETE_ON_CLOSE;
   if (flags & FLAG_BACKUP_SEMANTICS)
     create_flags |= FILE_FLAG_BACKUP_SEMANTICS;
+  if (flags & FLAG_SEQUENTIAL_SCAN)
+    create_flags |= FILE_FLAG_SEQUENTIAL_SCAN;
 
   file_.Set(CreateFile(path.value().c_str(), access, sharing, NULL,
                        disposition, create_flags, NULL));

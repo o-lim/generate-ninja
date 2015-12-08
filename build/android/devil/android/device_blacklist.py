@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import threading
+import time
 
 from pylib import constants
 
@@ -25,14 +26,19 @@ class Blacklist(object):
     """Reads the blacklist from the blacklist file.
 
     Returns:
-      A list containing bad devices.
+      A dict containing bad devices.
     """
     with self._blacklist_lock:
       if not os.path.exists(self._path):
-        return []
+        return dict()
 
       with open(self._path, 'r') as f:
-        return json.load(f)
+        blacklist = json.load(f)
+      if not isinstance(blacklist, dict):
+        logging.warning('Ignoring %s: %s (a dict was expected instead)',
+                        self._path, blacklist)
+        blacklist = dict()
+      return blacklist
 
   def Write(self, blacklist):
     """Writes the provided blacklist to the blacklist file.
@@ -42,18 +48,26 @@ class Blacklist(object):
     """
     with self._blacklist_lock:
       with open(self._path, 'w') as f:
-        json.dump(list(set(blacklist)), f)
+        json.dump(blacklist, f)
 
-  def Extend(self, devices):
+  def Extend(self, devices, reason='unknown'):
     """Adds devices to blacklist file.
 
     Args:
       devices: list of bad devices to be added to the blacklist file.
+      reason: string specifying the reason for blacklist (eg: 'unauthorized')
     """
-    logging.info('Adding %s to blacklist %s', ','.join(devices), self._path)
+    timestamp = time.time()
+    event_info = {
+        'timestamp': timestamp,
+        'reason': reason,
+    }
+    device_dicts = {device: event_info for device in devices}
+    logging.info('Adding %s to blacklist %s for reason: %s',
+                 ','.join(devices), self._path, reason)
     with self._blacklist_lock:
       blacklist = self.Read()
-      blacklist.extend(devices)
+      blacklist.update(device_dicts)
       self.Write(blacklist)
 
   def Reset(self):
@@ -62,4 +76,3 @@ class Blacklist(object):
     with self._blacklist_lock:
       if os.path.exists(self._path):
         os.remove(self._path)
-

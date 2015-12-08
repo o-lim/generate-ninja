@@ -12,7 +12,10 @@ import zipfile
 
 
 # When set and a difference is detected, a diff of what changed is printed.
-_PRINT_MD5_DIFFS = int(os.environ.get('PRINT_MD5_DIFFS', 0))
+PRINT_EXPLANATIONS = int(os.environ.get('PRINT_BUILD_EXPLANATIONS', 0))
+
+# An escape hatch that causes all targets to be rebuilt.
+_FORCE_REBUILD = int(os.environ.get('FORCE_REBUILD', 0))
 
 
 def CallAndRecordIfStale(
@@ -60,6 +63,7 @@ def CallAndRecordIfStale(
       new_metadata.AddFile(path, _Md5ForPath(path))
 
   old_metadata = None
+  force = force or _FORCE_REBUILD
   missing_outputs = [x for x in output_paths if force or not os.path.exists(x)]
   # When outputs are missing, don't bother gathering change information.
   if not missing_outputs and os.path.exists(record_path):
@@ -73,16 +77,11 @@ def CallAndRecordIfStale(
   if not changes.HasChanges():
     return
 
-  if _PRINT_MD5_DIFFS:
+  if PRINT_EXPLANATIONS:
     print '=' * 80
     print 'Target is stale: %s' % record_path
     print changes.DescribeDifference()
     print '=' * 80
-
-  # Delete the old metdata beforehand since failures leave it in an
-  # inderterminate state.
-  if old_metadata:
-    os.unlink(record_path)
 
   args = (changes,) if pass_changes else ()
   function(*args)
@@ -341,9 +340,12 @@ class _Metadata(object):
   def IterSubpaths(self, path):
     """Returns a generator for all subpaths in the given zip.
 
-    If the given path is not a zip file, returns an empty generator.
+    If the given path is not a zip file or doesn't exist, returns an empty
+    iterable.
     """
     outer_entry = self._GetEntry(path)
+    if not outer_entry:
+      return ()
     subentries = outer_entry.get('entries', [])
     return (entry['path'] for entry in subentries)
 
@@ -395,5 +397,6 @@ def _ExtractZipEntries(path):
     for zip_info in zip_file.infolist():
       # Skip directories and empty files.
       if zip_info.CRC:
-        entries.append((zip_info.filename, zip_info.CRC))
+        entries.append(
+            (zip_info.filename, zip_info.CRC + zip_info.compress_type))
   return entries

@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # Copyright 2014 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -179,16 +180,43 @@ class GNRoller(object):
       fp.write(new_deps)
 
   def WaitForBuildToFinish(self):
+    ret = self.CheckoutBuildBranch()
+    if ret:
+      return ret
+
     print('Checking build')
     results = self.CheckBuild()
     while (len(results) < 3 or
-           any(r['state'] == 'pending' for r in results.values())):
+           any(r['state'] in ('pending', 'started')
+               for r in results.values())):
       print()
       print('Sleeping for 30 seconds')
       time.sleep(30)
       print('Checking build')
       results = self.CheckBuild()
-    return 0 if all(r['state'] == 'success' for r in results.values()) else 1
+
+    ret = 0 if all(r['state'] == 'success' for r in results.values()) else 1
+    if ret:
+      print('Build failed.')
+    else:
+      print('Builds ready.')
+
+    # Close the build CL and move off of the build branch back to whatever
+    # we were on before.
+    self.Call('git-cl set-close')
+    self.MoveToLastHead()
+
+    return ret
+
+  def CheckoutBuildBranch(self):
+    ret, out, err = self.Call('git checkout build_gn_%s' % self.new_gn_version)
+    if ret:
+      print('Failed to check out build_gn_%s' % self.new_gn_version)
+      if out:
+        print(out)
+      if err:
+        print(err, file=sys.stderr)
+    return ret
 
   def CheckBuild(self):
     _, out, _ = self.Call('git-cl issue')
@@ -263,8 +291,13 @@ class GNRoller(object):
     return results
 
   def RollBuildtools(self):
+    ret = self.CheckoutBuildBranch()
+    if ret:
+      return ret
+
     results = self.CheckBuild()
-    if not all(r['state'] == 'success' for r in results.values()):
+    if (len(results) < 3 or
+        not all(r['state'] == 'success' for r in results.values())):
       print("Roll isn't done or didn't succeed, exiting:")
       return 1
 
@@ -306,6 +339,11 @@ class GNRoller(object):
     # merged branch.
     self.Call('git checkout origin/master', cwd=self.buildtools_dir)
 
+    _, out, _ = self.Call('git rev-parse origin/master',
+                          cwd=self.buildtools_dir)
+    new_buildtools_commitish = out.strip()
+    print('Ready to roll buildtools to %s in DEPS' % new_buildtools_commitish)
+
     return 0
 
   def RollDEPS(self):
@@ -336,7 +374,7 @@ class GNRoller(object):
       return 1
 
     with open('DEPS', 'w') as fp:
-      fp.write(''.join(new_deps_lines) + '\n')
+      fp.write(''.join(new_deps_lines))
 
     desc = self.GetDEPSRollDesc(old_buildtools_commitish,
                                 new_buildtools_commitish)
@@ -349,10 +387,21 @@ class GNRoller(object):
     finally:
       os.remove(desc_file.name)
 
-    # Intentionally leave the src checkout on the new branch with the roll
-    # since we're not auto-committing it.
+    # Move off of the roll branch onto whatever we were on before.
+    # Do not explicitly close the roll CL issue, however; the CQ
+    # will close it when the roll lands, assuming it does so.
+    self.MoveToLastHead()
 
     return 0
+
+  def MoveToLastHead(self):
+    # When this is called, there will be a commit + a checkout as
+    # the two most recent entries in the reflog, assuming nothing as
+    # modified the repo while this script has been running.
+    _, out, _ = self.Call('git reflog -2')
+    m = re.search('moving from ([^\s]+)', out)
+    last_head = m.group(1)
+    self.Call('git checkout %s' % last_head)
 
   def GetBuildtoolsDesc(self):
     gn_changes = self.GetGNChanges()
@@ -382,8 +431,7 @@ class GNRoller(object):
       '%s'
       '\n'
       'TBR=%s\n'
-      'CQ_EXTRA_TRYBOTS=tryserver.chromium.mac:mac_chromium_gn_rel,'
-      'mac_chromium_gn_dbg;'
+      'CQ_EXTRA_TRYBOTS=tryserver.chromium.mac:mac_chromium_gn_dbg;'
       'tryserver.chromium.win:win8_chromium_gn_dbg,'
       'win_chromium_gn_x64_rel\n' % (
         old_buildtools_commitish[:COMMITISH_DIGITS],

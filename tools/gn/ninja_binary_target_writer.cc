@@ -420,16 +420,12 @@ void NinjaBinaryTargetWriter::WriteCompilerVars(
     WriteOneFlag(SUBSTITUTION_ASMFLAGS, false, Toolchain::TYPE_NONE,
                  &ConfigValues::asmflags, opts);
   }
-  // TODO(andybons): Remove SOURCE_S and SOURCE_ASM checks once asmflags is
-  // used.
   if (used_types.Get(SOURCE_C) || used_types.Get(SOURCE_CPP) ||
-      used_types.Get(SOURCE_M) || used_types.Get(SOURCE_MM) ||
-      used_types.Get(SOURCE_S) || used_types.Get(SOURCE_ASM)) {
+      used_types.Get(SOURCE_M) || used_types.Get(SOURCE_MM)) {
     WriteOneFlag(SUBSTITUTION_CFLAGS, false, Toolchain::TYPE_NONE,
                  &ConfigValues::cflags, opts);
   }
-  if (used_types.Get(SOURCE_C) || used_types.Get(SOURCE_S) ||
-      used_types.Get(SOURCE_ASM)) {
+  if (used_types.Get(SOURCE_C)) {
     WriteOneFlag(SUBSTITUTION_CFLAGS_C, has_precompiled_headers,
                  Toolchain::TYPE_CC, &ConfigValues::cflags_c, opts);
   }
@@ -864,10 +860,9 @@ void NinjaBinaryTargetWriter::WriteLibs() {
   const OrderedSet<std::string> all_libs = target_->all_libs();
   const std::string framework_ending(".framework");
   for (size_t i = 0; i < all_libs.size(); i++) {
-    if (settings_->IsMac() &&
-        base::EndsWith(all_libs[i], framework_ending,
+    if (base::EndsWith(all_libs[i], framework_ending,
                        base::CompareCase::INSENSITIVE_ASCII)) {
-      // Special-case libraries ending in ".framework" on Mac. Add the
+      // Special-case libraries ending in ".framework" to support Mac: Add the
       // -framework switch and don't add the extension to the output.
       out_ << " -framework ";
       EscapeStringToStream(out_,
@@ -966,7 +961,7 @@ void NinjaBinaryTargetWriter::ClassifyDependency(
 
   if (dep->output_type() == Target::SOURCE_SET) {
     // Source sets have their object files linked into final targets
-    // (shared libraries, executables, and complete static
+    // (shared libraries, executables, loadable modules, and complete static
     // libraries). Intermediate static libraries and other source sets
     // just forward the dependency, otherwise the files in the source
     // set can easily get linked more than once which will cause

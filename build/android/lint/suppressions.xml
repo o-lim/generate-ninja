@@ -41,6 +41,10 @@ Still reading?
   <issue id="HandlerLeak">
     <ignore path="remoting/android/java/src/org/chromium/chromoting/TapGestureDetector.java"/>
   </issue>
+  <issue id="IconMissingDensityFolder">
+    <!-- see crbug.com/542435 -->
+    <ignore path="android_webview/apk/java/res" />
+  </issue>
   <issue id="IconDensities">
     <!-- crbug.com/457918 is tracking missing assets -->
     <ignore path="components/web_contents_delegate_android/android/java/res/drawable-xxhdpi"/>
@@ -51,7 +55,10 @@ Still reading?
     <ignore path="chrome/android/java/res/drawable-xxxhdpi"/>
     <ignore path="ui/android/java/res/drawable-xxhdpi"/>
     <ignore path="ui/android/java/res/drawable-xxxhdpi"/>
-    <ignore regexp=".*: data_reduction_illustration.png, reader_mode_bar_background.9.png, tabs_moved_htc.png, tabs_moved_nexus.png, tabs_moved_samsung.png$"/>
+    <ignore regexp=".*: data_reduction_illustration.png, google_icon_sprite.png, reader_mode_bar_background.9.png, tabs_moved_htc.png, tabs_moved_nexus.png, tabs_moved_samsung.png$"/>
+  </issue>
+  <issue id="IconDipSize">
+    <ignore regexp=".*google_icon_sprite.png.*"/>
   </issue>
   <issue id="IconLocation">
     <!-- It is OK for content_shell_apk to have missing assets. -->

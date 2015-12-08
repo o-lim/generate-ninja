@@ -5,26 +5,17 @@
 #ifndef BASE_TRACE_EVENT_TRACE_LOG_H_
 #define BASE_TRACE_EVENT_TRACE_LOG_H_
 
+#include <string>
+#include <vector>
+
+#include "base/atomicops.h"
+#include "base/containers/hash_tables.h"
 #include "base/gtest_prod_util.h"
+#include "base/memory/scoped_ptr.h"
+#include "base/memory/scoped_vector.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "base/trace_event/trace_config.h"
 #include "base/trace_event/trace_event_impl.h"
-
-// Older style trace macros with explicit id and extra data
-// Only these macros result in publishing data to ETW as currently implemented.
-// TODO(georgesak): Update/replace these with new ETW macros.
-#define TRACE_EVENT_BEGIN_ETW(name, id, extra)   \
-  base::trace_event::TraceLog::AddTraceEventEtw( \
-      TRACE_EVENT_PHASE_BEGIN, name, reinterpret_cast<const void*>(id), extra)
-
-#define TRACE_EVENT_END_ETW(name, id, extra)     \
-  base::trace_event::TraceLog::AddTraceEventEtw( \
-      TRACE_EVENT_PHASE_END, name, reinterpret_cast<const void*>(id), extra)
-
-#define TRACE_EVENT_INSTANT_ETW(name, id, extra)                          \
-  base::trace_event::TraceLog::AddTraceEventEtw(                          \
-      TRACE_EVENT_PHASE_INSTANT, name, reinterpret_cast<const void*>(id), \
-      extra)
 
 namespace base {
 
@@ -142,7 +133,7 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
   // For TRACE_EVENT_PHASE_COMPLETE events, the client will still receive pairs
   // of TRACE_EVENT_PHASE_BEGIN and TRACE_EVENT_PHASE_END events to keep the
   // interface simple.
-  typedef void (*EventCallback)(TraceTicks timestamp,
+  typedef void (*EventCallback)(TimeTicks timestamp,
                                 char phase,
                                 const unsigned char* category_group_enabled,
                                 const char* name,
@@ -211,6 +202,18 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
       const unsigned long long* arg_values,
       const scoped_refptr<ConvertableToTraceFormat>* convertable_values,
       unsigned int flags);
+  TraceEventHandle AddTraceEventWithProcessId(
+      char phase,
+      const unsigned char* category_group_enabled,
+      const char* name,
+      unsigned long long id,
+      int process_id,
+      int num_args,
+      const char** arg_names,
+      const unsigned char* arg_types,
+      const unsigned long long* arg_values,
+      const scoped_refptr<ConvertableToTraceFormat>* convertable_values,
+      unsigned int flags);
   TraceEventHandle AddTraceEventWithThreadIdAndTimestamp(
       char phase,
       const unsigned char* category_group_enabled,
@@ -218,7 +221,7 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
       unsigned long long id,
       unsigned long long context_id,
       int thread_id,
-      const TraceTicks& timestamp,
+      const TimeTicks& timestamp,
       int num_args,
       const char** arg_names,
       const unsigned char* arg_types,
@@ -233,21 +236,23 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
       unsigned long long context_id,
       unsigned long long bind_id,
       int thread_id,
-      const TraceTicks& timestamp,
+      const TimeTicks& timestamp,
       int num_args,
       const char** arg_names,
       const unsigned char* arg_types,
       const unsigned long long* arg_values,
       const scoped_refptr<ConvertableToTraceFormat>* convertable_values,
       unsigned int flags);
-  static void AddTraceEventEtw(char phase,
-                               const char* category_group,
-                               const void* id,
-                               const char* extra);
-  static void AddTraceEventEtw(char phase,
-                               const char* category_group,
-                               const void* id,
-                               const std::string& extra);
+
+  // Adds a metadata event that will be written when the trace log is flushed.
+  void AddMetadataEvent(
+      const char* name,
+      int num_args,
+      const char** arg_names,
+      const unsigned char* arg_types,
+      const unsigned long long* arg_values,
+      const scoped_refptr<ConvertableToTraceFormat>* convertable_values,
+      unsigned int flags);
 
   void UpdateTraceEventDuration(const unsigned char* category_group_enabled,
                                 const char* name,
@@ -296,7 +301,7 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
   // sort index, ascending, then by their name, and then tid.
   void SetThreadSortIndex(PlatformThreadId thread_id, int sort_index);
 
-  // Allow setting an offset between the current TraceTicks time and the time
+  // Allow setting an offset between the current TimeTicks time and the time
   // that should be reported.
   void SetTimeOffset(TimeDelta offset);
 
@@ -369,7 +374,7 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
   TraceBuffer* CreateTraceBuffer();
 
   std::string EventToConsoleMessage(unsigned char phase,
-                                    const TraceTicks& timestamp,
+                                    const TimeTicks& timestamp,
                                     TraceEvent* trace_event);
 
   TraceEvent* AddEventToThreadSharedChunkWhileLocked(TraceEventHandle* handle,
@@ -403,8 +408,8 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
   }
   void UseNextTraceBuffer();
 
-  TraceTicks OffsetNow() const { return OffsetTimestamp(TraceTicks::Now()); }
-  TraceTicks OffsetTimestamp(const TraceTicks& timestamp) const {
+  TimeTicks OffsetNow() const { return OffsetTimestamp(TimeTicks::Now()); }
+  TimeTicks OffsetTimestamp(const TimeTicks& timestamp) const {
     return timestamp - time_offset_;
   }
 
@@ -427,6 +432,7 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
   Mode mode_;
   int num_traces_recorded_;
   scoped_ptr<TraceBuffer> logged_events_;
+  std::vector<scoped_ptr<TraceEvent>> metadata_events_;
   subtle::AtomicWord /* EventCallback */ event_callback_;
   bool dispatching_to_observer_list_;
   std::vector<EnabledStateObserver*> enabled_state_observer_list_;
@@ -438,10 +444,10 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
   base::hash_map<int, std::string> thread_names_;
 
   // The following two maps are used only when ECHO_TO_CONSOLE.
-  base::hash_map<int, std::stack<TraceTicks>> thread_event_start_times_;
+  base::hash_map<int, std::stack<TimeTicks>> thread_event_start_times_;
   base::hash_map<std::string, int> thread_colors_;
 
-  TraceTicks buffer_limit_reached_timestamp_;
+  TimeTicks buffer_limit_reached_timestamp_;
 
   // XORed with TraceID to make it unlikely to collide with other processes.
   unsigned long long process_id_hash_;

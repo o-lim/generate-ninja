@@ -176,8 +176,10 @@ TEST_F(ProcessTest, SetProcessBackgrounded) {
   EXPECT_TRUE(process.SetProcessBackgrounded(false));
   EXPECT_FALSE(process.IsProcessBackgrounded());
 #else
-  process.SetProcessBackgrounded(true);
-  process.SetProcessBackgrounded(false);
+  if (process.CanBackgroundProcesses()) {
+    process.SetProcessBackgrounded(true);
+    process.SetProcessBackgrounded(false);
+  }
 #endif
   int new_priority = process.GetPriority();
   EXPECT_EQ(old_priority, new_priority);
@@ -200,5 +202,21 @@ TEST_F(ProcessTest, SetProcessBackgroundedSelf) {
   int new_priority = process.GetPriority();
   EXPECT_EQ(old_priority, new_priority);
 }
+
+#if defined(OS_CHROMEOS)
+
+// Tests that the function IsProcessBackgroundedCGroup() can parse the contents
+// of the /proc/<pid>/cgroup file successfully.
+TEST_F(ProcessTest, TestIsProcessBackgroundedCGroup) {
+  const char kNotBackgrounded[] = "5:cpuacct,cpu,cpuset:/daemons\n";
+  const char kBackgrounded[] =
+      "2:freezer:/chrome_renderers/to_be_frozen\n"
+      "1:cpu:/chrome_renderers/background\n";
+
+  EXPECT_FALSE(IsProcessBackgroundedCGroup(kNotBackgrounded));
+  EXPECT_TRUE(IsProcessBackgroundedCGroup(kBackgrounded));
+}
+
+#endif  // defined(OS_CHROMEOS)
 
 }  // namespace base

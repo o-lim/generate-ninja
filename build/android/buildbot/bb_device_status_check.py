@@ -16,6 +16,7 @@ import signal
 import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import devil_chromium
 from devil.android import battery_utils
 from devil.android import device_blacklist
 from devil.android import device_errors
@@ -72,7 +73,7 @@ def _BatteryStatus(device, blacklist):
       if not battery.GetCharging():
         battery.SetCharging(True)
       if blacklist:
-        blacklist.Extend([device.adb.GetDeviceSerial()])
+        blacklist.Extend([device.adb.GetDeviceSerial()], reason='low_battery')
 
   except device_errors.CommandFailedError:
     logging.exception('Failed to get battery information for %s',
@@ -173,16 +174,16 @@ def DeviceStatus(devices, blacklist):
           logging.exception('Failure while getting device status for %s.',
                             str(device))
           if blacklist:
-            blacklist.Extend([serial])
+            blacklist.Extend([serial], reason='status_check_failure')
 
         except device_errors.CommandTimeoutError:
           logging.exception('Timeout while getting device status for %s.',
                             str(device))
           if blacklist:
-            blacklist.Extend([serial])
+            blacklist.Extend([serial], reason='status_check_timeout')
 
     elif blacklist:
-      blacklist.Extend([serial])
+      blacklist.Extend([serial], reason=adb_status)
 
     device_status['blacklisted'] = _IsBlacklisted(serial, blacklist)
 
@@ -238,16 +239,16 @@ def RecoverDevices(devices, blacklist):
     except (IOError, device_errors.DeviceUnreachableError):
       logging.exception('Unable to reset USB for %s.', serial)
       if blacklist:
-        blacklist.Extend([serial])
+        blacklist.Extend([serial], reason='usb_failure')
 
   def blacklisting_recovery(device):
     if _IsBlacklisted(device.adb.GetDeviceSerial(), blacklist):
       logging.debug('%s is blacklisted, skipping recovery.', str(device))
       return
 
-    if device in should_reboot_device:
+    if str(device) in should_reboot_device:
       try:
-        device.WaitUntilFullyBooted()
+        device.WaitUntilFullyBooted(retries=0)
         return
       except (device_errors.CommandTimeoutError,
               device_errors.CommandFailedError):
@@ -255,16 +256,39 @@ def RecoverDevices(devices, blacklist):
                           'Attempting to recover.', str(device))
 
       try:
-        device.Reboot()
-        device.WaitUntilFullyBooted()
+        try:
+          device.Reboot(block=False, timeout=5, retries=0)
+        except device_errors.CommandTimeoutError:
+          logging.warning('Timed out while attempting to reboot %s normally.'
+                          'Attempting alternative reboot.', str(device))
+          # The device drops offline before we can grab the exit code, so
+          # we don't check for status.
+          device.adb.Root()
+          device.adb.Shell('echo b > /proc/sysrq-trigger', expect_status=None,
+                           timeout=5, retries=0)
+      except device_errors.CommandFailedError:
+        logging.exception('Failed to reboot %s.', str(device))
+        if blacklist:
+          blacklist.Extend([device.adb.GetDeviceSerial()],
+                           reason='reboot_failure')
+      except device_errors.CommandTimeoutError:
+        logging.exception('Timed out while rebooting %s.', str(device))
+        if blacklist:
+          blacklist.Extend([device.adb.GetDeviceSerial()],
+                           reason='reboot_timeout')
+
+      try:
+        device.WaitUntilFullyBooted(retries=0)
       except device_errors.CommandFailedError:
         logging.exception('Failure while waiting for %s.', str(device))
         if blacklist:
-          blacklist.Extend([device.adb.GetDeviceSerial()])
+          blacklist.Extend([device.adb.GetDeviceSerial()],
+                           reason='reboot_failure')
       except device_errors.CommandTimeoutError:
-        logging.exception('Timed out while waiting for %s. ', str(device))
+        logging.exception('Timed out while waiting for %s.', str(device))
         if blacklist:
-          blacklist.Extend([device.adb.GetDeviceSerial()])
+          blacklist.Extend([device.adb.GetDeviceSerial()],
+                           reason='reboot_timeout')
 
   device_utils.DeviceUtils.parallel(devices).pMap(blacklisting_recovery)
 
@@ -286,6 +310,8 @@ def main():
   args = parser.parse_args()
 
   run_tests_helper.SetLogLevel(args.verbose)
+
+  devil_chromium.Initialize()
 
   blacklist = (device_blacklist.Blacklist(args.blacklist_file)
                if args.blacklist_file

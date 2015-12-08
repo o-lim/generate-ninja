@@ -31,6 +31,7 @@ class TestLauncher;
 
 // Constants for GTest command-line flags.
 extern const char kGTestFilterFlag[];
+extern const char kGTestFlagfileFlag[];
 extern const char kGTestHelpFlag[];
 extern const char kGTestListTestsFlag[];
 extern const char kGTestRepeatFlag[];
@@ -161,6 +162,9 @@ class TestLauncher {
 
   // Tests to use (cached result of TestLauncherDelegate::GetTests).
   std::vector<TestIdentifier> tests_;
+
+  // Number of tests found in this binary.
+  size_t test_found_count_;
 
   // Number of tests started in this iteration.
   size_t test_started_count_;

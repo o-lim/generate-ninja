@@ -48,7 +48,6 @@ using base::ThreadTicks;
 using base::Time;
 using base::TimeDelta;
 using base::TimeTicks;
-using base::TraceTicks;
 
 namespace {
 
@@ -56,7 +55,7 @@ namespace {
 // 100-nanosecond intervals since January 1, 1601 (UTC)."
 int64 FileTimeToMicroseconds(const FILETIME& ft) {
   // Need to bit_cast to fix alignment, then divide by 10 to convert
-  // 100-nanoseconds to milliseconds. This only works on little-endian
+  // 100-nanoseconds to microseconds. This only works on little-endian
   // machines.
   return bit_cast<int64, FILETIME>(ft) / 10;
 }
@@ -65,7 +64,7 @@ void MicrosecondsToFileTime(int64 us, FILETIME* ft) {
   DCHECK_GE(us, 0LL) << "Time is less than 0, negative values are not "
       "representable in FILETIME";
 
-  // Multiply by 10 to convert milliseconds to 100-nanoseconds. Bit_cast will
+  // Multiply by 10 to convert microseconds to 100-nanoseconds. Bit_cast will
   // handle alignment problems. This only works on little-endian machines.
   *ft = bit_cast<FILETIME, int64>(us * 10);
 }
@@ -99,6 +98,26 @@ uint32_t g_high_res_timer_count = 0;
 // The lock to control access to the above two variables.
 base::LazyInstance<base::Lock>::Leaky g_high_res_lock =
     LAZY_INSTANCE_INITIALIZER;
+
+// Returns a pointer to the QueryThreadCycleTime() function from Windows.
+// Can't statically link to it because it is not available on XP.
+using QueryThreadCycleTimePtr = decltype(::QueryThreadCycleTime)*;
+QueryThreadCycleTimePtr GetQueryThreadCycleTimeFunction() {
+  static const QueryThreadCycleTimePtr query_thread_cycle_time_fn =
+      reinterpret_cast<QueryThreadCycleTimePtr>(::GetProcAddress(
+          ::GetModuleHandle(L"kernel32.dll"), "QueryThreadCycleTime"));
+  return query_thread_cycle_time_fn;
+}
+
+// Returns the current value of the performance counter.
+uint64 QPCNowRaw() {
+  LARGE_INTEGER perf_counter_now = {};
+  // According to the MSDN documentation for QueryPerformanceCounter(), this
+  // will never fail on systems that run XP or later.
+  // https://msdn.microsoft.com/library/windows/desktop/ms644904.aspx
+  ::QueryPerformanceCounter(&perf_counter_now);
+  return perf_counter_now.QuadPart;
+}
 
 }  // namespace
 
@@ -415,9 +434,7 @@ TimeDelta QPCValueToTimeDelta(LONGLONG qpc_value) {
 }
 
 TimeDelta QPCNow() {
-  LARGE_INTEGER now;
-  QueryPerformanceCounter(&now);
-  return QPCValueToTimeDelta(now.QuadPart);
+  return QPCValueToTimeDelta(QPCNowRaw());
 }
 
 bool IsBuggyAthlon(const base::CPU& cpu) {
@@ -441,14 +458,6 @@ void InitializeNowFunctionPointer() {
   //
   // Otherwise, Now uses the high-resolution QPC clock. As of 21 August 2015,
   // ~72% of users fall within this category.
-  //
-  // TraceTicks::Now() always uses the same clock as TimeTicks::Now(), even
-  // when the QPC exists but is expensive or unreliable. This is because we'd
-  // eventually like to merge TraceTicks and TimeTicks and have one type of
-  // timestamp that is reliable, monotonic, and comparable. Also, while we could
-  // use the high-resolution timer for TraceTicks even when it's unreliable or
-  // slow, it's easier to make tracing tools accommodate a coarse timer than
-  // one that's unreliable or slow.
   NowFunction now_function;
   base::CPU cpu;
   if (ticks_per_sec.QuadPart <= 0 ||
@@ -504,13 +513,94 @@ bool TimeTicks::IsHighResolution() {
 
 // static
 ThreadTicks ThreadTicks::Now() {
-  NOTREACHED();
-  return ThreadTicks();
+  DCHECK(IsSupported());
+
+  // Get the number of TSC ticks used by the current thread.
+  ULONG64 thread_cycle_time = 0;
+  GetQueryThreadCycleTimeFunction()(::GetCurrentThread(), &thread_cycle_time);
+
+  // Get the frequency of the TSC.
+  double tsc_ticks_per_second = TSCTicksPerSecond();
+  if (tsc_ticks_per_second == 0)
+    return ThreadTicks();
+
+  // Return the CPU time of the current thread.
+  double thread_time_seconds = thread_cycle_time / tsc_ticks_per_second;
+  return ThreadTicks(static_cast<int64>(
+      thread_time_seconds * Time::kMicrosecondsPerSecond));
 }
 
 // static
-TraceTicks TraceTicks::Now() {
-  return TraceTicks() + g_now_function();
+bool ThreadTicks::IsSupportedWin() {
+  static bool is_supported = GetQueryThreadCycleTimeFunction() &&
+                             base::CPU().has_non_stop_time_stamp_counter() &&
+                             !IsBuggyAthlon(base::CPU());
+  return is_supported;
+}
+
+// static
+void ThreadTicks::WaitUntilInitializedWin() {
+  while (TSCTicksPerSecond() == 0)
+    ::Sleep(10);
+}
+
+double ThreadTicks::TSCTicksPerSecond() {
+  DCHECK(IsSupported());
+
+  // The value returned by QueryPerformanceFrequency() cannot be used as the TSC
+  // frequency, because there is no guarantee that the TSC frequency is equal to
+  // the performance counter frequency.
+
+  // The TSC frequency is cached in a static variable because it takes some time
+  // to compute it.
+  static double tsc_ticks_per_second = 0;
+  if (tsc_ticks_per_second != 0)
+    return tsc_ticks_per_second;
+
+  // Increase the thread priority to reduces the chances of having a context
+  // switch during a reading of the TSC and the performance counter.
+  int previous_priority = ::GetThreadPriority(::GetCurrentThread());
+  ::SetThreadPriority(::GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+
+  // The first time that this function is called, make an initial reading of the
+  // TSC and the performance counter.
+  static const uint64 tsc_initial = __rdtsc();
+  static const uint64 perf_counter_initial = QPCNowRaw();
+
+  // Make a another reading of the TSC and the performance counter every time
+  // that this function is called.
+  uint64 tsc_now = __rdtsc();
+  uint64 perf_counter_now = QPCNowRaw();
+
+  // Reset the thread priority.
+  ::SetThreadPriority(::GetCurrentThread(), previous_priority);
+
+  // Make sure that at least 50 ms elapsed between the 2 readings. The first
+  // time that this function is called, we don't expect this to be the case.
+  // Note: The longer the elapsed time between the 2 readings is, the more
+  //   accurate the computed TSC frequency will be. The 50 ms value was
+  //   chosen because local benchmarks show that it allows us to get a
+  //   stddev of less than 1 tick/us between multiple runs.
+  // Note: According to the MSDN documentation for QueryPerformanceFrequency(),
+  //   this will never fail on systems that run XP or later.
+  //   https://msdn.microsoft.com/library/windows/desktop/ms644905.aspx
+  LARGE_INTEGER perf_counter_frequency = {};
+  ::QueryPerformanceFrequency(&perf_counter_frequency);
+  DCHECK_GE(perf_counter_now, perf_counter_initial);
+  uint64 perf_counter_ticks = perf_counter_now - perf_counter_initial;
+  double elapsed_time_seconds =
+      perf_counter_ticks / static_cast<double>(perf_counter_frequency.QuadPart);
+
+  const double kMinimumEvaluationPeriodSeconds = 0.05;
+  if (elapsed_time_seconds < kMinimumEvaluationPeriodSeconds)
+    return 0;
+
+  // Compute the frequency of the TSC.
+  DCHECK_GE(tsc_now, tsc_initial);
+  uint64 tsc_ticks = tsc_now - tsc_initial;
+  tsc_ticks_per_second = tsc_ticks / elapsed_time_seconds;
+
+  return tsc_ticks_per_second;
 }
 
 // static

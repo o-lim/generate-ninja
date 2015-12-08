@@ -54,7 +54,7 @@ variable name or the '{{' and '}}' which surround it."
   :group 'gn-faces)
 
 (defvar gn-font-lock-target-declaration-keywords
-  '("action" "action_foreach" "copy" "executable" "group"
+  '("action" "action_foreach" "copy" "executable" "group" "loadable_module"
     "shared_library" "source_set" "static_library" "if" "else"))
 
 (defvar gn-font-lock-buildfile-fun-keywords
@@ -73,10 +73,9 @@ variable name or the '{{' and '}}' which surround it."
   '("all_dependent_configs" "allow_circular_includes_from" "args" "asmflags"
     "cflags" "cflags_c" "cflags_cc" "cflags_objc" "cflags_objcc"
     "check_includes" "complete_static_lib" "configs" "data" "data_deps"
-    "defines" "depfile" "deps" "forward_dependent_configs_from" "include_dirs"
-    "inputs" "ldflags" "lib_dirs" "libs" "output_extension" "output_name"
-    "outputs" "public" "public_configs" "public_deps" "script" "sources"
-    "testonly" "visibility"))
+    "defines" "depfile" "deps" "include_dirs" "inputs" "ldflags" "lib_dirs"
+    "libs" "output_extension" "output_name" "outputs" "public" "public_configs"
+    "public_deps" "script" "sources" "testonly" "visibility"))
 
 (defconst gn-font-lock-keywords
   `((,(regexp-opt gn-font-lock-target-declaration-keywords 'words) .

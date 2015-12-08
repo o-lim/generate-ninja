@@ -31,36 +31,29 @@ namespace base {
 class FilePath;
 
 // Options for creating a shared memory object.
-struct SharedMemoryCreateOptions {
-  SharedMemoryCreateOptions()
-      : size(0),
-        executable(false),
-        share_read_only(false) {
-#if !defined(OS_MACOSX) || defined(OS_IOS)
-    name_deprecated = nullptr;
-    open_existing_deprecated = false;
-#endif
-  }
+struct BASE_EXPORT SharedMemoryCreateOptions {
+  SharedMemoryCreateOptions();
 
-#if !defined(OS_MACOSX) || defined(OS_IOS)
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+  // The type of OS primitive that should back the SharedMemory object.
+  SharedMemoryHandle::Type type;
+#else
   // DEPRECATED (crbug.com/345734):
   // If NULL, the object is anonymous.  This pointer is owned by the caller
   // and must live through the call to Create().
   const std::string* name_deprecated;
-#endif
 
-  // Size of the shared memory object to be created.
-  // When opening an existing object, this has no effect.
-  size_t size;
-
-#if !defined(OS_MACOSX) || defined(OS_IOS)
   // DEPRECATED (crbug.com/345734):
   // If true, and the shared memory already exists, Create() will open the
   // existing shared memory and ignore the size parameter.  If false,
   // shared memory must not exist.  This flag is meaningless unless
   // name_deprecated is non-NULL.
   bool open_existing_deprecated;
-#endif
+#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
+
+  // Size of the shared memory object to be created.
+  // When opening an existing object, this has no effect.
+  size_t size;
 
   // If true, mappings might need to be made executable later.
   bool executable;
@@ -124,9 +117,11 @@ class BASE_EXPORT SharedMemory {
 #endif
 
 #if defined(OS_POSIX) && !defined(OS_ANDROID)
-  // Returns the size of the shared memory region referred to by |handle|.
-  // Returns '-1' on a failure to determine the size.
-  static int GetSizeFromSharedMemoryHandle(const SharedMemoryHandle& handle);
+  // Gets the size of the shared memory region referred to by |handle|.
+  // Returns false on a failure to determine the size. On success, populates the
+  // output variable |size|.
+  static bool GetSizeFromSharedMemoryHandle(const SharedMemoryHandle& handle,
+                                            size_t* size);
 #endif  // defined(OS_POSIX) && !defined(OS_ANDROID)
 
   // Creates a shared memory object as described by the options struct.
@@ -136,6 +131,16 @@ class BASE_EXPORT SharedMemory {
   // Creates and maps an anonymous shared memory segment of size size.
   // Returns true on success and false on failure.
   bool CreateAndMapAnonymous(size_t size);
+
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+  // These two methods are analogs of CreateAndMapAnonymous and CreateAnonymous
+  // that force the underlying OS primitive to be a POSIX fd. Do not add new
+  // uses of these methods unless absolutely necessary, since constructing a
+  // fd-backed SharedMemory object frequently takes 100ms+.
+  // http://crbug.com/466437.
+  bool CreateAndMapAnonymousPosix(size_t size);
+  bool CreateAnonymousPosix(size_t size);
+#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
 
   // Creates an anonymous shared memory segment of size size.
   // Returns true on success and false on failure.
@@ -263,7 +268,9 @@ class BASE_EXPORT SharedMemory {
  private:
 #if defined(OS_POSIX) && !defined(OS_NACL) && !defined(OS_ANDROID)
   bool PrepareMapFile(ScopedFILE fp, ScopedFD readonly);
+#if !(defined(OS_MACOSX) && !defined(OS_IOS))
   bool FilePathForMemoryName(const std::string& mem_name, FilePath* path);
+#endif
 #endif  // defined(OS_POSIX) && !defined(OS_NACL) && !defined(OS_ANDROID)
   enum ShareMode {
     SHARE_READONLY,
@@ -277,6 +284,15 @@ class BASE_EXPORT SharedMemory {
 #if defined(OS_WIN)
   std::wstring       name_;
   HANDLE             mapped_file_;
+#elif defined(OS_MACOSX) && !defined(OS_IOS)
+  // The OS primitive that backs the shared memory region.
+  SharedMemoryHandle shm_;
+
+  // The mechanism by which the memory is mapped. Only valid if |memory_| is not
+  // |nullptr|.
+  SharedMemoryHandle::Type mapped_memory_mechanism_;
+
+  int readonly_mapped_file_;
 #elif defined(OS_POSIX)
   int                mapped_file_;
   int                readonly_mapped_file_;

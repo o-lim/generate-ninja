@@ -195,6 +195,7 @@ bool IsCompilerTool(Toolchain::ToolType type) {
 bool IsLinkerTool(Toolchain::ToolType type) {
   return type == Toolchain::TYPE_ALINK ||
          type == Toolchain::TYPE_SOLINK ||
+         type == Toolchain::TYPE_SOLINK_MODULE ||
          type == Toolchain::TYPE_LINK;
 }
 
@@ -503,7 +504,7 @@ const char kTool_Help[] =
     "    depend_output  [string with substitutions]\n"
     "        Valid for: \"solink\" only (optional)\n"
     "\n"
-    "        These two files specify whch of the outputs from the solink\n"
+    "        These two files specify which of the outputs from the solink\n"
     "        tool should be used for linking and dependency tracking. These\n"
     "        should match entries in the \"outputs\". If unspecified, the\n"
     "        first item in the \"outputs\" array will be used for both. See\n"
@@ -594,6 +595,13 @@ const char kTool_Help[] =
     "        omitted from the label for targets in the default toolchain, and\n"
     "        will be included for targets in other toolchains.\n"
     "\n"
+    "    {{label_name}}\n"
+    "        The short name of the label of the target. This is the part\n"
+    "        after the colon. For \"//foo/bar:baz\" this will be \"baz\".\n"
+    "        Unlike {{target_output_name}}, this is not affected by the\n"
+    "        \"output_prefix\" in the tool or the \"output_name\" set\n"
+    "        on the target.\n"
+    "\n"
     "    {{output}}\n"
     "        The relative path and name of the output(s) of the current\n"
     "        build step. If there is more than one output, this will expand\n"
@@ -611,6 +619,7 @@ const char kTool_Help[] =
     "        The short name of the current target with no path information,\n"
     "        or the value of the \"output_name\" variable if one is specified\n"
     "        in the target. This will include the \"output_prefix\" if any.\n"
+    "        See also {{label_name}}.\n"
     "        Example: \"libfoo\" for the target named \"foo\" and an\n"
     "        output prefix for the linker tool of \"lib\".\n"
     "\n"
@@ -847,9 +856,10 @@ Value RunTool(Scope* scope,
   // Validate that the link_output and depend_output refer to items in the
   // outputs and aren't defined for irrelevant tool types.
   if (!tool->link_output().empty()) {
-    if (tool_type != Toolchain::TYPE_SOLINK) {
+    if (tool_type != Toolchain::TYPE_SOLINK &&
+        tool_type != Toolchain::TYPE_SOLINK_MODULE) {
       *err = Err(function, "This tool specifies a link_output.",
-          "This is only valid for solink tools.");
+          "This is only valid for solink and solink_module tools.");
       return Value();
     }
     if (!IsPatternInOutputList(tool->outputs(), tool->link_output())) {
@@ -859,9 +869,10 @@ Value RunTool(Scope* scope,
     }
   }
   if (!tool->depend_output().empty()) {
-    if (tool_type != Toolchain::TYPE_SOLINK) {
+    if (tool_type != Toolchain::TYPE_SOLINK &&
+        tool_type != Toolchain::TYPE_SOLINK_MODULE) {
       *err = Err(function, "This tool specifies a depend_output.",
-          "This is only valid for solink tools.");
+          "This is only valid for solink and solink_module tools.");
       return Value();
     }
     if (!IsPatternInOutputList(tool->outputs(), tool->depend_output())) {

@@ -20,11 +20,10 @@ from devil.utils import cmd_helper
 from pylib import constants
 from pylib.utils import emulator
 
-
 def main(argv):
   # ANDROID_SDK_ROOT needs to be set to the location of the SDK used to launch
   # the emulator to find the system images upon launch.
-  emulator_sdk = os.path.join(constants.EMULATOR_SDK_ROOT, 'sdk')
+  emulator_sdk = constants.ANDROID_SDK_ROOT
   os.environ['ANDROID_SDK_ROOT'] = emulator_sdk
 
   opt_parser = optparse.OptionParser(description='AVD script.')
@@ -38,12 +37,28 @@ def main(argv):
   opt_parser.add_option('--api-level', dest='api_level',
                         help='API level for the image, e.g. 19 for Android 4.4',
                         type='int', default=constants.ANDROID_SDK_VERSION)
+  opt_parser.add_option('--kill-existing-emulators', action='store_true',
+                        dest='kill', default=False,
+                        help='Shutdown all existing emulators')
 
   options, _ = opt_parser.parse_args(argv[1:])
 
-  logging.basicConfig(level=logging.INFO,
-                      format='# %(asctime)-15s: %(message)s')
   logging.root.setLevel(logging.INFO)
+
+  # Make sure --kill-existing-emulators is mutually exclusive with other options
+  if options.kill and len(argv[1:]) > 1:
+    logging.error('--kill-existing-emulators was specified. '
+                  'Ignoring all other arguments.')
+
+  if options.kill:
+    logging.info('Killing all existing emulator and existing the program')
+    emulator.KillAllEmulators()
+    return
+
+ # Check if SDK exist in ANDROID_SDK_ROOT
+  if not install_emulator_deps.CheckSDK():
+    raise Exception('Emulator SDK not installed in %s'
+                     % constants.ANDROID_SDK_ROOT)
 
   # Check if KVM is enabled for x86 AVD's and check for x86 system images.
   # TODO(andrewhayden) Since we can fix all of these with install_emulator_deps
@@ -58,16 +73,11 @@ def main(argv):
                        'install_emulator_deps.py')
       return 1
 
-  if not install_emulator_deps.CheckSDK():
-    logging.critical('ERROR: Emulator SDK not installed. Run '
-                     'install_emulator_deps.py.')
-    return 1
-
   # If AVD is specified, check that the SDK has the required target. If not,
   # check that the SDK has the desired target for the temporary AVD's.
   api_level = options.api_level
   if options.name:
-    android = os.path.join(constants.EMULATOR_SDK_ROOT, 'sdk', 'tools',
+    android = os.path.join(constants.ANDROID_SDK_ROOT, 'tools',
                            'android')
     avds_output = cmd_helper.GetCmdOutput([android, 'list', 'avd'])
     names = re.findall(r'Name: (\w+)', avds_output)
