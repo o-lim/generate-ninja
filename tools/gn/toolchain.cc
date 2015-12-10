@@ -56,6 +56,10 @@ SourceFileType Toolchain::GetSourceFileType(const SourceFile& file) const {
       }
     }
   }
+  for (const auto & ext : object_extensions_) {
+    if (extension == ext)
+      return SOURCE_O;
+  }
 
   if (!ToolHasSourceExtensions(TYPE_CXX) &&
       (extension == "cc" || extension == "cpp" || extension == "cxx" ||
@@ -82,7 +86,8 @@ SourceFileType Toolchain::GetSourceFileType(const SourceFile& file) const {
   if (!ToolHasSourceExtensions(TYPE_ASM) &&
       extension == "asm")
     return SOURCE_ASM;
-  if (extension == "o" || extension == "obj")
+  if (object_extensions_.empty() &&
+      (extension == "o" || extension == "obj"))
     return SOURCE_O;
   if (extension == "def")
     return SOURCE_DEF;

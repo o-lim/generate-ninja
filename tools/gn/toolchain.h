@@ -121,6 +121,9 @@ class Toolchain : public Item {
   void set_concurrent_links(int cl) { concurrent_links_ = cl; }
   int concurrent_links() const { return concurrent_links_; }
 
+  const std::vector<std::string> & object_extensions() const { return object_extensions_; }
+  std::vector<std::string> & object_extensions() { return object_extensions_; }
+
  private:
   scoped_ptr<Tool> tools_[TYPE_NUMTYPES];
 
@@ -135,6 +138,8 @@ class Toolchain : public Item {
 
   LabelTargetVector deps_;
   Scope::KeyValueMap args_;
+
+  std::vector<std::string> object_extensions_;
 };
 
 #endif  // TOOLS_GN_TOOLCHAIN_H_

@@ -284,6 +284,10 @@ const char kToolchain_Help[] =
     "    The value used will be the one from the default toolchain of the\n"
     "    current build.\n"
     "\n"
+    "  object_extensions\n"
+    "    List of object extensions for this toolchain. Object files are passed\n"
+    "    directly to the output list and not compiled.\n"
+    "\n"
     "Invoking targets in toolchains:\n"
     "\n"
     "  By default, when a target depends on another, there is an implicit\n"
@@ -379,6 +383,16 @@ Value RunToolchain(Scope* scope,
     }
     toolchain->set_concurrent_links(
         static_cast<int>(concurrent_links_value->int_value()));
+  }
+
+  // Read object_extensions (if any).
+  const Value* object_extensions_value =
+      block_scope.GetValue("object_extensions", true);
+  if (object_extensions_value) {
+    ExtractListOfStringValues(
+        *object_extensions_value, &toolchain->object_extensions(), err);
+    if (err->has_error())
+      return Value();
   }
 
   if (!block_scope.CheckForUnusedVars(err))
