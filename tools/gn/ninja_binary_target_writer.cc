@@ -111,8 +111,10 @@ bool GetOutputFilesForSource(const Target* target,
   SourceFileType file_type = target->toolchain()->GetSourceFileType(source);
   if (file_type == SOURCE_UNKNOWN)
     return false;
-  if (file_type == SOURCE_O) {
-    // Object files just get passed to the output and not compiled.
+  if (file_type == SOURCE_O ||
+      (file_type == SOURCE_LINK && target->linked_output())) {
+    // Object files and linker scripts just get passed to the output and
+    // not compiled.
     outputs->push_back(
         OutputFile(target->settings()->build_settings(), source));
     return true;

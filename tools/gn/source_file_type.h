@@ -20,6 +20,7 @@ enum SourceFileType {
   SOURCE_S,
   SOURCE_RC,
   SOURCE_O,  // Object files can be inputs, too. Also counts .obj.
+  SOURCE_LINK,  // Linker scripts can be inputs, too.
   SOURCE_DEF,
 
   // Must be last.

@@ -89,6 +89,11 @@ SourceFileType Toolchain::GetSourceFileType(const SourceFile& file) const {
   if (object_extensions_.empty() &&
       (extension == "o" || extension == "obj"))
     return SOURCE_O;
+  if (!(ToolHasSourceExtensions(TYPE_LINK) ||
+        ToolHasSourceExtensions(TYPE_SOLINK) ||
+        ToolHasSourceExtensions(TYPE_SOLINK_MODULE)) &&
+      extension == "ld")
+    return SOURCE_LINK;
   if (extension == "def")
     return SOURCE_DEF;
 
@@ -175,6 +180,7 @@ Toolchain::ToolType Toolchain::GetToolTypeForSourceType(SourceFileType type) {
     case SOURCE_H:
     case SOURCE_O:
     case SOURCE_DEF:
+    case SOURCE_LINK:
       return TYPE_NONE;
     default:
       NOTREACHED();
@@ -196,6 +202,10 @@ SourceFileType Toolchain::GetSourceTypeForToolType(ToolType type) {
       return SOURCE_ASM;
     case TYPE_RC:
       return SOURCE_RC;
+    case TYPE_LINK:
+    case TYPE_SOLINK:
+    case TYPE_SOLINK_MODULE:
+      return SOURCE_LINK;
     default:
       return SOURCE_UNKNOWN;
   }

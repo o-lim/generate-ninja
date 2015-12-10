@@ -136,6 +136,14 @@ class Target : public Item {
            output_type_ == COPY_FILES;
   }
 
+  // Returns true if target generates a linked output such as an executable
+  // or shared object.
+  bool linked_output() const {
+    return output_type_ == EXECUTABLE ||
+           output_type_ == SHARED_LIBRARY ||
+           output_type_ == LOADABLE_MODULE;
+  }
+
   // Returns the iterator range which can be used in range-based for loops
   // to iterate over multiple types of deps in one loop:
   //   for (const auto& pair : target->GetDeps(Target::DEPS_ALL)) ...
