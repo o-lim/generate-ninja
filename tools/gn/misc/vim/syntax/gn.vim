@@ -45,8 +45,8 @@ syn keyword     gnVariable all_dependent_configs allow_circular_includes_from
 syn keyword     gnVariable args asmflags cflags cflags_c cflags_cc cflags_objc
 syn keyword     gnVariable cflags_objcc check_includes complete_static_lib
 syn keyword     gnVariable cppflags cppflags_c cppflags_cc cppflags_objc
-syn keyword     gnVariable cppflags_objcc command description
-syn keyword     gnVariable configs data data_deps defines depfile deps
+syn keyword     gnVariable cppflags_objcc command configs description
+syn keyword     gnVariable data data_deps defines depfile deps depsformat
 syn keyword     gnVariable include_dirs inputs ldflags lib_dirs libs
 syn keyword     gnVariable output_extension output_name outputs public
 syn keyword     gnVariable public_configs public_deps scripte sources testonly
