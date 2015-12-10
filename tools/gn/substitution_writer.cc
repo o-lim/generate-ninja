@@ -96,7 +96,7 @@ const char kSourceExpansion_Help[] =
     "\n"
     "  {{source_out_dir}}\n"
     "      The object file directory (*) corresponding to the source file's\n"
-    "      path, relative to the build directory. this us be different than\n"
+    "      path, relative to the build directory. This must be different than\n"
     "      the target's out directory if the source file is in a different\n"
     "      directory than the build.gn file.\n"
     "        \"//foo/bar/baz.txt\" => \"obj/foo/bar\"\n"

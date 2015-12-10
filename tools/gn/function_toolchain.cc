@@ -271,7 +271,7 @@ const char kToolchain_Help[] =
     "    absolutely necessary.\n"
     "\n"
     "  concurrent_links\n"
-    "    In integer expressing the number of links that Ninja will perform in\n"
+    "    An integer expressing the number of links that Ninja will perform in\n"
     "    parallel. GN will create a pool for shared library and executable\n"
     "    link steps with this many processes. Since linking is memory- and\n"
     "    I/O-intensive, projects with many large targets may want to limit\n"
