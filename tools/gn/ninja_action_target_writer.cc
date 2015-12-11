@@ -203,6 +203,10 @@ void NinjaActionTargetWriter::WriteSourceRules(
         settings_, sources[i],
         target_->action_values().rsp_file_contents().required_types(),
         args_escape_options, out_);
+    SubstitutionWriter::WriteNinjaVariablesForSource(
+        settings_, sources[i],
+        target_->action_values().description().required_types(),
+        args_escape_options, out_);
 
     if (target_->action_values().has_depfile()) {
       out_ << "  depfile = ";

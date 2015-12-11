@@ -114,18 +114,11 @@ bool ActionTargetGenerator::FillCommandOrScript() {
 
 bool ActionTargetGenerator::FillCommand() {
   const Value* value = scope_->GetValue(variables::kCommand, true);
-  if (!value) {
-    return false;
-  }
-  if (!value->VerifyTypeIs(Value::STRING, err_))
+  if (!value)
     return false;
 
   SubstitutionPattern pattern;
   if (!pattern.Parse(*value, err_))
-    return false;
-  if (!ValidateSubstitutionList(pattern.required_types(), value, err_))
-    return false;
-  if (err_->has_error())
     return false;
   target_->action_values().set_command(pattern);
   return true;
@@ -135,14 +128,9 @@ bool ActionTargetGenerator::FillDescription() {
   const Value* value = scope_->GetValue(variables::kDescription, true);
   if (!value)
     return true;
-  if (!value->VerifyTypeIs(Value::STRING, err_))
-    return false;
+
   SubstitutionPattern pattern;
   if (!pattern.Parse(*value, err_))
-    return false;
-  if (!ValidateSubstitutionList(pattern.required_types(), value, err_))
-    return false;
-  if (err_->has_error())
     return false;
   target_->action_values().set_description(pattern);
   return true;
@@ -230,20 +218,6 @@ bool ActionTargetGenerator::CheckOutputs() {
           "An action_foreach target should have a source expansion pattern in\n"
           "it to map source file to unique output file name. Otherwise, the\n"
           "build system can't determine when your script needs to be run.");
-      return false;
-    }
-  }
-  return true;
-}
-
-bool ActionTargetGenerator::ValidateSubstitutionList(const std::vector<SubstitutionType>& list,
-                                                     const Value* value,
-                                                     Err* err) {
-  for (const auto& cur_type : list) {
-    if (!IsValidSourceSubstitution(cur_type)) {
-      *err = Err(*value, "Pattern not valid here.",
-          "You used the pattern " + std::string(kSubstitutionNames[cur_type]) +
-          "which is not valid\n for this variable.");
       return false;
     }
   }
