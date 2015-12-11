@@ -2390,6 +2390,7 @@
     Linker tools:
       "alink": Linker for static libraries (archives)
       "solink": Linker for shared libraries
+      "solink_module": Linker for loadable modules
       "link": Linker for executables
 
     Other tools:
@@ -2494,7 +2495,7 @@
 
     link_output  [string with substitutions]
     depend_output  [string with substitutions]
-        Valid for: "solink" only (optional)
+        Valid for: "solink" and "solink_module" only (optional)
 
         These two files specify which of the outputs from the solink
         tool should be used for linking and dependency tracking. These
@@ -2575,7 +2576,7 @@
           }
 
     source_extensions  [list of strings]
-        Valid for: compiler tools (optional)
+        Valid for: compiler and linker tools except "alink" (optional)
 
         Specifies the source file extensions for which the tool applies.
 
@@ -2586,6 +2587,7 @@
            objcxx: [ "mm" ]
            asm: [ "asm", "S", "s" ]
            rc: [ "rc" ]
+           link, solink, solink_module: [ "ld" ]
 
 ```
 
@@ -2814,7 +2816,7 @@
     absolutely necessary.
 
   concurrent_links
-    In integer expressing the number of links that Ninja will perform in
+    An integer expressing the number of links that Ninja will perform in
     parallel. GN will create a pool for shared library and executable
     link steps with this many processes. Since linking is memory- and
     I/O-intensive, projects with many large targets may want to limit
@@ -2826,6 +2828,10 @@
 
     The value used will be the one from the default toolchain of the
     current build.
+
+  object_extensions
+    List of object extensions for this toolchain. Object files are passed
+    directly to the output list and not compiled.
 
 ```
 
@@ -5366,7 +5372,7 @@
 
   {{source_out_dir}}
       The object file directory (*) corresponding to the source file's
-      path, relative to the build directory. this us be different than
+      path, relative to the build directory. This must be different than
       the target's out directory if the source file is in a different
       directory than the build.gn file.
         "//foo/bar/baz.txt" => "obj/foo/bar"
