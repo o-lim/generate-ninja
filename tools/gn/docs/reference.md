@@ -387,6 +387,7 @@
       Outputs for script and copy target types.
 
   asmflags        [--blame]
+  asmppflags      [--blame]
   defines         [--blame]
   include_dirs    [--blame]
   cflags          [--blame]
@@ -3372,6 +3373,35 @@
 
 
 ```
+## **asmppflags**: Flags passed to the assembler pre-processor.
+
+```
+  A list of strings.
+
+  "asmppflags" are passed to any invocation of a tool that takes an
+  .asm or .S file as input.
+
+```
+
+### **Ordering of flags and values**
+
+```
+  1. Those set on the current target (not in a config).
+  2. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  3. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  4. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  5. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  6. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+
+
+```
 ## **cflags***: Flags passed to the C compiler.
 
 ```
@@ -3774,46 +3804,10 @@
 
   To target one of these variants individually, use "cppflags_c",
   "cppflags_cc", "cppflags_objc", and "cppflags_objcc",
-  respectively.
+  respectively. These variant-specific versions of cppflags* will be
+  appended to the "cppflags".
 
-  These variant-specific versions of cppflags* will be appended to the
-  "cppflags".
-
-```
-
-### **Ordering of flags and values**
-
-```
-  1. Those set on the current target (not in a config).
-  2. Those set on the "configs" on the target in order that the
-     configs appear in the list.
-  3. Those set on the "all_dependent_configs" on the target in order
-     that the configs appear in the list.
-  4. Those set on the "public_configs" on the target in order that
-     those configs appear in the list.
-  5. all_dependent_configs pulled from dependencies, in the order of
-     the "deps" list. This is done recursively. If a config appears
-     more than once, only the first occurance will be used.
-  6. public_configs pulled from dependencies, in the order of the
-     "deps" list. If a dependency is public, they will be applied
-     recursively.
-
-
-```
-## **cppflags***: Flags passed to the pre-processor.
-
-```
-  A list of strings.
-
-  "cppflags" are passed to all invocations of the C, C++, Objective C,
-  and Objective C++ compilers.
-
-  To target one of these variants individually, use "cppflags_c",
-  "cppflags_cc", "cppflags_objc", and "cppflags_objcc",
-  respectively.
-
-  These variant-specific versions of cppflags* will be appended to the
-  "cppflags".
+  See also "asmppflags" for flags for assembly-language files.
 
 ```
 
@@ -3846,46 +3840,10 @@
 
   To target one of these variants individually, use "cppflags_c",
   "cppflags_cc", "cppflags_objc", and "cppflags_objcc",
-  respectively.
+  respectively. These variant-specific versions of cppflags* will be
+  appended to the "cppflags".
 
-  These variant-specific versions of cppflags* will be appended to the
-  "cppflags".
-
-```
-
-### **Ordering of flags and values**
-
-```
-  1. Those set on the current target (not in a config).
-  2. Those set on the "configs" on the target in order that the
-     configs appear in the list.
-  3. Those set on the "all_dependent_configs" on the target in order
-     that the configs appear in the list.
-  4. Those set on the "public_configs" on the target in order that
-     those configs appear in the list.
-  5. all_dependent_configs pulled from dependencies, in the order of
-     the "deps" list. This is done recursively. If a config appears
-     more than once, only the first occurance will be used.
-  6. public_configs pulled from dependencies, in the order of the
-     "deps" list. If a dependency is public, they will be applied
-     recursively.
-
-
-```
-## **cppflags***: Flags passed to the pre-processor.
-
-```
-  A list of strings.
-
-  "cppflags" are passed to all invocations of the C, C++, Objective C,
-  and Objective C++ compilers.
-
-  To target one of these variants individually, use "cppflags_c",
-  "cppflags_cc", "cppflags_objc", and "cppflags_objcc",
-  respectively.
-
-  These variant-specific versions of cppflags* will be appended to the
-  "cppflags".
+  See also "asmppflags" for flags for assembly-language files.
 
 ```
 
@@ -3918,10 +3876,82 @@
 
   To target one of these variants individually, use "cppflags_c",
   "cppflags_cc", "cppflags_objc", and "cppflags_objcc",
-  respectively.
+  respectively. These variant-specific versions of cppflags* will be
+  appended to the "cppflags".
 
-  These variant-specific versions of cppflags* will be appended to the
-  "cppflags".
+  See also "asmppflags" for flags for assembly-language files.
+
+```
+
+### **Ordering of flags and values**
+
+```
+  1. Those set on the current target (not in a config).
+  2. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  3. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  4. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  5. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  6. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+
+
+```
+## **cppflags***: Flags passed to the pre-processor.
+
+```
+  A list of strings.
+
+  "cppflags" are passed to all invocations of the C, C++, Objective C,
+  and Objective C++ compilers.
+
+  To target one of these variants individually, use "cppflags_c",
+  "cppflags_cc", "cppflags_objc", and "cppflags_objcc",
+  respectively. These variant-specific versions of cppflags* will be
+  appended to the "cppflags".
+
+  See also "asmppflags" for flags for assembly-language files.
+
+```
+
+### **Ordering of flags and values**
+
+```
+  1. Those set on the current target (not in a config).
+  2. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  3. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  4. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  5. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  6. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+
+
+```
+## **cppflags***: Flags passed to the pre-processor.
+
+```
+  A list of strings.
+
+  "cppflags" are passed to all invocations of the C, C++, Objective C,
+  and Objective C++ compilers.
+
+  To target one of these variants individually, use "cppflags_c",
+  "cppflags_cc", "cppflags_objc", and "cppflags_objcc",
+  respectively. These variant-specific versions of cppflags* will be
+  appended to the "cppflags".
+
+  See also "asmppflags" for flags for assembly-language files.
 
 ```
 

@@ -523,6 +523,7 @@ const char kDesc_Help[] =
     "      Outputs for script and copy target types.\n"
     "\n"
     "  asmflags        [--blame]\n"
+    "  asmppflags      [--blame]\n"
     "  defines         [--blame]\n"
     "  include_dirs    [--blame]\n"
     "  cflags          [--blame]\n"
@@ -674,6 +675,7 @@ int RunDesc(const std::vector<std::string>& args) {
     CONFIG_VALUE_HANDLER(defines, std::string)
     CONFIG_VALUE_HANDLER(include_dirs, SourceDir)
     CONFIG_VALUE_HANDLER(asmflags, std::string)
+    CONFIG_VALUE_HANDLER(asmppflags, std::string)
     CONFIG_VALUE_HANDLER(cflags, std::string)
     CONFIG_VALUE_HANDLER(cflags_c, std::string)
     CONFIG_VALUE_HANDLER(cflags_cc, std::string)
@@ -739,6 +741,7 @@ int RunDesc(const std::vector<std::string>& args) {
     OUTPUT_CONFIG_VALUE(defines, std::string)
     OUTPUT_CONFIG_VALUE(include_dirs, SourceDir)
     OUTPUT_CONFIG_VALUE(asmflags, std::string)
+    OUTPUT_CONFIG_VALUE(asmppflags, std::string)
     OUTPUT_CONFIG_VALUE(cflags, std::string)
     OUTPUT_CONFIG_VALUE(cflags_c, std::string)
     OUTPUT_CONFIG_VALUE(cflags_cc, std::string)

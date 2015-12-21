@@ -423,6 +423,18 @@ const char* kAsmflags_Help =
     "  .asm or .S file as input.\n"
     COMMON_ORDERING_HELP;
 
+const char kAsmppflags[] = "asmppflags";
+const char kAsmppflags_HelpShort[] =
+    "asmppflags: [string list] Flags passed to the assembler pre-processor.";
+const char* kAsmppflags_Help =
+    "asmppflags: Flags passed to the assembler pre-processor.\n"
+    "\n"
+    "  A list of strings.\n"
+    "\n"
+    "  \"asmppflags\" are passed to any invocation of a tool that takes an\n"
+    "  .asm or .S file as input.\n"
+    COMMON_ORDERING_HELP;
+
 const char kCflagsC[] = "cflags_c";
 const char kCflagsC_HelpShort[] =
     "cflags_c: [string list] Flags passed to the C compiler.";
@@ -445,7 +457,7 @@ const char* kCflagsObjCC_Help = kCommonCflagsHelp;
 
 const char kCppflags[] = "cppflags";
 const char kCppflags_HelpShort[] =
-    "cppflags: [string list] Flags passed to all pre-processor variants.";
+    "cppflags: [string list] Flags passed to all C pre-processor variants.";
 const char kCommonCppflagsHelp[] =
     "cppflags*: Flags passed to the pre-processor.\n"
     "\n"
@@ -456,10 +468,10 @@ const char kCommonCppflagsHelp[] =
     "\n"
     "  To target one of these variants individually, use \"cppflags_c\",\n"
     "  \"cppflags_cc\", \"cppflags_objc\", and \"cppflags_objcc\",\n"
-    "  respectively.\n"
+    "  respectively. These variant-specific versions of cppflags* will be\n"
+    "  appended to the \"cppflags\".\n"
     "\n"
-    "  These variant-specific versions of cppflags* will be appended to the\n"
-    "  \"cppflags\".\n"
+    "  See also \"asmppflags\" for flags for assembly-language files.\n"
     COMMON_ORDERING_HELP;
 const char* kCppflags_Help = kCommonCppflagsHelp;
 
@@ -1450,6 +1462,7 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(AllowCircularIncludesFrom)
     INSERT_VARIABLE(Args)
     INSERT_VARIABLE(Asmflags)
+    INSERT_VARIABLE(Asmppflags)
     INSERT_VARIABLE(Cflags)
     INSERT_VARIABLE(CflagsC)
     INSERT_VARIABLE(CflagsCC)

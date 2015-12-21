@@ -421,6 +421,8 @@ void NinjaBinaryTargetWriter::WriteCompilerVars(
   if (used_types.Get(SOURCE_S) || used_types.Get(SOURCE_ASM)) {
     WriteOneFlag(SUBSTITUTION_ASMFLAGS, false, Toolchain::TYPE_NONE,
                  &ConfigValues::asmflags, opts);
+    WriteOneFlag(SUBSTITUTION_ASMPPFLAGS, false, Toolchain::TYPE_NONE,
+                 &ConfigValues::asmppflags, opts);
   }
   if (used_types.Get(SOURCE_C) || used_types.Get(SOURCE_CPP) ||
       used_types.Get(SOURCE_M) || used_types.Get(SOURCE_MM)) {

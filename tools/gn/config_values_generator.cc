@@ -70,6 +70,7 @@ void ConfigValuesGenerator::Run() {
                &ConfigValues::name, err_);
 
   FILL_STRING_CONFIG_VALUE(asmflags)
+  FILL_STRING_CONFIG_VALUE(asmppflags)
   FILL_STRING_CONFIG_VALUE(cflags)
   FILL_STRING_CONFIG_VALUE(cflags_c)
   FILL_STRING_CONFIG_VALUE(cflags_cc)
