@@ -5,6 +5,7 @@
 #ifndef BASE_TRACE_EVENT_HEAP_PROFILER_ALLOCATION_CONTEXT_H_
 #define BASE_TRACE_EVENT_HEAP_PROFILER_ALLOCATION_CONTEXT_H_
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include "base/base_export.h"
@@ -82,12 +83,12 @@ bool BASE_EXPORT operator==(const AllocationContext& lhs,
 namespace BASE_HASH_NAMESPACE {
 
 template <>
-struct hash<base::trace_event::Backtrace> {
+struct BASE_EXPORT hash<base::trace_event::Backtrace> {
   size_t operator()(const base::trace_event::Backtrace& backtrace) const;
 };
 
 template <>
-struct hash<base::trace_event::AllocationContext> {
+struct BASE_EXPORT hash<base::trace_event::AllocationContext> {
   size_t operator()(const base::trace_event::AllocationContext& context) const;
 };
 

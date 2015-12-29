@@ -283,7 +283,7 @@ config("compiler") {
       #"-Wl,--thread-count=4",
     ]
 
-    if (!using_sanitizer) {
+    if (!using_sanitizer && !(is_android && use_order_profiling)) {
       # TODO(brettw) common.gypi has this only for target toolset.
       ldflags += [ "-Wl,--icf=all" ]
     }
@@ -732,7 +732,6 @@ config("default_warnings") {
       "/wd4100",  # Unreferenced formal function parameter.
       "/wd4121",  # Alignment of a member was sensitive to packing.
       "/wd4244",  # Conversion: possible loss of data.
-      "/wd4481",  # Nonstandard extension: override specifier.
       "/wd4505",  # Unreferenced local function has been removed.
       "/wd4510",  # Default constructor could not be generated.
       "/wd4512",  # Assignment operator could not be generated.
@@ -779,16 +778,6 @@ config("default_warnings") {
       ]
     }
   } else {
-    # Common GCC warning setup.
-    cflags += [
-      # Enables.
-      "-Wendif-labels",  # Weird old-style text after an #endif.
-
-      # Disables.
-      "-Wno-missing-field-initializers",  # "struct foo f = {0};"
-      "-Wno-unused-parameter",  # Unused function parameters.
-    ]
-
     if (treat_warnings_as_errors) {
       cflags += [ "-Werror" ]
     }
@@ -828,6 +817,15 @@ config("default_warnings") {
       # TODO: remove this flag once all builds work. See crbug.com/227506
       cflags += [ "-Wno-unused-local-typedefs" ]
     }
+  }
+
+  # Common Clang and GCC warning setup.
+  if (!is_win || is_clang) {
+    cflags += [
+      # Disables.
+      "-Wno-missing-field-initializers",  # "struct foo f = {0};"
+      "-Wno-unused-parameter",  # Unused function parameters.
+    ]
   }
 
   if (is_clang) {
@@ -1075,11 +1073,11 @@ if (is_win) {
       "/Gw",
     ]
   }
-  common_optimize_on_ldflags = [ "/OPT:ICF" ]
+  common_optimize_on_ldflags = [ "/OPT:ICF" ]  # Redundant COMDAT folding.
   if (is_official_build) {
     common_optimize_on_ldflags += [
-      # Link-time code generation.
-      "/LTCG",
+      "/OPT:REF",  # Remove unreferenced data.
+      "/LTCG",  # Link-time code generation.
 
       # Set the number of LTCG code-gen threads to eight. The default is four.
       # This gives a 5-10% link speedup.

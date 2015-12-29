@@ -16,7 +16,6 @@ with the following files/directories exported directly via git archive:
   testing/*.h
   testing/*.cc
   testing/*.mm
-  third_party/libevent
   third_party/libxml
   third_party/modp_b64
   third_party/zlib

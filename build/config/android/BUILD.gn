@@ -33,6 +33,7 @@ config("compiler") {
   if (is_clang) {
     rebased_android_toolchain_root =
         rebase_path(android_toolchain_root, root_build_dir)
+    assert(rebased_android_toolchain_root != "")  # Mark as used.
     if (current_cpu == "mipsel") {
       cflags += [
         # TODO(gordanac) Enable integrated-as.
@@ -75,7 +76,7 @@ config("compiler") {
     # http://crbug.com/448386
     "-Wl,--exclude-libs=libvpx_assembly_arm.a",
   ]
-  if (current_cpu == "arm") {
+  if (current_cpu == "arm" && !use_order_profiling) {
     ldflags += [
       # Enable identical code folding to reduce size.
       "-Wl,--icf=safe",
@@ -145,7 +146,9 @@ config("runtime_library") {
   lib_dirs = [ "$android_libcpp_root/libs/$android_app_abi" ]
 
   # The libc++ runtime library (must come first).
-  if (is_component_build) {
+  # ASan needs to dynamically link to libc++ even in static builds so
+  # that it can interpose operator new.
+  if (is_component_build || is_asan) {
     libs = [ "c++_shared" ]
   } else {
     libs = [ "c++_static" ]
@@ -223,17 +226,19 @@ config("default_cygprofile_instrumentation") {
 }
 
 config("cygprofile_instrumentation") {
-  cflags = [
-    "-finstrument-functions",
-
-    # Allow mmx intrinsics to inline, so that the compiler can expand the intrinsics.
-    "-finstrument-functions-exclude-file-list=mmintrin.h",
-
-    # Avoid errors with current NDK:
-    # "third_party/android_tools/ndk/toolchains/arm-linux-androideabi-4.6/prebuilt/linux-x86_64/bin/../lib/gcc/arm-linux-androideabi/4.6/include/arm_neon.h:3426:3: error: argument must be a constant"
-    "-finstrument-functions-exclude-file-list=arm_neon.h,SaturatedArithmeticARM.h",
-  ]
   defines = [ "CYGPROFILE_INSTRUMENTATION=1" ]
+  cflags = [ "-finstrument-functions" ]
+
+  if (!is_clang) {
+    cflags += [
+      # Allow mmx intrinsics to inline, so that the compiler can expand the intrinsics.
+      "-finstrument-functions-exclude-file-list=mmintrin.h",
+
+      # Avoid errors with current NDK:
+      # "third_party/android_tools/ndk/toolchains/arm-linux-androideabi-4.6/prebuilt/linux-x86_64/bin/../lib/gcc/arm-linux-androideabi/4.6/include/arm_neon.h:3426:3: error: argument must be a constant"
+      "-finstrument-functions-exclude-file-list=arm_neon.h",
+    ]
+  }
 }
 
 config("no_cygprofile_instrumentation") {

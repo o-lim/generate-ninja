@@ -4,6 +4,8 @@
 
 #include "tools/gn/build_settings.h"
 
+#include <utility>
+
 #include "base/files/file_util.h"
 #include "tools/gn/filesystem_utils.h"
 
@@ -66,5 +68,5 @@ base::FilePath BuildSettings::GetFullPathSecondary(
 void BuildSettings::ItemDefined(scoped_ptr<Item> item) const {
   DCHECK(item);
   if (!item_defined_callback_.is_null())
-    item_defined_callback_.Run(item.Pass());
+    item_defined_callback_.Run(std::move(item));
 }

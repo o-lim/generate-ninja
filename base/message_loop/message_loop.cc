@@ -22,6 +22,7 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "base/tracked_objects.h"
+#include "build/build_config.h"
 
 #if defined(OS_MACOSX)
 #include "base/message_loop/message_pump_mac.h"
@@ -300,7 +301,12 @@ void MessageLoop::QuitWhenIdle() {
   if (run_loop_) {
     run_loop_->quit_when_idle_received_ = true;
   } else {
-    NOTREACHED() << "Must be inside Run to call Quit";
+    // We don't assert that run_loop_ is valid for custom message pumps. Some,
+    // for example MojoMessagePump, might have shutdown already based on other
+    // shutdown signals.
+    if (type_ != MessageLoop::TYPE_CUSTOM) {
+      NOTREACHED() << "Must be inside Run to call Quit";
+    }
   }
 }
 

@@ -6,15 +6,14 @@
 # pylint: disable=protected-access
 
 import itertools
-import sys
 import unittest
 
 from devil import devil_env
 from devil.android import logcat_monitor
 from devil.android.sdk import adb_wrapper
 
-sys.path.append(devil_env.config.LocalPath('pymock'))
-import mock # pylint: disable=import-error
+with devil_env.SysPath(devil_env.config.LocalPath('pymock')):
+  import mock # pylint: disable=import-error
 
 
 def _CreateTestLog(raw_logcat=None):
@@ -22,7 +21,6 @@ def _CreateTestLog(raw_logcat=None):
   test_adb.Logcat = mock.Mock(return_value=(l for l in raw_logcat))
   test_log = logcat_monitor.LogcatMonitor(test_adb, clear=False)
   return test_log
-
 
 class LogcatMonitorTest(unittest.TestCase):
 
@@ -40,7 +38,7 @@ class LogcatMonitorTest(unittest.TestCase):
         '01-01 01:02:03.461  2345  5432 F LogcatMonitorTest: '
             'fatal logcat monitor test message 6',
         '01-01 01:02:03.462  3456  6543 D LogcatMonitorTest: '
-            'ignore me',]
+            'last line',]
 
   def assertIterEqual(self, expected_iter, actual_iter):
     for expected, actual in itertools.izip_longest(expected_iter, actual_iter):
@@ -61,9 +59,11 @@ class LogcatMonitorTest(unittest.TestCase):
     with self.assertRaises(StopIteration):
       next(expected_iter)
 
+  @mock.patch('time.sleep', mock.Mock())
   def testWaitFor_success(self):
     test_log = _CreateTestLog(
         raw_logcat=type(self)._TEST_THREADTIME_LOGCAT_DATA)
+    test_log.Start()
     actual_match = test_log.WaitFor(r'.*(fatal|error) logcat monitor.*', None)
     self.assertTrue(actual_match)
     self.assertEqual(
@@ -71,17 +71,27 @@ class LogcatMonitorTest(unittest.TestCase):
             'error logcat monitor test message 5',
         actual_match.group(0))
     self.assertEqual('error', actual_match.group(1))
+    test_log.Stop()
+    test_log.Close()
 
+  @mock.patch('time.sleep', mock.Mock())
   def testWaitFor_failure(self):
     test_log = _CreateTestLog(
         raw_logcat=type(self)._TEST_THREADTIME_LOGCAT_DATA)
+    test_log.Start()
     actual_match = test_log.WaitFor(
         r'.*My Success Regex.*', r'.*(fatal|error) logcat monitor.*')
     self.assertIsNone(actual_match)
+    test_log.Stop()
+    test_log.Close()
 
+  @mock.patch('time.sleep', mock.Mock())
   def testFindAll_defaults(self):
     test_log = _CreateTestLog(
         raw_logcat=type(self)._TEST_THREADTIME_LOGCAT_DATA)
+    test_log.Start()
+    test_log.WaitFor(r'.*last line.*', None)
+    test_log.Stop()
     expected_results = [
         ('7890', '0987', 'V', 'LogcatMonitorTest',
          'verbose logcat monitor test message 1'),
@@ -97,37 +107,57 @@ class LogcatMonitorTest(unittest.TestCase):
          'fatal logcat monitor test message 6')]
     actual_results = test_log.FindAll(r'\S* logcat monitor test message \d')
     self.assertIterEqual(iter(expected_results), actual_results)
+    test_log.Close()
 
+  @mock.patch('time.sleep', mock.Mock())
   def testFindAll_defaults_miss(self):
     test_log = _CreateTestLog(
         raw_logcat=type(self)._TEST_THREADTIME_LOGCAT_DATA)
+    test_log.Start()
+    test_log.WaitFor(r'.*last line.*', None)
+    test_log.Stop()
     expected_results = []
     actual_results = test_log.FindAll(r'\S* nothing should match this \d')
     self.assertIterEqual(iter(expected_results), actual_results)
+    test_log.Close()
 
+  @mock.patch('time.sleep', mock.Mock())
   def testFindAll_filterProcId(self):
     test_log = _CreateTestLog(
         raw_logcat=type(self)._TEST_THREADTIME_LOGCAT_DATA)
+    test_log.Start()
+    test_log.WaitFor(r'.*last line.*', None)
+    test_log.Stop()
     actual_results = test_log.FindAll(
         r'\S* logcat monitor test message \d', proc_id=1234)
     expected_results = [
         ('1234', '4321', 'E', 'LogcatMonitorTest',
          'error logcat monitor test message 5')]
     self.assertIterEqual(iter(expected_results), actual_results)
+    test_log.Close()
 
+  @mock.patch('time.sleep', mock.Mock())
   def testFindAll_filterThreadId(self):
     test_log = _CreateTestLog(
         raw_logcat=type(self)._TEST_THREADTIME_LOGCAT_DATA)
+    test_log.Start()
+    test_log.WaitFor(r'.*last line.*', None)
+    test_log.Stop()
     actual_results = test_log.FindAll(
         r'\S* logcat monitor test message \d', thread_id=2109)
     expected_results = [
         ('9012', '2109', 'I', 'LogcatMonitorTest',
          'info logcat monitor test message 3')]
     self.assertIterEqual(iter(expected_results), actual_results)
+    test_log.Close()
 
+  @mock.patch('time.sleep', mock.Mock())
   def testFindAll_filterLogLevel(self):
     test_log = _CreateTestLog(
         raw_logcat=type(self)._TEST_THREADTIME_LOGCAT_DATA)
+    test_log.Start()
+    test_log.WaitFor(r'.*last line.*', None)
+    test_log.Stop()
     actual_results = test_log.FindAll(
         r'\S* logcat monitor test message \d', log_level=r'[DW]')
     expected_results = [
@@ -136,10 +166,15 @@ class LogcatMonitorTest(unittest.TestCase):
         ('0123', '3210', 'W', 'LogcatMonitorTest',
          'warning logcat monitor test message 4'),]
     self.assertIterEqual(iter(expected_results), actual_results)
+    test_log.Close()
 
+  @mock.patch('time.sleep', mock.Mock())
   def testFindAll_filterComponent(self):
     test_log = _CreateTestLog(
         raw_logcat=type(self)._TEST_THREADTIME_LOGCAT_DATA)
+    test_log.Start()
+    test_log.WaitFor(r'.*last line.*', None)
+    test_log.Stop()
     actual_results = test_log.FindAll(r'.*', component='LogcatMonitorTest')
     expected_results = [
         ('7890', '0987', 'V', 'LogcatMonitorTest',
@@ -155,8 +190,9 @@ class LogcatMonitorTest(unittest.TestCase):
         ('2345', '5432', 'F', 'LogcatMonitorTest',
          'fatal logcat monitor test message 6'),
         ('3456', '6543', 'D', 'LogcatMonitorTest',
-         'ignore me'),]
+         'last line'),]
     self.assertIterEqual(iter(expected_results), actual_results)
+    test_log.Close()
 
 
 if __name__ == '__main__':

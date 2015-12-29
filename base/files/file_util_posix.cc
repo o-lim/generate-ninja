@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <libgen.h>
 #include <limits.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,16 +22,11 @@
 #include <time.h>
 #include <unistd.h>
 
-#if defined(OS_MACOSX)
-#include <AvailabilityMacros.h>
-#include "base/mac/foundation_util.h"
-#endif
-
-#include "base/basictypes.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/path_service.h"
@@ -43,6 +39,12 @@
 #include "base/sys_info.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
+
+#if defined(OS_MACOSX)
+#include <AvailabilityMacros.h>
+#include "base/mac/foundation_util.h"
+#endif
 
 #if defined(OS_ANDROID)
 #include "base/android/content_uri_utils.h"
@@ -347,6 +349,17 @@ bool CopyDirectory(const FilePath& from_path,
   return success;
 }
 #endif  // !defined(OS_NACL_NONSFI)
+
+bool SetNonBlocking(int fd) {
+  int flags = fcntl(fd, F_GETFL, 0);
+  if (flags == -1)
+    return false;
+  if (flags & O_NONBLOCK)
+    return true;
+  if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)
+    return false;
+  return true;
+}
 
 bool PathExists(const FilePath& path) {
   ThreadRestrictions::AssertIOAllowed();

@@ -4,6 +4,8 @@
 
 #include "base/trace_event/trace_event_impl.h"
 
+#include <stddef.h>
+
 #include "base/format_macros.h"
 #include "base/json/string_escape.h"
 #include "base/process/process_handle.h"
@@ -58,7 +60,6 @@ void TraceEvent::CopyFrom(const TraceEvent& other) {
   thread_timestamp_ = other.thread_timestamp_;
   duration_ = other.duration_;
   id_ = other.id_;
-  context_id_ = other.context_id_;
   category_group_enabled_ = other.category_group_enabled_;
   name_ = other.name_;
   if (other.flags_ & TRACE_EVENT_FLAG_HAS_PROCESS_ID)
@@ -85,7 +86,6 @@ void TraceEvent::Initialize(
     const unsigned char* category_group_enabled,
     const char* name,
     unsigned long long id,
-    unsigned long long context_id,
     unsigned long long bind_id,
     int num_args,
     const char** arg_names,
@@ -97,7 +97,6 @@ void TraceEvent::Initialize(
   thread_timestamp_ = thread_timestamp;
   duration_ = TimeDelta::FromInternalValue(-1);
   id_ = id;
-  context_id_ = context_id;
   category_group_enabled_ = category_group_enabled;
   name_ = name;
   thread_id_ = thread_id;
@@ -213,10 +212,10 @@ void TraceEvent::AppendValueAsJSON(unsigned char type,
       *out += value.as_bool ? "true" : "false";
       break;
     case TRACE_VALUE_TYPE_UINT:
-      StringAppendF(out, "%" PRIu64, static_cast<uint64>(value.as_uint));
+      StringAppendF(out, "%" PRIu64, static_cast<uint64_t>(value.as_uint));
       break;
     case TRACE_VALUE_TYPE_INT:
-      StringAppendF(out, "%" PRId64, static_cast<int64>(value.as_int));
+      StringAppendF(out, "%" PRId64, static_cast<int64_t>(value.as_int));
       break;
     case TRACE_VALUE_TYPE_DOUBLE: {
       // FIXME: base/json/json_writer.cc is using the same code,
@@ -256,9 +255,9 @@ void TraceEvent::AppendValueAsJSON(unsigned char type,
     case TRACE_VALUE_TYPE_POINTER:
       // JSON only supports double and int numbers.
       // So as not to lose bits from a 64-bit pointer, output as a hex string.
-      StringAppendF(out, "\"0x%" PRIx64 "\"", static_cast<uint64>(
-                                     reinterpret_cast<intptr_t>(
-                                     value.as_pointer)));
+      StringAppendF(
+          out, "\"0x%" PRIx64 "\"",
+          static_cast<uint64_t>(reinterpret_cast<intptr_t>(value.as_pointer)));
       break;
     case TRACE_VALUE_TYPE_STRING:
     case TRACE_VALUE_TYPE_COPY_STRING:
@@ -273,7 +272,7 @@ void TraceEvent::AppendValueAsJSON(unsigned char type,
 void TraceEvent::AppendAsJSON(
     std::string* out,
     const ArgumentFilterPredicate& argument_filter_predicate) const {
-  int64 time_int64 = timestamp_.ToInternalValue();
+  int64_t time_int64 = timestamp_.ToInternalValue();
   int process_id;
   int thread_id;
   if ((flags_ & TRACE_EVENT_FLAG_HAS_PROCESS_ID) &&
@@ -332,11 +331,11 @@ void TraceEvent::AppendAsJSON(
   }
 
   if (phase_ == TRACE_EVENT_PHASE_COMPLETE) {
-    int64 duration = duration_.ToInternalValue();
+    int64_t duration = duration_.ToInternalValue();
     if (duration != -1)
       StringAppendF(out, ",\"dur\":%" PRId64, duration);
     if (!thread_timestamp_.is_null()) {
-      int64 thread_duration = thread_duration_.ToInternalValue();
+      int64_t thread_duration = thread_duration_.ToInternalValue();
       if (thread_duration != -1)
         StringAppendF(out, ",\"tdur\":%" PRId64, thread_duration);
     }
@@ -344,7 +343,7 @@ void TraceEvent::AppendAsJSON(
 
   // Output tts if thread_timestamp is valid.
   if (!thread_timestamp_.is_null()) {
-    int64 thread_time_int64 = thread_timestamp_.ToInternalValue();
+    int64_t thread_time_int64 = thread_timestamp_.ToInternalValue();
     StringAppendF(out, ",\"tts\":%" PRId64, thread_time_int64);
   }
 
@@ -356,7 +355,7 @@ void TraceEvent::AppendAsJSON(
   // If id_ is set, print it out as a hex string so we don't loose any
   // bits (it might be a 64-bit pointer).
   if (flags_ & TRACE_EVENT_FLAG_HAS_ID)
-    StringAppendF(out, ",\"id\":\"0x%" PRIx64 "\"", static_cast<uint64>(id_));
+    StringAppendF(out, ",\"id\":\"0x%" PRIx64 "\"", static_cast<uint64_t>(id_));
 
   if (flags_ & TRACE_EVENT_FLAG_BIND_TO_ENCLOSING)
     StringAppendF(out, ",\"bp\":\"e\"");
@@ -364,17 +363,12 @@ void TraceEvent::AppendAsJSON(
   if ((flags_ & TRACE_EVENT_FLAG_FLOW_OUT) ||
       (flags_ & TRACE_EVENT_FLAG_FLOW_IN)) {
     StringAppendF(out, ",\"bind_id\":\"0x%" PRIx64 "\"",
-                  static_cast<uint64>(bind_id_));
+                  static_cast<uint64_t>(bind_id_));
   }
   if (flags_ & TRACE_EVENT_FLAG_FLOW_IN)
     StringAppendF(out, ",\"flow_in\":true");
   if (flags_ & TRACE_EVENT_FLAG_FLOW_OUT)
     StringAppendF(out, ",\"flow_out\":true");
-
-  // Similar to id_, print the context_id as hex if present.
-  if (flags_ & TRACE_EVENT_FLAG_HAS_CONTEXT_ID)
-    StringAppendF(out, ",\"cid\":\"0x%" PRIx64 "\"",
-                  static_cast<uint64>(context_id_));
 
   // Instant events also output their scope.
   if (phase_ == TRACE_EVENT_PHASE_INSTANT) {

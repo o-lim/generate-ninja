@@ -2,11 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <set>
 #include <sstream>
 
 #include "base/command_line.h"
+#include "build/build_config.h"
 #include "tools/gn/commands.h"
 #include "tools/gn/config.h"
 #include "tools/gn/config_values_extractors.h"
@@ -169,7 +172,7 @@ void PrintLibDirs(const Target* target, bool display_header) {
 }
 
 void PrintLibs(const Target* target, bool display_header) {
-  const OrderedSet<std::string>& libs = target->all_libs();
+  const OrderedSet<LibFile>& libs = target->all_libs();
   if (libs.empty())
     return;
 
@@ -177,7 +180,7 @@ void PrintLibs(const Target* target, bool display_header) {
     OutputString("\nlibs\n");
 
   for (size_t i = 0; i < libs.size(); i++)
-    OutputString("    " + libs[i] + "\n");
+    OutputString("    " + libs[i].value() + "\n");
 }
 
 void PrintPublic(const Target* target, bool display_header) {

@@ -87,10 +87,14 @@
             ['chromecast==0', {
               'dependencies': [
                 '../android_webview/android_webview.gyp:android_webview_apk',
-                '../android_webview/android_webview.gyp:system_webview_apk',
                 '../android_webview/android_webview_shell.gyp:system_webview_shell_apk',
                 '../chrome/android/chrome_apk.gyp:chrome_public_apk',
                 '../chrome/android/chrome_apk.gyp:chrome_sync_shell_apk',
+              ],
+            }],
+            ['chromecast==0 and use_webview_internal_framework==0', {
+              'dependencies': [
+                '../android_webview/android_webview.gyp:system_webview_apk',
               ],
             }],
             # TODO: Enable packed relocations for x64. See: b/20532404
@@ -230,10 +234,6 @@
             '<(angle_path)/src/angle.gyp:*',
             '../third_party/bspatch/bspatch.gyp:*',
             '../tools/win/static_initializers/static_initializers.gyp:*',
-          ],
-        }, {
-          'dependencies': [
-            '../third_party/libevent/libevent.gyp:*',
           ],
         }],
         ['toolkit_views==1', {

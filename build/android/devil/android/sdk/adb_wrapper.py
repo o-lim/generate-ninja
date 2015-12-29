@@ -64,6 +64,10 @@ def _FindAdb():
     raise device_errors.NoAdbError()
 
 
+def _ShouldRetryAdbCmd(exc):
+  return not isinstance(exc, device_errors.NoAdbError)
+
+
 DeviceStat = collections.namedtuple('DeviceStat',
                                     ['st_mode', 'st_size', 'st_time'])
 
@@ -99,15 +103,22 @@ class AdbWrapper(object):
     cmd.extend(args)
     return cmd
 
-  # pylint: disable=unused-argument
+  #pylint: disable=unused-argument
   @classmethod
-  @decorators.WithTimeoutAndRetries
+  @decorators.WithTimeoutAndConditionalRetries(_ShouldRetryAdbCmd)
   def _RunAdbCmd(cls, args, timeout=None, retries=None, device_serial=None,
                  check_error=True, cpu_affinity=None):
     # pylint: disable=no-member
-    status, output = cmd_helper.GetCmdStatusAndOutputWithTimeout(
-        cls._BuildAdbCmd(args, device_serial, cpu_affinity=cpu_affinity),
-        timeout_retry.CurrentTimeoutThreadGroup().GetRemainingTime())
+    try:
+      status, output = cmd_helper.GetCmdStatusAndOutputWithTimeout(
+          cls._BuildAdbCmd(args, device_serial, cpu_affinity=cpu_affinity),
+          timeout_retry.CurrentTimeoutThreadGroup().GetRemainingTime())
+    except OSError as e:
+      if e.errno in (errno.ENOENT, errno.ENOEXEC):
+        raise device_errors.NoAdbError(msg=str(e))
+      else:
+        raise
+
     if status != 0:
       raise device_errors.AdbCommandFailedError(
           args, output, status, device_serial)
@@ -464,13 +475,15 @@ class AdbWrapper(object):
     return [a.strip() for a in
             self._RunDeviceAdbCmd(['jdwp'], timeout, retries).split('\n')]
 
-  def Install(self, apk_path, forward_lock=False, reinstall=False,
-              sd_card=False, timeout=60*2, retries=_DEFAULT_RETRIES):
+  def Install(self, apk_path, forward_lock=False, allow_downgrade=False,
+              reinstall=False, sd_card=False, timeout=60*2,
+              retries=_DEFAULT_RETRIES):
     """Install an apk on the device.
 
     Args:
       apk_path: Host path to the APK file.
       forward_lock: (optional) If set forward-locks the app.
+      allow_downgrade: (optional) If set, allows for downgrades.
       reinstall: (optional) If set reinstalls the app, keeping its data.
       sd_card: (optional) If set installs on the SD card.
       timeout: (optional) Timeout per try in seconds.
@@ -484,6 +497,8 @@ class AdbWrapper(object):
       cmd.append('-r')
     if sd_card:
       cmd.append('-s')
+    if allow_downgrade:
+      cmd.append('-d')
     cmd.append(apk_path)
     output = self._RunDeviceAdbCmd(cmd, timeout, retries)
     if 'Success' not in output:
@@ -500,10 +515,10 @@ class AdbWrapper(object):
       forward_lock: (optional) If set forward-locks the app.
       reinstall: (optional) If set reinstalls the app, keeping its data.
       sd_card: (optional) If set installs on the SD card.
-      timeout: (optional) Timeout per try in seconds.
-      retries: (optional) Number of retries to attempt.
       allow_downgrade: (optional) Allow versionCode downgrade.
       partial: (optional) Package ID if apk_paths doesn't include all .apks.
+      timeout: (optional) Timeout per try in seconds.
+      retries: (optional) Number of retries to attempt.
     """
     for path in apk_paths:
       VerifyLocalFileExists(path)

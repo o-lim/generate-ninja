@@ -4,6 +4,8 @@
 
 #include "base/trace_event/trace_event_etw_export_win.h"
 
+#include <stddef.h>
+
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
@@ -90,8 +92,8 @@ const char* const kFilteredEventGroupNames[] = {
 const char kOtherEventsGroupName[] = "__OTHER_EVENTS";  // 0x2000000000000000
 const char kDisabledOtherEventsGroupName[] =
     "__DISABLED_OTHER_EVENTS";  // 0x4000000000000000
-const uint64 kOtherEventsKeywordBit = 1ULL << 61;
-const uint64 kDisabledOtherEventsKeywordBit = 1ULL << 62;
+const uint64_t kOtherEventsKeywordBit = 1ULL << 61;
+const uint64_t kDisabledOtherEventsKeywordBit = 1ULL << 62;
 const size_t kNumberOfCategories = ARRAYSIZE(kFilteredEventGroupNames) + 2U;
 
 }  // namespace
@@ -177,7 +179,7 @@ TraceEventETWExport::TraceEventETWExport()
   // modifications will be made by the background thread and only affect the
   // values of the keys (no key addition/deletion). Therefore, the map does not
   // require a lock for access.
-  for (int i = 0; i < ARRAYSIZE(kFilteredEventGroupNames); i++)
+  for (size_t i = 0; i < ARRAYSIZE(kFilteredEventGroupNames); i++)
     categories_status_[kFilteredEventGroupNames[i]] = false;
   categories_status_[kOtherEventsGroupName] = false;
   categories_status_[kDisabledOtherEventsGroupName] = false;
@@ -376,7 +378,7 @@ bool TraceEventETWExport::UpdateEnabledCategories() {
   // recording tools) using the ETW infrastructure. This value will be set in
   // all Chrome processes that have registered their ETW provider.
   etw_match_any_keyword_ = CHROME_Context.MatchAnyKeyword;
-  for (int i = 0; i < ARRAYSIZE(kFilteredEventGroupNames); i++) {
+  for (size_t i = 0; i < ARRAYSIZE(kFilteredEventGroupNames); i++) {
     if (etw_match_any_keyword_ & (1ULL << i)) {
       categories_status_[kFilteredEventGroupNames[i]] = true;
     } else {

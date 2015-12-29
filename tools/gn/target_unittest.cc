@@ -2,12 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "tools/gn/target.h"
+
+#include <utility>
+
 #include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/build_settings.h"
 #include "tools/gn/config.h"
 #include "tools/gn/scheduler.h"
 #include "tools/gn/settings.h"
-#include "tools/gn/target.h"
 #include "tools/gn/test_with_scope.h"
 #include "tools/gn/toolchain.h"
 
@@ -35,7 +38,7 @@ TEST(Target, LibInheritance) {
   TestWithScope setup;
   Err err;
 
-  const std::string lib("foo");
+  const LibFile lib("foo");
   const SourceDir libdir("/foo_dir/");
 
   // Leaf target with ldflags set.
@@ -52,7 +55,7 @@ TEST(Target, LibInheritance) {
 
   // Shared library target should inherit the libs from the static library
   // and its own. Its own flag should be before the inherited one.
-  const std::string second_lib("bar");
+  const LibFile second_lib("bar");
   const SourceDir second_libdir("/bar_dir/");
   TestTarget shared(setup, "//foo:shared", Target::SHARED_LIBRARY);
   shared.config_values().libs().push_back(second_lib);
@@ -386,6 +389,8 @@ TEST(Target, PublicConfigs) {
 
   Label pub_config_label(SourceDir("//a/"), "pubconfig");
   Config pub_config(setup.settings(), pub_config_label);
+  LibFile lib_name("testlib");
+  pub_config.own_values().libs().push_back(lib_name);
   ASSERT_TRUE(pub_config.OnResolved(&err));
 
   // This is the destination target that has a public config.
@@ -405,6 +410,11 @@ TEST(Target, PublicConfigs) {
   ASSERT_TRUE(dep_on_pub.OnResolved(&err));
   ASSERT_EQ(1u, dep_on_pub.configs().size());
   EXPECT_EQ(&pub_config, dep_on_pub.configs()[0].ptr);
+
+  // Libs have special handling, check that they were forwarded from the
+  // public config to all_libs.
+  ASSERT_EQ(1u, dep_on_pub.all_libs().size());
+  ASSERT_EQ(lib_name, dep_on_pub.all_libs()[0]);
 
   // This target has a private dependency on dest for forwards configs.
   TestTarget forward(setup, "//a:f", Target::SOURCE_SET);
@@ -438,7 +448,7 @@ TEST(Target, LinkAndDepOutputs) {
   solink_tool->set_outputs(SubstitutionList::MakeForTest(
       kLinkPattern, kDependPattern));
 
-  toolchain.SetTool(Toolchain::TYPE_SOLINK, solink_tool.Pass());
+  toolchain.SetTool(Toolchain::TYPE_SOLINK, std::move(solink_tool));
 
   Target target(setup.settings(), Label(SourceDir("//a/"), "a"));
   target.set_output_type(Target::SHARED_LIBRARY);

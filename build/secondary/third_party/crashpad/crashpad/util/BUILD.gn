@@ -102,6 +102,8 @@ source_set("util") {
     "posix/process_info_mac.cc",
     "posix/symbolic_constants_posix.cc",
     "posix/symbolic_constants_posix.h",
+    "stdlib/aligned_allocator.cc",
+    "stdlib/aligned_allocator.h",
     "stdlib/cxx.h",
     "stdlib/map_insert.h",
     "stdlib/objc.h",
@@ -217,7 +219,10 @@ source_set("util") {
       "rpcrt4.lib",
       "winhttp.lib",
     ]
-    cflags = [ "/wd4201" ]  # nonstandard extension used : nameless struct/union.
+    cflags = [
+      "/wd4201",  # nonstandard extension used : nameless struct/union.
+      "/wd4577",  # 'noexcept' used with no exception handling mode specified.
+    ]
 
     # TODO(GYP) UseSafeExceptionHandlers masm rule.
   } else if (is_mac) {

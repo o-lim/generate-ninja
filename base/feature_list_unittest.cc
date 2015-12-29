@@ -4,9 +4,12 @@
 
 #include "base/feature_list.h"
 
+#include <stddef.h>
+
 #include <utility>
 
 #include "base/format_macros.h"
+#include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -329,7 +332,7 @@ TEST_F(FeatureListTest, GetFeatureOverrides) {
                                            FeatureList::OVERRIDE_ENABLE_FEATURE,
                                            trial);
 
-  RegisterFeatureListInstance(feature_list.Pass());
+  RegisterFeatureListInstance(std::move(feature_list));
 
   std::string enable_features;
   std::string disable_features;
@@ -345,7 +348,7 @@ TEST_F(FeatureListTest, InitializeFromCommandLine_WithFieldTrials) {
   FieldTrialList::CreateFieldTrial("Trial", "Group");
   scoped_ptr<FeatureList> feature_list(new FeatureList);
   feature_list->InitializeFromCommandLine("A,OffByDefault<Trial,X", "D");
-  RegisterFeatureListInstance(feature_list.Pass());
+  RegisterFeatureListInstance(std::move(feature_list));
 
   EXPECT_FALSE(FieldTrialList::IsTrialActive("Trial"));
   EXPECT_TRUE(FeatureList::IsEnabled(kFeatureOffByDefault));

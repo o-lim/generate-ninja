@@ -175,13 +175,21 @@ def _RunInstrumentCommand(_command, options, _, option_parser):
            '-m', 'fullcopy']
     build_utils.CheckOutput(cmd)
 
+    # File is not generated when filter_string doesn't match any files.
+    if not os.path.exists(options.coverage_file):
+      build_utils.Touch(options.coverage_file)
+
     temp_jar_dir = os.path.join(temp_dir, 'lib')
     jars = os.listdir(temp_jar_dir)
     if len(jars) != 1:
       print('Error: multiple output files in: %s' % (temp_jar_dir))
       return 1
 
-    shutil.copy(os.path.join(temp_jar_dir, jars[0]), options.output_path)
+    # Delete output_path first to avoid modifying input_path in the case where
+    # input_path is a hardlink to output_path. http://crbug.com/571642
+    if os.path.exists(options.output_path):
+      os.unlink(options.output_path)
+    shutil.move(os.path.join(temp_jar_dir, jars[0]), options.output_path)
   finally:
     shutil.rmtree(temp_dir)
 

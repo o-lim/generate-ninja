@@ -5,22 +5,20 @@
 #ifndef BASE_MEMORY_SHARED_MEMORY_H_
 #define BASE_MEMORY_SHARED_MEMORY_H_
 
-#include "build/build_config.h"
+#include <stddef.h>
 
 #include <string>
+
+#include "base/base_export.h"
+#include "base/macros.h"
+#include "base/memory/shared_memory_handle.h"
+#include "base/process/process_handle.h"
+#include "build/build_config.h"
 
 #if defined(OS_POSIX)
 #include <stdio.h>
 #include <sys/types.h>
 #include <semaphore.h>
-#endif
-
-#include "base/base_export.h"
-#include "base/basictypes.h"
-#include "base/memory/shared_memory_handle.h"
-#include "base/process/process_handle.h"
-
-#if defined(OS_POSIX)
 #include "base/file_descriptor_posix.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
@@ -84,12 +82,14 @@ class BASE_EXPORT SharedMemory {
   // that |read_only| matches the permissions of the handle.
   SharedMemory(const SharedMemoryHandle& handle, bool read_only);
 
+#if defined(OS_WIN)
   // Create a new SharedMemory object from an existing, open
   // shared memory file that was created by a remote process and not shared
   // to the current process.
   SharedMemory(const SharedMemoryHandle& handle,
                bool read_only,
                ProcessHandle process);
+#endif
 
   // Closes any open files.
   ~SharedMemory();
@@ -282,6 +282,9 @@ class BASE_EXPORT SharedMemory {
                             ShareMode);
 
 #if defined(OS_WIN)
+  // If true indicates this came from an external source so needs extra checks
+  // before being mapped.
+  bool external_section_;
   std::wstring       name_;
   HANDLE             mapped_file_;
 #elif defined(OS_MACOSX) && !defined(OS_IOS)

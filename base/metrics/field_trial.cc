@@ -9,7 +9,6 @@
 #include "base/build_time.h"
 #include "base/logging.h"
 #include "base/rand_util.h"
-#include "base/sha1.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -227,16 +226,12 @@ bool FieldTrial::GetActiveGroup(ActiveGroup* active_group) const {
   return true;
 }
 
-bool FieldTrial::GetState(FieldTrialState* field_trial_state) const {
+bool FieldTrial::GetState(FieldTrialState* field_trial_state) {
   if (!enable_field_trial_)
     return false;
+  FinalizeGroupChoice();
   field_trial_state->trial_name = trial_name_;
-  // If the group name is empty (hasn't been finalized yet), use the default
-  // group name instead.
-  if (!group_name_.empty())
-    field_trial_state->group_name = group_name_;
-  else
-    field_trial_state->group_name = default_group_name_;
+  field_trial_state->group_name = group_name_;
   field_trial_state->activated = group_reported_;
   return true;
 }
@@ -303,7 +298,7 @@ FieldTrial* FieldTrialList::FactoryGetFieldTrialWithRandomizationSeed(
     const int month,
     const int day_of_month,
     FieldTrial::RandomizationType randomization_type,
-    uint32 randomization_seed,
+    uint32_t randomization_seed,
     int* default_group_number) {
   if (default_group_number)
     *default_group_number = FieldTrial::kDefaultGroupNumber;

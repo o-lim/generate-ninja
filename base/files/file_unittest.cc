@@ -3,9 +3,15 @@
 // found in the LICENSE file.
 
 #include "base/files/file.h"
+
+#include <stdint.h>
+
+#include <utility>
+
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using base::File;
@@ -199,7 +205,7 @@ TEST(FileTest, ReadWrite) {
   EXPECT_EQ(kPartialWriteLength, bytes_written);
 
   // Make sure the file was extended.
-  int64 file_size = 0;
+  int64_t file_size = 0;
   EXPECT_TRUE(GetFileSize(file_path, &file_size));
   EXPECT_EQ(kOffsetBeyondEndOfFile + kPartialWriteLength, file_size);
 
@@ -240,7 +246,7 @@ TEST(FileTest, Append) {
   ASSERT_TRUE(file2.IsValid());
 
   // Test passing the file around.
-  file = file2.Pass();
+  file = std::move(file2);
   EXPECT_FALSE(file2.IsValid());
   ASSERT_TRUE(file.IsValid());
 
@@ -281,7 +287,7 @@ TEST(FileTest, Length) {
 
   // Extend the file.
   const int kExtendedFileLength = 10;
-  int64 file_size = 0;
+  int64_t file_size = 0;
   EXPECT_TRUE(file.SetLength(kExtendedFileLength));
   EXPECT_EQ(kExtendedFileLength, file.GetLength());
   EXPECT_TRUE(GetFileSize(file_path, &file_size));
@@ -434,7 +440,7 @@ TEST(FileTest, Seek) {
                 base::File::FLAG_WRITE);
   ASSERT_TRUE(file.IsValid());
 
-  const int64 kOffset = 10;
+  const int64_t kOffset = 10;
   EXPECT_EQ(kOffset, file.Seek(base::File::FROM_BEGIN, kOffset));
   EXPECT_EQ(2 * kOffset, file.Seek(base::File::FROM_CURRENT, kOffset));
   EXPECT_EQ(kOffset, file.Seek(base::File::FROM_CURRENT, -kOffset));

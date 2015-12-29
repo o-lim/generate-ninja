@@ -5,6 +5,7 @@
 import("//base/android/linker/config.gni")
 import("//build/config/android/config.gni")
 import("//build/config/android/internal_rules.gni")
+import("//build/config/sanitizers/sanitizers.gni")
 import("//build/toolchain/toolchain.gni")
 import("//third_party/android_platform/config.gni")
 import("//tools/grit/grit_rule.gni")
@@ -564,6 +565,12 @@ template("locale_pak_resources") {
 #     listed in deps will be included by libraries/apks that depend on this
 #     target.
 #   resource_dirs: List of directories containing resources for this target.
+#   generated_resource_dirs: List of directories containing resources for this
+#     target which are *generated* by a dependency. |generated_resource_files|
+#     must be specified if |generated_resource_dirs| is specified.
+#   generated_resource_files: List of all files in |generated_resource_dirs|.
+#     |generated_resource_dirs| must be specified in |generated_resource_files|
+#     is specified.
 #   android_manifest: AndroidManifest.xml for this target. Defaults to
 #     //build/android/AndroidManifest.xml.
 #   custom_package: java package for generated .java files.
@@ -631,6 +638,8 @@ template("android_resources") {
                              "android_manifest",
                              "custom_package",
                              "deps",
+                             "generated_resource_dirs",
+                             "generated_resource_files",
                              "resource_dirs",
                              "shared_resources",
                              "v14_skip",
@@ -1322,7 +1331,7 @@ template("android_apk") {
   _native_libs_deps = []
 
   if (defined(invoker.native_libs) && invoker.native_libs != []) {
-    if (is_component_build) {
+    if (is_component_build || is_asan) {
       _native_libs += [ "$root_shlib_dir/libc++_shared.so" ]
       _native_libs_deps += [ "//build/android:cpplib_stripped" ]
     }
@@ -1660,7 +1669,6 @@ template("android_apk") {
     deps = []
     forward_variables_from(invoker,
                            [
-                             "asset_location",
                              "deps",
                              "extensions_to_not_compress",
                              "language_splits",

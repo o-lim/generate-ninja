@@ -9,6 +9,7 @@
 #define BASE_CALLBACK_INTERNAL_H_
 
 #include <stddef.h>
+#include <memory>
 #include <type_traits>
 
 #include "base/atomic_ref_count.h"
@@ -72,7 +73,7 @@ class BASE_EXPORT CallbackBase {
   // another type. It is not okay to use void*. We create a InvokeFuncStorage
   // that that can store our function pointer, and then cast it back to
   // the original type on usage.
-  typedef void(*InvokeFuncStorage)(void);
+  using InvokeFuncStorage = void(*)();
 
   // Returns true if this callback equals |other|. |other| may be null.
   bool Equals(const CallbackBase& other) const;
@@ -94,7 +95,13 @@ class BASE_EXPORT CallbackBase {
 
 // A helper template to determine if given type is non-const move-only-type,
 // i.e. if a value of the given type should be passed via std::move() in a
-// destructive way.
+// destructive way. Types are considered to be move-only if they have a
+// sentinel MoveOnlyTypeForCPP03 member: a class typically gets this from using
+// the DISALLOW_COPY_AND_ASSIGN_WITH_MOVE_FOR_BIND macro.
+// It would be easy to generalize this trait to all move-only types... but this
+// confuses template deduction in VS2013 with certain types such as
+// std::unique_ptr.
+// TODO(dcheng): Revisit this when Windows switches to VS2015 by default.
 template <typename T> struct IsMoveOnlyType {
   template <typename U>
   static YesType Test(const typename U::MoveOnlyTypeForCPP03*);
@@ -105,6 +112,11 @@ template <typename T> struct IsMoveOnlyType {
   static const bool value = sizeof((Test<T>(0))) == sizeof(YesType) &&
                             !is_const<T>::value;
 };
+
+// Specialization of IsMoveOnlyType so that std::unique_ptr is still considered
+// move-only, even without the sentinel member.
+template <typename T>
+struct IsMoveOnlyType<std::unique_ptr<T>> : std::true_type {};
 
 template <typename>
 struct CallbackParamTraitsForMoveOnlyType;
@@ -136,8 +148,8 @@ struct CallbackParamTraits
 
 template <typename T>
 struct CallbackParamTraitsForNonMoveOnlyType {
-  typedef const T& ForwardType;
-  typedef T StorageType;
+  using ForwardType = const T&;
+  using StorageType = T;
 };
 
 // The Storage should almost be impossible to trigger unless someone manually
@@ -147,8 +159,8 @@ struct CallbackParamTraitsForNonMoveOnlyType {
 // The ForwardType should only be used for unbound arguments.
 template <typename T>
 struct CallbackParamTraitsForNonMoveOnlyType<T&> {
-  typedef T& ForwardType;
-  typedef T StorageType;
+  using ForwardType = T&;
+  using StorageType = T;
 };
 
 // Note that for array types, we implicitly add a const in the conversion. This
@@ -158,15 +170,15 @@ struct CallbackParamTraitsForNonMoveOnlyType<T&> {
 // restriction.
 template <typename T, size_t n>
 struct CallbackParamTraitsForNonMoveOnlyType<T[n]> {
-  typedef const T* ForwardType;
-  typedef const T* StorageType;
+  using ForwardType = const T*;
+  using StorageType = const T*;
 };
 
 // See comment for CallbackParamTraits<T[n]>.
 template <typename T>
 struct CallbackParamTraitsForNonMoveOnlyType<T[]> {
-  typedef const T* ForwardType;
-  typedef const T* StorageType;
+  using ForwardType = const T*;
+  using StorageType = const T*;
 };
 
 // Parameter traits for movable-but-not-copyable scopers.
@@ -184,8 +196,8 @@ struct CallbackParamTraitsForNonMoveOnlyType<T[]> {
 // function or a cast would not be usable with Callback<> or Bind().
 template <typename T>
 struct CallbackParamTraitsForMoveOnlyType {
-  typedef T ForwardType;
-  typedef T StorageType;
+  using ForwardType = T;
+  using StorageType = T;
 };
 
 // CallbackForward() is a very limited simulation of C++11's std::forward()

@@ -3,6 +3,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+# This file isn't officially supported by the Chromium project. It's maintained
+# on a best-effort basis by volunteers, so some things may be broken from time
+# to time. If you encounter errors, it's most often due to files in base that
+# have been added or moved since somebody last tried this script. Generally
+# such errors are easy to diagnose.
+
 """Bootstraps gn.
 
 It is done by first building it manually in a temporary directory, then building
@@ -183,6 +189,7 @@ def write_ninja(path, options):
       'base/lazy_instance.cc',
       'base/location.cc',
       'base/logging.cc',
+      'base/md5.cc',
       'base/memory/ref_counted.cc',
       'base/memory/ref_counted_memory.cc',
       'base/memory/singleton.cc',
@@ -196,6 +203,7 @@ def write_ninja(path, options):
       'base/metrics/histogram.cc',
       'base/metrics/histogram_base.cc',
       'base/metrics/histogram_samples.cc',
+      'base/metrics/metrics_hashes.cc',
       'base/metrics/sample_map.cc',
       'base/metrics/sample_vector.cc',
       'base/metrics/sparse_histogram.cc',
@@ -267,6 +275,7 @@ def write_ninja(path, options):
       'base/trace_event/trace_log.cc',
       'base/trace_event/trace_log_constants.cc',
       'base/trace_event/trace_sampling_thread.cc',
+      'base/trace_event/tracing_agent.cc',
       'base/tracked_objects.cc',
       'base/tracking_info.cc',
       'base/values.cc',
@@ -301,19 +310,19 @@ def write_ninja(path, options):
     ])
     static_libraries['libevent'] = {
         'sources': [
-            'third_party/libevent/buffer.c',
-            'third_party/libevent/evbuffer.c',
-            'third_party/libevent/evdns.c',
-            'third_party/libevent/event.c',
-            'third_party/libevent/event_tagging.c',
-            'third_party/libevent/evrpc.c',
-            'third_party/libevent/evutil.c',
-            'third_party/libevent/http.c',
-            'third_party/libevent/log.c',
-            'third_party/libevent/poll.c',
-            'third_party/libevent/select.c',
-            'third_party/libevent/signal.c',
-            'third_party/libevent/strlcpy.c',
+            'base/third_party/libevent/buffer.c',
+            'base/third_party/libevent/evbuffer.c',
+            'base/third_party/libevent/evdns.c',
+            'base/third_party/libevent/event.c',
+            'base/third_party/libevent/event_tagging.c',
+            'base/third_party/libevent/evrpc.c',
+            'base/third_party/libevent/evutil.c',
+            'base/third_party/libevent/http.c',
+            'base/third_party/libevent/log.c',
+            'base/third_party/libevent/poll.c',
+            'base/third_party/libevent/select.c',
+            'base/third_party/libevent/signal.c',
+            'base/third_party/libevent/strlcpy.c',
         ],
         'tool': 'cc',
         'include_dirs': [],
@@ -345,10 +354,10 @@ def write_ninja(path, options):
         'base/trace_event/process_memory_maps_dump_provider.cc',
     ])
     static_libraries['libevent']['include_dirs'].extend([
-        os.path.join(SRC_ROOT, 'third_party', 'libevent', 'linux')
+        os.path.join(SRC_ROOT, 'base', 'third_party', 'libevent', 'linux')
     ])
     static_libraries['libevent']['sources'].extend([
-        'third_party/libevent/epoll.c',
+        'base/third_party/libevent/epoll.c',
     ])
 
 
@@ -370,12 +379,13 @@ def write_ninja(path, options):
         'base/strings/sys_string_conversions_mac.mm',
         'base/time/time_mac.cc',
         'base/threading/platform_thread_mac.mm',
+        'base/trace_event/malloc_dump_provider.cc',
     ])
     static_libraries['libevent']['include_dirs'].extend([
-        os.path.join(SRC_ROOT, 'third_party', 'libevent', 'mac')
+        os.path.join(SRC_ROOT, 'base', 'third_party', 'libevent', 'mac')
     ])
     static_libraries['libevent']['sources'].extend([
-        'third_party/libevent/kqueue.c',
+        'base/third_party/libevent/kqueue.c',
     ])
 
 
