@@ -2,9 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#if defined(COMPILER_MSVC) && defined(ARCH_CPU_32_BITS)
-#include <mmintrin.h>
-#endif
+#include <stddef.h>
 #include <stdint.h>
 
 #include <limits>
@@ -14,7 +12,12 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/numerics/safe_math.h"
 #include "base/template_util.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+#if defined(COMPILER_MSVC) && defined(ARCH_CPU_32_BITS)
+#include <mmintrin.h>
+#endif
 
 using std::numeric_limits;
 using base::CheckedNumeric;
@@ -664,7 +667,24 @@ TEST(SafeNumerics, CastTests) {
   EXPECT_EQ(saturated_cast<float>(-double_large), -double_infinity);
   EXPECT_EQ(numeric_limits<int>::min(), saturated_cast<int>(double_small_int));
   EXPECT_EQ(numeric_limits<int>::max(), saturated_cast<int>(double_large_int));
+
+  float not_a_number = std::numeric_limits<float>::infinity() -
+                       std::numeric_limits<float>::infinity();
+  EXPECT_TRUE(std::isnan(not_a_number));
+  EXPECT_EQ(0, saturated_cast<int>(not_a_number));
 }
+
+#if GTEST_HAS_DEATH_TEST
+
+TEST(SafeNumerics, SaturatedCastChecks) {
+  float not_a_number = std::numeric_limits<float>::infinity() -
+                       std::numeric_limits<float>::infinity();
+  EXPECT_TRUE(std::isnan(not_a_number));
+  EXPECT_DEATH((saturated_cast<int, base::SaturatedCastNaNBehaviorCheck>(
+      not_a_number)), "");
+}
+
+#endif  // GTEST_HAS_DEATH_TEST
 
 TEST(SafeNumerics, IsValueInRangeForNumericType) {
   EXPECT_TRUE(IsValueInRangeForNumericType<uint32_t>(0));

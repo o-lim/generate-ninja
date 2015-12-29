@@ -6,7 +6,6 @@
 #define BASE_PROCESS_PROCESS_H_
 
 #include "base/base_export.h"
-#include "base/basictypes.h"
 #include "base/move.h"
 #include "base/process/process_handle.h"
 #include "base/time/time.h"
@@ -122,6 +121,13 @@ class BASE_EXPORT Process {
   // Returns an integer representing the priority of a process. The meaning
   // of this value is OS dependent.
   int GetPriority() const;
+
+#if defined(OS_CHROMEOS)
+  // Get the PID in its PID namespace.
+  // If the process is not in a PID namespace or /proc/<pid>/status does not
+  // report NSpid, kNullProcessId is returned.
+  ProcessId GetPidInNamespace() const;
+#endif
 
  private:
 #if defined(OS_WIN)

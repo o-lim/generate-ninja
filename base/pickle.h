@@ -5,6 +5,7 @@
 #ifndef BASE_PICKLE_H_
 #define BASE_PICKLE_H_
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include <string>
@@ -258,6 +259,13 @@ class BASE_EXPORT Pickle {
   // of the header.
   void Resize(size_t new_capacity);
 
+  // Claims |num_bytes| bytes of payload. This is similar to Reserve() in that
+  // it may grow the capacity, but it also advances the write offset of the
+  // pickle by |num_bytes|. Claimed memory, including padding, is zeroed.
+  //
+  // Returns the address of the first byte claimed.
+  void* ClaimBytes(size_t num_bytes);
+
   // Find the end of the pickled data that starts at range_start.  Returns NULL
   // if the entire Pickle is not found in the given data range.
   static const char* FindNext(size_t header_size,
@@ -299,6 +307,8 @@ class BASE_EXPORT Pickle {
     WriteBytesStatic<sizeof(data)>(&data);
     return true;
   }
+
+  inline void* ClaimUninitializedBytesInternal(size_t num_bytes);
   inline void WriteBytesCommon(const void* data, size_t length);
 
   FRIEND_TEST_ALL_PREFIXES(PickleTest, DeepCopyResize);

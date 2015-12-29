@@ -6,6 +6,7 @@
 
 #include "base/atomicops.h"
 #include "base/logging.h"
+#include "build/build_config.h"
 
 using base::internal::PlatformThreadLocalStorage;
 
@@ -76,8 +77,10 @@ void** ConstructTlsVector() {
     // TLS_KEY_OUT_OF_INDEXES, go ahead and set it.  Otherwise, do nothing, as
     // another thread already did our dirty work.
     if (PlatformThreadLocalStorage::TLS_KEY_OUT_OF_INDEXES !=
-        base::subtle::NoBarrier_CompareAndSwap(&g_native_tls_key,
-            PlatformThreadLocalStorage::TLS_KEY_OUT_OF_INDEXES, key)) {
+        static_cast<PlatformThreadLocalStorage::TLSKey>(
+            base::subtle::NoBarrier_CompareAndSwap(
+                &g_native_tls_key,
+                PlatformThreadLocalStorage::TLS_KEY_OUT_OF_INDEXES, key))) {
       // We've been shortcut. Another thread replaced g_native_tls_key first so
       // we need to destroy our index and use the one the other thread got
       // first.

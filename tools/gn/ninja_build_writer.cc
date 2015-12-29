@@ -4,6 +4,8 @@
 
 #include "tools/gn/ninja_build_writer.h"
 
+#include <stddef.h>
+
 #include <fstream>
 #include <map>
 
@@ -83,6 +85,27 @@ OutputFile GetTargetOutputFile(const Target* target) {
   // The output files may have leading "./" so normalize those away.
   NormalizePath(&result.value());
   return result;
+}
+
+bool HasOutputIdenticalToLabel(const Target* target,
+                               const std::string& short_name) {
+  if (target->output_type() != Target::ACTION &&
+      target->output_type() != Target::ACTION_FOREACH)
+    return false;
+
+  // Rather than convert all outputs to be relative to the build directory
+  // and then compare to the short name, convert the short name to look like a
+  // file in the output directory since this is only one conversion.
+  SourceFile short_name_as_source_file(
+      target->settings()->build_settings()->build_dir().value() + short_name);
+
+  std::vector<SourceFile> outputs_as_source;
+  target->action_values().GetOutputsAsSourceFiles(target, &outputs_as_source);
+  for (const SourceFile& output_as_source : outputs_as_source) {
+    if (output_as_source == short_name_as_source_file)
+      return true;
+  }
+  return false;
 }
 
 // Given an output that appears more than once, generates an error message
@@ -194,12 +217,16 @@ void NinjaBuildWriter::WriteNinjaRules() {
   dep_out_ << "build.ninja:";
   std::vector<base::FilePath> input_files;
   g_scheduler->input_file_manager()->GetAllPhysicalInputFileNames(&input_files);
-  for (const auto& input_file : input_files)
-    dep_out_ << " " << FilePathToUTF8(input_file);
 
   // Other files read by the build.
   std::vector<base::FilePath> other_files = g_scheduler->GetGenDependencies();
-  for (const auto& other_file : other_files)
+
+  // Sort the input files to order them deterministically.
+  // Additionally, remove duplicate filepaths that seem to creep in.
+  std::set<base::FilePath> fileset(input_files.begin(), input_files.end());
+  fileset.insert(other_files.begin(), other_files.end());
+
+  for (const auto& other_file : fileset)
     dep_out_ << " " << FilePathToUTF8(other_file);
 
   out_ << std::endl;
@@ -294,7 +321,24 @@ bool NinjaBuildWriter::WritePhonyAndAllRules(Err* err) {
     if (small_name_count[label.name()] == 1 ||
         (target->output_type() == Target::EXECUTABLE &&
          exe_count[label.name()] == 1)) {
-      WritePhonyRule(target, target_file, label.name(), &written_rules);
+      // It's reasonable to generate output files in the root build directory
+      // with the same name as the target. Don't generate phony rules for
+      // these cases.
+      //
+      // All of this does not do the general checking of all target's outputs
+      // which may theoretically collide. But it's not very reasonable for
+      // a script target named "foo" to generate a file named "bar" with no
+      // extension in the root build directory while another target is named
+      // "bar". If this does occur, the user is likely to be confused when
+      // building "bar" that is builds foo anyway, so you probably just
+      // shouldn't do that.
+      //
+      // We should fix this however, and build up all generated script outputs
+      // and check everything against that. There are other edge cases that the
+      // current phony rule generator doesn't check. We may need to make a big
+      // set of every possible generated file in the build for this purpose.
+      if (!HasOutputIdenticalToLabel(target, label.name()))
+        WritePhonyRule(target, target_file, label.name(), &written_rules);
     }
 
     if (!all_rules.empty())

@@ -10,6 +10,7 @@
 #include <windows.h>
 #include <wmistr.h>
 #include <evntrace.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include <limits>
@@ -67,7 +68,7 @@ template <size_t N> class EtwMofEvent: public EtwMofEventBase<N> {
     header.Flags = WNODE_FLAG_TRACED_GUID | WNODE_FLAG_USE_MOF_PTR;
   }
 
-  void SetField(int field, size_t size, const void *data) {
+  void SetField(size_t field, size_t size, const void* data) {
     // DCHECK(field < N);
     if ((field < N) && (size <= std::numeric_limits<uint32_t>::max())) {
       fields[field].DataPtr = reinterpret_cast<ULONG64>(data);

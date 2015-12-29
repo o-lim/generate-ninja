@@ -112,7 +112,6 @@
             '<(tcmalloc_dir)/src/base/atomicops-internals-x86.cc',
             '<(tcmalloc_dir)/src/base/atomicops-internals-x86.h',
             '<(tcmalloc_dir)/src/base/atomicops.h',
-            '<(tcmalloc_dir)/src/base/basictypes.h',
             '<(tcmalloc_dir)/src/base/commandlineflags.h',
             '<(tcmalloc_dir)/src/base/cycleclock.h',
             # We don't list dynamic_annotations.c since its copy is already
@@ -236,7 +235,6 @@
             '<(tcmalloc_dir)/src/base/atomicops-internals-x86-msvc.h',
             '<(tcmalloc_dir)/src/base/atomicops-internals-x86.h',
             '<(tcmalloc_dir)/src/base/atomicops.h',
-            '<(tcmalloc_dir)/src/base/basictypes.h',
             '<(tcmalloc_dir)/src/base/commandlineflags.h',
             '<(tcmalloc_dir)/src/base/cycleclock.h',
             '<(tcmalloc_dir)/src/base/elf_mem_image.h',

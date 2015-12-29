@@ -29,6 +29,7 @@ from devil.android import device_signal
 from devil.android import decorators
 from devil.android import device_errors
 from devil.android import device_temp_file
+from devil.android import install_commands
 from devil.android import logcat_monitor
 from devil.android import md5sum
 from devil.android.sdk import adb_wrapper
@@ -42,7 +43,6 @@ from devil.utils import parallelizer
 from devil.utils import reraiser_thread
 from devil.utils import timeout_retry
 from devil.utils import zip_utils
-from pylib.device.commands import install_commands
 
 _DEFAULT_TIMEOUT = 30
 _DEFAULT_RETRIES = 3
@@ -67,6 +67,7 @@ _RESTART_ADBD_SCRIPT = """
 _PERMISSIONS_BLACKLIST = [
     'android.permission.ACCESS_MOCK_LOCATION',
     'android.permission.ACCESS_NETWORK_STATE',
+    'android.permission.AUTHENTICATE_ACCOUNTS',
     'android.permission.BLUETOOTH',
     'android.permission.BLUETOOTH_ADMIN',
     'android.permission.DOWNLOAD_WITHOUT_NOTIFICATION',
@@ -76,6 +77,7 @@ _PERMISSIONS_BLACKLIST = [
     'android.permission.NFC',
     'android.permission.READ_SYNC_SETTINGS',
     'android.permission.READ_SYNC_STATS',
+    'android.permission.RECEIVE_BOOT_COMPLETED',
     'android.permission.USE_CREDENTIALS',
     'android.permission.VIBRATE',
     'android.permission.WAKE_LOCK',
@@ -90,6 +92,9 @@ _PERMISSIONS_BLACKLIST = [
     'com.google.android.c2dm.permission.RECEIVE',
     'com.google.android.providers.gsf.permission.READ_GSERVICES',
     'com.sec.enterprise.knox.MDM_CONTENT_PROVIDER',
+    'org.chromium.chrome.permission.C2D_MESSAGE',
+    'org.chromium.chrome.permission.READ_WRITE_BOOKMARK_FOLDERS',
+    'org.chromium.chrome.TOS_ACKED',
 ]
 
 _CURRENT_FOCUS_CRASH_RE = re.compile(
@@ -544,17 +549,18 @@ class DeviceUtils(object):
 
   @decorators.WithTimeoutAndRetriesFromInstance(
       min_default_timeout=INSTALL_DEFAULT_TIMEOUT)
-  def Install(self, apk, reinstall=False, permissions=None, timeout=None,
-              retries=None):
+  def Install(self, apk, allow_downgrade=False, reinstall=False,
+              permissions=None, timeout=None, retries=None):
     """Install an APK.
 
     Noop if an identical APK is already installed.
 
     Args:
       apk: An ApkHelper instance or string containing the path to the APK.
+      allow_downgrade: A boolean indicating if we should allow downgrades.
+      reinstall: A boolean indicating if we should keep any existing app data.
       permissions: Set of permissions to set. If not set, finds permissions with
           apk helper. To set no permissions, pass [].
-      reinstall: A boolean indicating if we should keep any existing app data.
       timeout: timeout in seconds
       retries: number of retries
 
@@ -563,14 +569,14 @@ class DeviceUtils(object):
       CommandTimeoutError if the installation times out.
       DeviceUnreachableError on missing device.
     """
-    self._InstallInternal(apk, None, reinstall=reinstall,
-                          permissions=permissions)
+    self._InstallInternal(apk, None, allow_downgrade=allow_downgrade,
+                          reinstall=reinstall, permissions=permissions)
 
   @decorators.WithTimeoutAndRetriesFromInstance(
       min_default_timeout=INSTALL_DEFAULT_TIMEOUT)
-  def InstallSplitApk(self, base_apk, split_apks, reinstall=False,
-                      allow_cached_props=False, permissions=None, timeout=None,
-                      retries=None):
+  def InstallSplitApk(self, base_apk, split_apks, allow_downgrade=False,
+                      reinstall=False, allow_cached_props=False,
+                      permissions=None, timeout=None, retries=None):
     """Install a split APK.
 
     Noop if all of the APK splits are already installed.
@@ -579,6 +585,7 @@ class DeviceUtils(object):
       base_apk: An ApkHelper instance or string containing the path to the base
           APK.
       split_apks: A list of strings of paths of all of the APK splits.
+      allow_downgrade: A boolean indicating if we should allow downgrades.
       reinstall: A boolean indicating if we should keep any existing app data.
       allow_cached_props: Whether to use cached values for device properties.
       permissions: Set of permissions to set. If not set, finds permissions with
@@ -594,10 +601,12 @@ class DeviceUtils(object):
     """
     self._InstallInternal(base_apk, split_apks, reinstall=reinstall,
                           allow_cached_props=allow_cached_props,
-                          permissions=permissions)
+                          permissions=permissions,
+                          allow_downgrade=allow_downgrade)
 
-  def _InstallInternal(self, base_apk, split_apks, reinstall=False,
-                       allow_cached_props=False, permissions=None):
+  def _InstallInternal(self, base_apk, split_apks, allow_downgrade=False,
+                       reinstall=False, allow_cached_props=False,
+                       permissions=None):
     if split_apks:
       self._CheckSdkLevel(version_codes.LOLLIPOP)
 
@@ -643,9 +652,11 @@ class DeviceUtils(object):
       if split_apks:
         partial = package_name if len(apks_to_install) < len(all_apks) else None
         self.adb.InstallMultiple(
-            apks_to_install, partial=partial, reinstall=reinstall)
+            apks_to_install, partial=partial, reinstall=reinstall,
+            allow_downgrade=allow_downgrade)
       else:
-        self.adb.Install(base_apk.path, reinstall=reinstall)
+        self.adb.Install(
+            base_apk.path, reinstall=reinstall, allow_downgrade=allow_downgrade)
       if (permissions is None
           and self.build_version_sdk >= version_codes.MARSHMALLOW):
         permissions = base_apk.GetPermissions()
@@ -1880,7 +1891,8 @@ class DeviceUtils(object):
       DeviceUnreachableError on missing device.
     """
     if not host_path:
-      host_path = os.path.abspath('screenshot-%s.png' % _GetTimeStamp())
+      host_path = os.path.abspath('screenshot-%s-%s.png' % (
+          self.adb.GetDeviceSerial(), _GetTimeStamp()))
     with device_temp_file.DeviceTempFile(self.adb, suffix='.png') as device_tmp:
       self.RunShellCommand(['/system/bin/screencap', '-p', device_tmp.name],
                            check_return=True)
@@ -1975,16 +1987,11 @@ class DeviceUtils(object):
     raise device_errors.CommandFailedError(
         'Could not find memory peak value for pid %s', str(pid))
 
-  @decorators.WithTimeoutAndRetriesFromInstance()
-  def GetLogcatMonitor(self, timeout=None, retries=None, *args, **kwargs):
+  def GetLogcatMonitor(self, *args, **kwargs):
     """Returns a new LogcatMonitor associated with this device.
 
     Parameters passed to this function are passed directly to
     |logcat_monitor.LogcatMonitor| and are documented there.
-
-    Args:
-      timeout: timeout in seconds
-      retries: number of retries
     """
     return logcat_monitor.LogcatMonitor(self.adb, *args, **kwargs)
 
@@ -2102,13 +2109,14 @@ class DeviceUtils(object):
     if ('android.permission.WRITE_EXTERNAL_STORAGE' in permissions
         and 'android.permission.READ_EXTERNAL_STORAGE' not in permissions):
       permissions.append('android.permission.READ_EXTERNAL_STORAGE')
-    cmd = ';'.join('pm grant %s %s' %(package, p) for p in permissions)
+    cmd = ';'.join('pm grant %s %s' % (package, p) for p in permissions)
     if cmd:
       output = self.RunShellCommand(cmd)
       if output:
         logging.warning('Possible problem when granting permissions. Blacklist '
                         'may need to be updated.')
-        logging.warning(output)
+        for line in output:
+          logging.warning('  %s', line)
 
   @decorators.WithTimeoutAndRetriesFromInstance()
   def IsScreenOn(self, timeout=None, retries=None):

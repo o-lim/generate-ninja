@@ -853,13 +853,6 @@ template("create_apk") {
         invoker.native_libs_even_when_incremental
   }
 
-  # TODO(agrieve): Remove support for asset_location in favor of using
-  # android_assets() everywhere (http://crbug.com/547162).
-  if (defined(invoker.asset_location)) {
-    _asset_location = invoker.asset_location
-    assert(_asset_location != "")  # Mark as used.
-  }
-
   _version_code = invoker.version_code
   _version_name = invoker.version_name
   assert(_version_code != -1)  # Mark as used.
@@ -931,12 +924,6 @@ template("create_apk") {
         rebase_path(invoker.resource_packaged_apk_path, root_build_dir),
       ]
 
-      if (defined(_asset_location)) {
-        args += [
-          "--asset-dir",
-          rebase_path(_asset_location, root_build_dir),
-        ]
-      }
       if (defined(_resources_zip)) {
         args += [
           "--resource-zips",
@@ -1700,7 +1687,6 @@ template("process_resources") {
   srcjar_path = invoker.srcjar_path
   r_text_path = invoker.r_text_path
   build_config = invoker.build_config
-  resource_dirs = invoker.resource_dirs
   android_manifest = invoker.android_manifest
 
   non_constant_id = true
@@ -1724,17 +1710,30 @@ template("process_resources") {
       r_text_path,
     ]
 
-    sources_build_rel = exec_script("//build/android/gyp/find.py",
-                                    rebase_path(resource_dirs, root_build_dir),
-                                    "list lines")
-    sources = rebase_path(sources_build_rel, ".", root_build_dir)
+    _all_resource_dirs = []
+    sources = []
+
+    if (defined(invoker.resource_dirs)) {
+      _all_resource_dirs += invoker.resource_dirs
+      sources_build_rel =
+          exec_script("//build/android/gyp/find.py",
+                      rebase_path(invoker.resource_dirs, root_build_dir),
+                      "list lines")
+      sources += rebase_path(sources_build_rel, ".", root_build_dir)
+    }
+
+    if (defined(invoker.generated_resource_dirs)) {
+      assert(defined(invoker.generated_resource_files))
+      _all_resource_dirs += invoker.generated_resource_dirs
+      sources += invoker.generated_resource_files
+    }
 
     inputs = [
       build_config,
       android_manifest,
     ]
 
-    rebase_resource_dirs = rebase_path(resource_dirs, root_build_dir)
+    _rebased_all_resource_dirs = rebase_path(_all_resource_dirs, root_build_dir)
     rebase_build_config = rebase_path(build_config, root_build_dir)
     args = [
       "--depfile",
@@ -1745,7 +1744,7 @@ template("process_resources") {
       android_aapt_path,
       "--android-manifest",
       rebase_path(android_manifest, root_build_dir),
-      "--resource-dirs=$rebase_resource_dirs",
+      "--resource-dirs=$_rebased_all_resource_dirs",
       "--srcjar-out",
       rebase_path(srcjar_path, root_build_dir),
       "--resource-zip-out",
@@ -1979,6 +1978,14 @@ template("test_runner_script") {
         "--apk-under-test",
         "@FileArg($_rebased_build_config:deps_info:tested_apk_path)",
       ]
+      if (emma_coverage) {
+        # Set a default coverage output directory (can be overridden by user
+        # passing the same flag).
+        test_runner_args += [
+          "--coverage-dir",
+          rebase_path("$root_out_dir/coverage", root_build_dir),
+        ]
+      }
     } else {
       assert(false, "Invalid test type: $_test_type.")
     }

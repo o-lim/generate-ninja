@@ -33,9 +33,6 @@ _DEFAULT_ANNOTATIONS = [
     'EnormousTest', 'IntegrationTest']
 _EXCLUDE_UNLESS_REQUESTED_ANNOTATIONS = [
     'DisabledTest', 'FlakyTest']
-_EXTRA_ENABLE_HTTP_SERVER = (
-    'org.chromium.chrome.test.ChromeInstrumentationTestRunner.'
-        + 'EnableTestHttpServer')
 _EXTRA_DRIVER_TEST_LIST = (
     'org.chromium.test.driver.OnDeviceInstrumentationDriver.TestList')
 _EXTRA_DRIVER_TEST_LIST_FILE = (
@@ -44,6 +41,9 @@ _EXTRA_DRIVER_TARGET_PACKAGE = (
     'org.chromium.test.driver.OnDeviceInstrumentationDriver.TargetPackage')
 _EXTRA_DRIVER_TARGET_CLASS = (
     'org.chromium.test.driver.OnDeviceInstrumentationDriver.TargetClass')
+_EXTRA_TIMEOUT_SCALE = (
+    'org.chromium.test.driver.OnDeviceInstrumentationDriver.TimeoutScale')
+
 _PARAMETERIZED_TEST_ANNOTATION = 'ParameterizedTest'
 _PARAMETERIZED_TEST_SET_ANNOTATION = 'ParameterizedTest$Set'
 _NATIVE_CRASH_RE = re.compile('native crash', re.IGNORECASE)
@@ -595,17 +595,12 @@ class InstrumentationTestInstance(test_instance.TestInstance):
           new_tests.append(parameterized_t)
     return tests + new_tests
 
-  @staticmethod
-  def GetHttpServerEnvironmentVars():
-    return {
-      _EXTRA_ENABLE_HTTP_SERVER: None,
-    }
-
   def GetDriverEnvironmentVars(
       self, test_list=None, test_list_file_path=None):
     env = {
       _EXTRA_DRIVER_TARGET_PACKAGE: self.test_package,
       _EXTRA_DRIVER_TARGET_CLASS: self.test_runner,
+      _EXTRA_TIMEOUT_SCALE: self._timeout_scale,
     }
 
     if test_list:

@@ -2,9 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "tools/gn/parse_tree.h"
+
+#include <stdint.h>
+#include <utility>
+
 #include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/input_file.h"
-#include "tools/gn/parse_tree.h"
 #include "tools/gn/scope.h"
 #include "tools/gn/test_with_scope.h"
 
@@ -22,7 +26,7 @@ TEST(ParseTree, Accessor) {
 
   scoped_ptr<IdentifierNode> member_identifier(
       new IdentifierNode(member_token));
-  accessor.set_member(member_identifier.Pass());
+  accessor.set_member(std::move(member_identifier));
 
   // The access should fail because a is not defined.
   Err err;
@@ -40,7 +44,7 @@ TEST(ParseTree, Accessor) {
   EXPECT_EQ(Value::NONE, result.type());
 
   // Define b, accessor should succeed now.
-  const int64 kBValue = 42;
+  const int64_t kBValue = 42;
   err = Err();
   setup.scope()
       ->GetMutableValue("a", false)

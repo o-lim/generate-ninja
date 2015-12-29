@@ -4,6 +4,9 @@
 
 #include "tools/gn/builder.h"
 
+#include <stddef.h>
+#include <utility>
+
 #include "tools/gn/config.h"
 #include "tools/gn/deps_iterator.h"
 #include "tools/gn/err.h"
@@ -80,7 +83,7 @@ void Builder::ItemDefined(scoped_ptr<Item> item) {
     return;
   }
 
-  record->set_item(item.Pass());
+  record->set_item(std::move(item));
 
   // Do target-specific dependency setup. This will also schedule dependency
   // loads for targets that are required.

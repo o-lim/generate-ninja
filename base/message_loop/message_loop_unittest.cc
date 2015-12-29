@@ -2,12 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/message_loop/message_loop_test.h"
@@ -19,6 +23,7 @@
 #include "base/thread_task_runner_handle.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(OS_WIN)
@@ -336,7 +341,7 @@ void RunTest_RecursiveDenial2(MessageLoop::Type message_loop_type) {
   WaitForSingleObject(event.Get(), INFINITE);
   MessageLoop::current()->Run();
 
-  ASSERT_EQ(order.Size(), 17);
+  ASSERT_EQ(17u, order.Size());
   EXPECT_EQ(order.Get(0), TaskItem(RECURSIVE, 1, true));
   EXPECT_EQ(order.Get(1), TaskItem(RECURSIVE, 1, false));
   EXPECT_EQ(order.Get(2), TaskItem(MESSAGEBOX, 2, true));
@@ -380,7 +385,7 @@ void RunTest_RecursiveSupport2(MessageLoop::Type message_loop_type) {
   WaitForSingleObject(event.Get(), INFINITE);
   MessageLoop::current()->Run();
 
-  ASSERT_EQ(order.Size(), 18);
+  ASSERT_EQ(18u, order.Size());
   EXPECT_EQ(order.Get(0), TaskItem(RECURSIVE, 1, true));
   EXPECT_EQ(order.Get(1), TaskItem(RECURSIVE, 1, false));
   EXPECT_EQ(order.Get(2), TaskItem(MESSAGEBOX, 2, true));
@@ -522,7 +527,7 @@ void TestIOHandler::Init() {
 
   DWORD read;
   EXPECT_FALSE(ReadFile(file_.Get(), buffer_, size(), &read, context()));
-  EXPECT_EQ(ERROR_IO_PENDING, GetLastError());
+  EXPECT_EQ(static_cast<DWORD>(ERROR_IO_PENDING), GetLastError());
   if (wait_)
     WaitForIO();
 }
@@ -615,8 +620,9 @@ void RunTest_WaitForIO() {
   DWORD written;
   EXPECT_TRUE(WriteFile(server1.Get(), buffer, sizeof(buffer), &written, NULL));
   PlatformThread::Sleep(2 * delay);
-  EXPECT_EQ(WAIT_TIMEOUT, WaitForSingleObject(callback1_called.Get(), 0)) <<
-      "handler1 has not been called";
+  EXPECT_EQ(static_cast<DWORD>(WAIT_TIMEOUT),
+            WaitForSingleObject(callback1_called.Get(), 0))
+      << "handler1 has not been called";
 
   EXPECT_TRUE(WriteFile(server2.Get(), buffer, sizeof(buffer), &written, NULL));
 

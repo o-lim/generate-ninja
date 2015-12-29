@@ -16,6 +16,7 @@
 #include "base/files/file_util.h"
 #include "base/i18n/icu_util.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
@@ -27,6 +28,7 @@
 #include "base/test/test_switches.h"
 #include "base/test/test_timeouts.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/multiprocess_func_list.h"
@@ -97,23 +99,17 @@ int RunUnitTestsUsingBaseTestSuite(int argc, char **argv) {
 }
 
 TestSuite::TestSuite(int argc, char** argv) : initialized_command_line_(false) {
-  PreInitialize(true);
+  PreInitialize();
   InitializeFromCommandLine(argc, argv);
 }
 
 #if defined(OS_WIN)
 TestSuite::TestSuite(int argc, wchar_t** argv)
     : initialized_command_line_(false) {
-  PreInitialize(true);
+  PreInitialize();
   InitializeFromCommandLine(argc, argv);
 }
 #endif  // defined(OS_WIN)
-
-TestSuite::TestSuite(int argc, char** argv, bool create_at_exit_manager)
-    : initialized_command_line_(false) {
-  PreInitialize(create_at_exit_manager);
-  InitializeFromCommandLine(argc, argv);
-}
 
 TestSuite::~TestSuite() {
   if (initialized_command_line_)
@@ -139,7 +135,7 @@ void TestSuite::InitializeFromCommandLine(int argc, wchar_t** argv) {
 }
 #endif  // defined(OS_WIN)
 
-void TestSuite::PreInitialize(bool create_at_exit_manager) {
+void TestSuite::PreInitialize() {
 #if defined(OS_WIN)
   testing::GTEST_FLAG(catch_exceptions) = false;
 #endif
@@ -154,8 +150,7 @@ void TestSuite::PreInitialize(bool create_at_exit_manager) {
   // On Android, AtExitManager is created in
   // testing/android/native_test_wrapper.cc before main() is called.
 #if !defined(OS_ANDROID)
-  if (create_at_exit_manager)
-    at_exit_manager_.reset(new AtExitManager);
+  at_exit_manager_.reset(new AtExitManager);
 #endif
 
   // Don't add additional code to this function.  Instead add it to

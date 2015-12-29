@@ -5,6 +5,8 @@
 #ifndef BASE_BIND_INTERNAL_H_
 #define BASE_BIND_INTERNAL_H_
 
+#include <stddef.h>
+
 #include <type_traits>
 
 #include "base/bind_helpers.h"
@@ -39,12 +41,7 @@ namespace internal {
 //             even if the invocation syntax differs.
 //  RunType -- A function type (as opposed to function _pointer_ type) for
 //             a Run() function.  Usually just a convenience typedef.
-//  (Bound)ArgsType -- A function type that is being (ab)used to store the
-//                     types of set of arguments.  The "return" type is always
-//                     void here.  We use this hack so that we do not need
-//                     a new type name for each arity of type. (eg.,
-//                     BindState1, BindState2).  This makes forward
-//                     declarations and friending much much easier.
+//  (Bound)Args -- A set of types that stores the arguments.
 //
 // Types:
 //  RunnableAdapter<> -- Wraps the various "function" pointer types into an
@@ -56,7 +53,6 @@ namespace internal {
 //                     signature adapters are applied.
 //  MakeRunnable<> -- Takes a Functor and returns an object in the Runnable
 //                    type class that represents the underlying Functor.
-//                    There are |O(1)| MakeRunnable types.
 //  InvokeHelper<> -- Take a Runnable + arguments and actully invokes it.
 //                    Handle the differing syntaxes needed for WeakPtr<>
 //                    support, and for ignoring return values.  This is separate
@@ -71,17 +67,17 @@ namespace internal {
 // |Sig| is a non-const reference.
 // Implementation note: This non-specialized case handles zero-arity case only.
 // Non-zero-arity cases should be handled by the specialization below.
-template <typename Sig>
-struct HasNonConstReferenceParam : false_type {};
+template <typename List>
+struct HasNonConstReferenceItem : false_type {};
 
 // Implementation note: Select true_type if the first parameter is a non-const
 // reference.  Otherwise, skip the first parameter and check rest of parameters
 // recursively.
-template <typename R, typename T, typename... Args>
-struct HasNonConstReferenceParam<R(T, Args...)>
+template <typename T, typename... Args>
+struct HasNonConstReferenceItem<TypeList<T, Args...>>
     : std::conditional<is_non_const_reference<T>::value,
                        true_type,
-                       HasNonConstReferenceParam<R(Args...)>>::type {};
+                       HasNonConstReferenceItem<TypeList<Args...>>>::type {};
 
 // HasRefCountedTypeAsRawPtr selects true_type when any of the |Args| is a raw
 // pointer to a RefCounted type.
@@ -149,7 +145,9 @@ class RunnableAdapter;
 template <typename R, typename... Args>
 class RunnableAdapter<R(*)(Args...)> {
  public:
-  typedef R (RunType)(Args...);
+  // MSVC 2013 doesn't support Type Alias of function types.
+  // Revisit this after we update it to newer version.
+  typedef R RunType(Args...);
 
   explicit RunnableAdapter(R(*function)(Args...))
       : function_(function) {
@@ -167,8 +165,10 @@ class RunnableAdapter<R(*)(Args...)> {
 template <typename R, typename T, typename... Args>
 class RunnableAdapter<R(T::*)(Args...)> {
  public:
-  typedef R (RunType)(T*, Args...);
-  typedef true_type IsMethod;
+  // MSVC 2013 doesn't support Type Alias of function types.
+  // Revisit this after we update it to newer version.
+  typedef R RunType(T*, Args...);
+  using IsMethod = true_type;
 
   explicit RunnableAdapter(R(T::*method)(Args...))
       : method_(method) {
@@ -186,8 +186,8 @@ class RunnableAdapter<R(T::*)(Args...)> {
 template <typename R, typename T, typename... Args>
 class RunnableAdapter<R(T::*)(Args...) const> {
  public:
-  typedef R (RunType)(const T*, Args...);
-  typedef true_type IsMethod;
+  using RunType = R(const T*, Args...);
+  using IsMethod = true_type;
 
   explicit RunnableAdapter(R(T::*method)(Args...) const)
       : method_(method) {
@@ -211,7 +211,9 @@ struct ForceVoidReturn;
 
 template <typename R, typename... Args>
 struct ForceVoidReturn<R(Args...)> {
-  typedef void(RunType)(Args...);
+  // MSVC 2013 doesn't support Type Alias of function types.
+  // Revisit this after we update it to newer version.
+  typedef void RunType(Args...);
 };
 
 
@@ -220,21 +222,21 @@ struct ForceVoidReturn<R(Args...)> {
 // See description at top of file.
 template <typename T>
 struct FunctorTraits {
-  typedef RunnableAdapter<T> RunnableType;
-  typedef typename RunnableType::RunType RunType;
+  using RunnableType = RunnableAdapter<T>;
+  using RunType = typename RunnableType::RunType;
 };
 
 template <typename T>
 struct FunctorTraits<IgnoreResultHelper<T>> {
-  typedef typename FunctorTraits<T>::RunnableType RunnableType;
-  typedef typename ForceVoidReturn<
-      typename RunnableType::RunType>::RunType RunType;
+  using RunnableType = typename FunctorTraits<T>::RunnableType;
+  using RunType =
+      typename ForceVoidReturn<typename RunnableType::RunType>::RunType;
 };
 
 template <typename T>
 struct FunctorTraits<Callback<T>> {
-  typedef Callback<T> RunnableType;
-  typedef typename Callback<T>::RunType RunType;
+  using RunnableType = Callback<T> ;
+  using RunType = typename Callback<T>::RunType;
 };
 
 
@@ -360,19 +362,18 @@ struct Invoker<IndexSequence<bound_indices...>,
 // Normally, this is the same as the RunType of the Runnable, but it can
 // be different if an adapter like IgnoreResult() has been used.
 //
-// BoundArgsType contains the storage type for all the bound arguments by
-// (ab)using a function type.
-template <typename Runnable, typename RunType, typename BoundArgList>
+// BoundArgs contains the storage type for all the bound arguments.
+template <typename Runnable, typename RunType, typename... BoundArgs>
 struct BindState;
 
 template <typename Runnable,
           typename R,
           typename... Args,
           typename... BoundArgs>
-struct BindState<Runnable, R(Args...), TypeList<BoundArgs...>> final
+struct BindState<Runnable, R(Args...), BoundArgs...> final
     : public BindStateBase {
  private:
-  using StorageType = BindState<Runnable, R(Args...), TypeList<BoundArgs...>>;
+  using StorageType = BindState<Runnable, R(Args...), BoundArgs...>;
   using RunnableType = Runnable;
 
   // true_type if Runnable is a method invocation and the first bound argument

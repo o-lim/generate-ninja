@@ -2,10 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "tools/gn/ninja_binary_target_writer.h"
+
 #include <sstream>
+#include <utility>
 
 #include "testing/gtest/include/gtest/gtest.h"
-#include "tools/gn/ninja_binary_target_writer.h"
 #include "tools/gn/scheduler.h"
 #include "tools/gn/target.h"
 #include "tools/gn/test_with_scope.h"
@@ -196,6 +198,43 @@ TEST(NinjaBinaryTargetWriter, ProductExtensionAndInputDeps) {
       "  ldflags =\n"
       "  libs =\n"
       "  output_extension = .so.6\n";
+
+  std::string out_str = out.str();
+  EXPECT_EQ(expected, out_str);
+}
+
+// Tests libs are applied.
+TEST(NinjaBinaryTargetWriter, LibsAndLibDirs) {
+  TestWithScope setup;
+  Err err;
+
+  setup.build_settings()->SetBuildDir(SourceDir("//out/Debug/"));
+
+  // A shared library w/ libs and lib_dirs.
+  Target target(setup.settings(), Label(SourceDir("//foo/"), "shlib"));
+  target.set_output_type(Target::SHARED_LIBRARY);
+  target.config_values().libs().push_back(LibFile(SourceFile("//foo/lib1.a")));
+  target.config_values().libs().push_back(LibFile("foo"));
+  target.config_values().lib_dirs().push_back(SourceDir("//foo/bar/"));
+  target.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  std::ostringstream out;
+  NinjaBinaryTargetWriter writer(&target, out);
+  writer.Run();
+
+  const char expected[] =
+      "defines =\n"
+      "include_dirs =\n"
+      "root_out_dir = .\n"
+      "target_out_dir = obj/foo\n"
+      "target_output_name = libshlib\n"
+      "\n"
+      "\n"
+      "build ./libshlib.so: solink | ../../foo/lib1.a\n"
+      "  ldflags = -L../../foo/bar\n"
+      "  libs = ../../foo/lib1.a -lfoo\n"
+      "  output_extension = .so\n";
 
   std::string out_str = out.str();
   EXPECT_EQ(expected, out_str);
@@ -448,7 +487,7 @@ TEST(NinjaBinaryTargetWriter, WinPrecompiledHeaders) {
   cxx_tool->set_outputs(SubstitutionList::MakeForTest(
       "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o"));
   cxx_tool->set_precompiled_header_type(Tool::PCH_MSVC);
-  pch_toolchain.SetTool(Toolchain::TYPE_CXX, cxx_tool.Pass());
+  pch_toolchain.SetTool(Toolchain::TYPE_CXX, std::move(cxx_tool));
 
   // Add a C compiler as well.
   scoped_ptr<Tool> cc_tool(new Tool);
@@ -459,7 +498,7 @@ TEST(NinjaBinaryTargetWriter, WinPrecompiledHeaders) {
   cc_tool->set_outputs(SubstitutionList::MakeForTest(
       "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o"));
   cc_tool->set_precompiled_header_type(Tool::PCH_MSVC);
-  pch_toolchain.SetTool(Toolchain::TYPE_CC, cc_tool.Pass());
+  pch_toolchain.SetTool(Toolchain::TYPE_CC, std::move(cc_tool));
   pch_toolchain.ToolchainSetupComplete();
 
   // This target doesn't specify precompiled headers.
@@ -576,7 +615,7 @@ TEST(NinjaBinaryTargetWriter, GCCPrecompiledHeaders) {
   cxx_tool->set_outputs(SubstitutionList::MakeForTest(
       "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o"));
   cxx_tool->set_precompiled_header_type(Tool::PCH_GCC);
-  pch_toolchain.SetTool(Toolchain::TYPE_CXX, cxx_tool.Pass());
+  pch_toolchain.SetTool(Toolchain::TYPE_CXX, std::move(cxx_tool));
   pch_toolchain.ToolchainSetupComplete();
 
   // Add a C compiler as well.
@@ -588,7 +627,7 @@ TEST(NinjaBinaryTargetWriter, GCCPrecompiledHeaders) {
   cc_tool->set_outputs(SubstitutionList::MakeForTest(
       "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o"));
   cc_tool->set_precompiled_header_type(Tool::PCH_GCC);
-  pch_toolchain.SetTool(Toolchain::TYPE_CC, cc_tool.Pass());
+  pch_toolchain.SetTool(Toolchain::TYPE_CC, std::move(cc_tool));
   pch_toolchain.ToolchainSetupComplete();
 
   // This target doesn't specify precompiled headers.
