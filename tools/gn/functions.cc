@@ -822,6 +822,8 @@ struct FunctionInfoInitializer {
     INSERT_FUNCTION(GetPathInfo, false)
     INSERT_FUNCTION(GetTargetOutputs, false)
     INSERT_FUNCTION(Import, false)
+    INSERT_FUNCTION(MarkUsed, false)
+    INSERT_FUNCTION(MarkUsedFrom, false)
     INSERT_FUNCTION(Print, false)
     INSERT_FUNCTION(ProcessFileTemplate, false)
     INSERT_FUNCTION(ReadFile, false)

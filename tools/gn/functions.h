@@ -204,6 +204,22 @@ Value RunLoadableModule(Scope* scope,
                         BlockNode* block,
                         Err* err);
 
+extern const char kMarkUsed[];
+extern const char kMarkUsed_HelpShort[];
+extern const char kMarkUsed_Help[];
+Value RunMarkUsed(Scope* scope,
+                  const FunctionCallNode* function,
+                  const ListNode* args_list,
+                  Err* err);
+
+extern const char kMarkUsedFrom[];
+extern const char kMarkUsedFrom_HelpShort[];
+extern const char kMarkUsedFrom_Help[];
+Value RunMarkUsedFrom(Scope* scope,
+                      const FunctionCallNode* function,
+                      const ListNode* args_list,
+                      Err* err);
+
 extern const char kPrint[];
 extern const char kPrint_HelpShort[];
 extern const char kPrint_Help[];

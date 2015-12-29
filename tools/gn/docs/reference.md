@@ -1744,6 +1744,86 @@
 
 
 ```
+## **mark_used**: Marks variables as used from the current scope.
+
+```
+  mark_used(variable_name_or_variable_list)
+
+  Marks the given variables from the current scope as used. This can be
+  used in the context of templates to prevent "Assignment had no effect"
+  errors.
+
+  The variables in the given variable_list will be marked used in the
+  current scope or any enclosing scope.
+
+  See also "mark_used_from" for marking variables used from a
+  different scope.
+
+
+
+```
+## **mark_used_from**: Marks variables as used from a different scope.
+
+```
+  mark_used_from(from_scope, variable_list_or_star)
+
+  Marks the given variables from the given scope as used if they exist.
+  This is normally used in the context of templates to prevent
+  "Assignment had no effect" errors.
+
+  The variables in the given variable_list will be marked used if they
+  exist in the given scope or any enclosing scope. If they do not exist,
+  nothing will happen.
+
+  As a special case, if the variable_list is a string with the value of
+  "*", all variables from the given scope will be marked used. "*"
+  only marks variables used that exist directly on the from_scope, not
+  enclosing ones. Otherwise it would mark all global variables as used.
+
+  See also "forward_variables_from" for copying variables from a.
+  different scope.
+
+```
+
+### **Examples**
+
+```
+  # This is a common action template. It would invoke a script with
+  # some given parameters, and wants to use the various types of deps
+  # and the visibility from the invoker if it's defined. It also injects
+  # an additional dependency to all targets depending on the visibility
+  # flag.
+  template("my_test") {
+    action(target_name) {
+      forward_variables_from(invoker, [ "data_deps", "deps",
+                                        "public_deps", "visibility" ])
+      if (defined(visibility) && visibility) {
+        if (defined(invoker.extra_deps)) {
+          # Add these extra deps to the dependencies.
+          # "deps" may or may not be defined at this point.
+          if (defined(deps)) {
+            deps += invoker.extra_deps
+          } else {
+            deps = invoker.extra_deps
+          }
+        }
+      } else {
+        # Don't do anything with these extra deps.
+        mark_used_from(invoker, [ "extra_deps" ])
+      }
+    }
+  }
+
+  # This is a template around a target whose type depends on a global
+  # variable. It marks all values from the invoker as used.
+  template("my_wrapper") {
+    target(my_wrapper_target_type, target_name) {
+      mark_used_from(invoker, "*")
+    }
+ }
+
+
+```
 ## **print**: Prints to the console.
 
 ```
