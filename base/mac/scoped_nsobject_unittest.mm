@@ -52,6 +52,14 @@ TEST(ScopedNSObjectTest, ScopedNSObject) {
   ASSERT_EQ(2u, [p1 retainCount]);
 }
 
+// Instantiating scoped_nsobject<> with T=NSAutoreleasePool should trip a
+// static_assert.
+#if 0
+TEST(ScopedNSObjectTest, FailToCreateScopedNSObjectAutoreleasePool) {
+  base::scoped_nsobject<NSAutoreleasePool> pool;
+}
+#endif
+
 TEST(ScopedNSObjectTest, ScopedNSObjectInContainer) {
   base::scoped_nsobject<id> p([[NSObject alloc] init]);
   ASSERT_TRUE(p.get());

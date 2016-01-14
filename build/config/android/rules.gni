@@ -517,6 +517,7 @@ template("locale_pak_resources") {
     build_config = _build_config
     resources_zip = _resources_zip
     type = "android_resources"
+    is_locale_resource = true
   }
 
   action("${target_name}__create_resources_zip") {
@@ -576,10 +577,10 @@ template("locale_pak_resources") {
 #   custom_package: java package for generated .java files.
 #   v14_skip: If true, don't run v14 resource generator on this. Defaults to
 #     false. (see build/android/gyp/generate_v14_compatible_resources.py)
-#
 #   shared_resources: If true make a resource package that can be loaded by a
 #     different application at runtime to access the package's resources.
-#
+#   app_as_shared_lib: If true make a resource package that can be loaded as
+#     both shared_resources and normal application.
 
 # Example:
 #   android_resources("foo_resources") {
@@ -635,6 +636,7 @@ template("android_resources") {
     deps = []
     forward_variables_from(invoker,
                            [
+                             "app_as_shared_lib",
                              "android_manifest",
                              "custom_package",
                              "deps",
@@ -1182,6 +1184,10 @@ template("android_java_prebuilt") {
 # and (possibly) native libraries.
 #
 # Variables
+#   alternative_android_sdk_jar: The alternative android sdk jar used in
+#     proguard.
+#   android_aapt_path: Android aapt tool to replace default one to build
+#     resource.
 #   android_manifest: Path to AndroidManifest.xml.
 #   android_manifest_dep: Target that generates AndroidManifest (if applicable)
 #   chromium_code: If true, extra analysis warning/errors will be enabled.
@@ -1221,6 +1227,8 @@ template("android_java_prebuilt") {
 #   testonly: Marks this target as "test-only".
 #   write_asset_list: Adds an extra file to the assets, which contains a list of
 #     all other asset files.
+#   alternative_locale_resource_dep: The locale resource target which overrides
+#     any exsting locale resources in dep graph.
 #
 #   DEPRECATED_java_in_dir: Directory containing java files. All .java files in
 #     this directory will be included in the library. This is only supported to
@@ -1394,6 +1402,11 @@ template("android_apk") {
       deps += invoker.deps
     }
 
+    if (defined(invoker.alternative_locale_resource_dep)) {
+      deps += [ invoker.alternative_locale_resource_dep ]
+      has_alternative_locale_resource = true
+    }
+
     proguard_enabled = _proguard_enabled
     if (_proguard_enabled) {
       proguard_info = "$_proguard_jar_path.info"
@@ -1409,6 +1422,9 @@ template("android_apk") {
   process_resources(process_resources_target) {
     forward_variables_from(invoker,
                            [
+                             "alternative_android_sdk_jar",
+                             "android_aapt_path",
+                             "app_as_shared_lib",
                              "include_all_resources",
                              "shared_resources",
                            ])
@@ -1540,6 +1556,7 @@ template("android_apk") {
     }
     _proguard_target = "${_template_name}__proguard"
     proguard(_proguard_target) {
+      forward_variables_from(invoker, [ "alternative_android_sdk_jar" ])
       deps = [
         ":$build_config_target",
         ":$java_target",
@@ -1669,6 +1686,9 @@ template("android_apk") {
     deps = []
     forward_variables_from(invoker,
                            [
+                             "alternative_android_sdk_jar",
+                             "android_aapt_path",
+                             "app_as_shared_lib",
                              "deps",
                              "extensions_to_not_compress",
                              "language_splits",
@@ -1720,11 +1740,11 @@ template("android_apk") {
       native_libs = _extra_native_libs
       native_libs_even_when_incremental =
           _extra_native_libs_even_when_incremental
-
-      # Placeholders necessary for some older devices.
-      # http://crbug.com/395038
-      forward_variables_from(invoker, [ "native_lib_placeholders" ])
     }
+
+    # Placeholders necessary for some older devices.
+    # http://crbug.com/395038
+    forward_variables_from(invoker, [ "native_lib_placeholders" ])
   }
 
   if ((_native_libs != [] || _extra_native_libs_even_when_incremental != []) &&
@@ -1761,6 +1781,8 @@ template("android_apk") {
       deps = []
       forward_variables_from(invoker,
                              [
+                               "alternative_android_sdk_jar",
+                               "android_aapt_path",
                                "deps",
                                "native_lib_placeholders",
                                "public_deps",
@@ -2192,7 +2214,7 @@ template("create_native_executable_dist") {
 #
 # Example:
 #  proto_java_library("foo_proto_java") {
-#    proto_path = [ "src/foo" ]
+#    proto_path = "src/foo"
 #    sources = [ "$proto_path/foo.proto" ]
 #  }
 template("proto_java_library") {

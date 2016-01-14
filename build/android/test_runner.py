@@ -17,7 +17,6 @@ import threading
 import unittest
 
 import devil_chromium
-
 from devil import base_error
 from devil import devil_env
 from devil.android import apk_helper
@@ -30,6 +29,7 @@ from devil.utils import reraiser_thread
 from devil.utils import run_tests_helper
 
 from pylib import constants
+from pylib.constants import host_paths
 from pylib.base import base_test_result
 from pylib.base import environment_factory
 from pylib.base import test_dispatcher
@@ -51,7 +51,7 @@ from pylib.results import report_results
 
 
 _DEVIL_STATIC_CONFIG_FILE = os.path.abspath(os.path.join(
-    constants.DIR_SOURCE_ROOT, 'build', 'android', 'devil_config.json'))
+    host_paths.DIR_SOURCE_ROOT, 'build', 'android', 'devil_config.json'))
 
 
 def AddCommonOptions(parser):
@@ -109,6 +109,9 @@ def AddCommonOptions(parser):
                      dest='json_results_file',
                      help='If set, will dump results in JSON form '
                           'to specified file.')
+  group.add_argument('--logcat-output-dir',
+                     help='If set, will dump logcats recorded during test run '
+                          'to directory. File names will be the device ids.')
 
 def ProcessCommonOptions(args):
   """Processes and handles all common options."""
@@ -390,6 +393,10 @@ def AddInstrumentationTestOptions(parser):
                      help='Delete stale test data on the device.')
   group.add_argument('--timeout-scale', type=float,
                      help='Factor by which timeouts should be scaled.')
+  group.add_argument('--strict-mode', dest='strict_mode', default='off',
+                     help='StrictMode command-line flag set on the device, '
+                          'death/testing to kill the process, off to stop '
+                          'checking, flash to flash only. Default testing.')
 
   AddCommonOptions(parser)
   AddDeviceOptions(parser)
@@ -450,7 +457,10 @@ def ProcessInstrumentationOptions(args):
       args.isolate_file_path,
       args.set_asserts,
       args.delete_stale_data,
-      args.timeout_scale)
+      args.timeout_scale,
+      args.apk_under_test,
+      args.additional_apks,
+      args.strict_mode)
 
 
 def AddUIAutomatorTestOptions(parser):

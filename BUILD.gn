@@ -149,7 +149,6 @@ group("both_gn_and_gyp") {
       "//third_party/codesighs",
       "//third_party/pdfium/samples:pdfium_test",
       "//tools/gn",
-      "//tools/gn:generate_test_gn_data",
       "//tools/gn:gn_unittests",
       "//tools/perf/clear_system_cache",
       "//ui/accessibility:accessibility_unittests",
@@ -176,8 +175,8 @@ group("both_gn_and_gyp") {
       "//media/cast:cast_unittests",
       "//media/midi:midi_unittests",
       "//mojo",
-      "//mojo/application/public/cpp",
       "//mojo/common:mojo_common_unittests",
+      "//mojo/shell/public/cpp",
       "//net:net_perftests",
 
       # TODO(use-new-edk):
@@ -196,7 +195,6 @@ group("both_gn_and_gyp") {
       "//third_party/mojo/src/mojo/edk/test:mojo_public_system_unittests",
       "//third_party/mojo/src/mojo/edk/test:mojo_public_utility_unittests",
       "//third_party/smhasher:pmurhash",
-      "//tools/battor_agent",
       "//tools/imagediff($host_toolchain)",
       "//tools/telemetry:bitmaptools($host_toolchain)",
       "//ui/display:display_unittests",
@@ -222,6 +220,10 @@ group("both_gn_and_gyp") {
         "//ios/public/provider/chrome/browser",
       ]
     }
+  }
+
+  if (is_mac || is_win || is_linux) {
+    deps += [ "//tools/battor_agent" ]
   }
 
   deps += root_extra_deps
@@ -299,6 +301,7 @@ group("both_gn_and_gyp") {
 
     if (!is_component_build) {
       deps += [
+        "//components/cronet/android:cronet_package",
         "//components/cronet/android:cronet_sample_apk",
         "//components/cronet/android:cronet_sample_test_apk",
         "//components/cronet/android:cronet_test_apk",
@@ -502,7 +505,7 @@ group("both_gn_and_gyp") {
       # TODO(GYP): Remove this when the gles2 tests work
       "//gpu/command_buffer/client:gles2_implementation_no_check",
       "//gpu/khronos_glcts_support:khronos_glcts_test",  # TODO(GYP) crbug.com/471903 to make this complete.
-      "//mojo/application/public/cpp",
+      "//mojo/shell/public/cpp",
       "//testing/gmock:gmock_main",
 
       # TODO(use-new-edk):
@@ -621,7 +624,10 @@ group("gn_only") {
   }
 
   if (is_win || is_linux) {
-    deps += [ "//mash:all" ]
+    deps += [
+      "//mash:all",
+      "//ui/views/mus:tests",
+    ]
   }
 
   if (is_linux && !is_chromeos && !is_chromecast) {
@@ -748,9 +754,7 @@ group("gn_mojo_targets") {
       "//mojo:tests",
 
       # TODO(use-new-edk):
-      #"//mojo/edk/js/test:js_integration_tests",
       #"//mojo/edk/js/tests:js_to_cpp_bindings_python",
-      "//third_party/mojo/src/mojo/edk/js/test:js_integration_tests",
     ]
   }
 }

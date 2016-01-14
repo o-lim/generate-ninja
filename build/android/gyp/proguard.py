@@ -31,6 +31,8 @@ def _ParseOptions(args):
   parser.add_option('--classpath', action='append',
                     help='Classpath for proguard.')
   parser.add_option('--stamp', help='Path to touch on success.')
+  parser.add_option('--verbose', '-v', action='store_true',
+                    help='Print all proguard output')
 
   options, _ = parser.parse_args(args)
 
@@ -59,6 +61,7 @@ def main(args):
 
   classpath = list(set(options.classpath))
   proguard.libraryjars(classpath)
+  proguard.verbose(options.verbose)
 
   input_paths = proguard.GetInputs()
 

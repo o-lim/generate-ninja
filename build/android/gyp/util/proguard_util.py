@@ -3,29 +3,33 @@
 # found in the LICENSE file.
 
 import os
+import re
 from util import build_utils
 
-def FilterProguardOutput(output):
-  '''ProGuard outputs boring stuff to stdout (proguard version, jar path, etc)
+
+class _ProguardOutputFilter(object):
+  """ProGuard outputs boring stuff to stdout (proguard version, jar path, etc)
   as well as interesting stuff (notes, warnings, etc). If stdout is entirely
-  boring, this method suppresses the output.
-  '''
-  ignore_patterns = [
-    'ProGuard, version ',
-    'Reading program jar [',
-    'Reading library jar [',
-    'Preparing output jar [',
-    '  Copying resources from program jar [',
-  ]
-  for line in output.splitlines():
-    for pattern in ignore_patterns:
-      if line.startswith(pattern):
-        break
-    else:
-      # line doesn't match any of the patterns; it's probably something worth
-      # printing out.
-      return output
-  return ''
+  boring, this class suppresses the output.
+  """
+
+  IGNORE_RE = re.compile(
+      r'(?:Pro.*version|Note:|Reading|Preparing|.*:.*(?:MANIFEST\.MF|\.empty))')
+
+  def __init__(self):
+    self._last_line_ignored = False
+
+  def __call__(self, output):
+    ret = []
+    for line in output.splitlines(True):
+      if not line.startswith(' '):
+        self._last_line_ignored = bool(self.IGNORE_RE.match(line))
+      elif 'You should check if you need to specify' in line:
+        self._last_line_ignored = True
+
+      if not self._last_line_ignored:
+        ret.append(line)
+    return ''.join(ret)
 
 
 class ProguardCmdBuilder(object):
@@ -40,6 +44,7 @@ class ProguardCmdBuilder(object):
     self._configs = None
     self._outjar = None
     self._cmd = None
+    self._verbose = False
 
   def outjar(self, path):
     assert self._cmd is None
@@ -77,6 +82,10 @@ class ProguardCmdBuilder(object):
     for p in paths:
       assert os.path.exists(p), p
     self._configs = paths
+
+  def verbose(self, verbose):
+    assert self._cmd is None
+    self._verbose = verbose
 
   def build(self):
     if self._cmd:
@@ -130,6 +139,10 @@ class ProguardCmdBuilder(object):
       '-printusage', self._outjar + '.usage',
       '-printmapping', self._outjar + '.mapping',
     ]
+
+    if self._verbose:
+      cmd.append('-verbose')
+
     self._cmd = cmd
     return self._cmd
 
@@ -154,8 +167,17 @@ class ProguardCmdBuilder(object):
     open(self._outjar + '.seeds', 'w').close()
     open(self._outjar + '.usage', 'w').close()
     open(self._outjar + '.mapping', 'w').close()
+    # Warning: and Error: are sent to stderr, but messages and Note: are sent
+    # to stdout.
+    stdout_filter = None
+    stderr_filter = None
+    if not self._verbose:
+      stdout_filter = _ProguardOutputFilter()
+      stderr_filter = _ProguardOutputFilter()
     build_utils.CheckOutput(self._cmd, print_stdout=True,
-                            stdout_filter=FilterProguardOutput)
+                            print_stderr=True,
+                            stdout_filter=stdout_filter,
+                            stderr_filter=stderr_filter)
 
     this_info = {
       'inputs': self._injars,

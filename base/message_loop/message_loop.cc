@@ -133,9 +133,11 @@ MessageLoop::MessageLoop(scoped_ptr<MessagePump> pump)
 }
 
 MessageLoop::~MessageLoop() {
-  // current() could be NULL if this message loop is destructed before it is
-  // bound to a thread.
-  DCHECK(current() == this || !current());
+  // If |pump_| is non-null, this message loop has been bound and should be the
+  // current one on this thread. Otherwise, this loop is being destructed before
+  // it was bound to a thread, so a different message loop (or no loop at all)
+  // may be current.
+  DCHECK((pump_ && current() == this) || (!pump_ && current() != this));
 
   // iOS just attaches to the loop, it doesn't Run it.
   // TODO(stuartmorgan): Consider wiring up a Detach().
@@ -177,7 +179,8 @@ MessageLoop::~MessageLoop() {
   task_runner_ = NULL;
 
   // OK, now make it so that no one can find us.
-  lazy_tls_ptr.Pointer()->Set(NULL);
+  if (current() == this)
+    lazy_tls_ptr.Pointer()->Set(nullptr);
 }
 
 // static
@@ -301,12 +304,7 @@ void MessageLoop::QuitWhenIdle() {
   if (run_loop_) {
     run_loop_->quit_when_idle_received_ = true;
   } else {
-    // We don't assert that run_loop_ is valid for custom message pumps. Some,
-    // for example MojoMessagePump, might have shutdown already based on other
-    // shutdown signals.
-    if (type_ != MessageLoop::TYPE_CUSTOM) {
-      NOTREACHED() << "Must be inside Run to call Quit";
-    }
+    NOTREACHED() << "Must be inside Run to call Quit";
   }
 }
 

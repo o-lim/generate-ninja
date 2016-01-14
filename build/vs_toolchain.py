@@ -64,15 +64,82 @@ def SetEnvironmentAndGetRuntimeDllDirs():
     # Include the VS runtime in the PATH in case it's not machine-installed.
     runtime_path = ';'.join(vs_runtime_dll_dirs)
     os.environ['PATH'] = runtime_path + ';' + os.environ['PATH']
+  elif sys.platform == 'win32' and not depot_tools_win_toolchain:
+    if not 'GYP_MSVS_OVERRIDE_PATH' in os.environ:
+      os.environ['GYP_MSVS_OVERRIDE_PATH'] = DetectVisualStudioPath()
+
   return vs_runtime_dll_dirs
+
+
+def _RegistryGetValueUsingWinReg(key, value):
+  """Use the _winreg module to obtain the value of a registry key.
+
+  Args:
+    key: The registry key.
+    value: The particular registry value to read.
+  Return:
+    contents of the registry key's value, or None on failure.  Throws
+    ImportError if _winreg is unavailable.
+  """
+  import _winreg
+  try:
+    root, subkey = key.split('\\', 1)
+    assert root == 'HKLM'  # Only need HKLM for now.
+    with _winreg.OpenKey(_winreg.HKEY_LOCAL_MACHINE, subkey) as hkey:
+      return _winreg.QueryValueEx(hkey, value)[0]
+  except WindowsError:
+    return None
+
+
+def _RegistryGetValue(key, value):
+  try:
+    return _RegistryGetValueUsingWinReg(key, value)
+  except ImportError:
+    raise Exception('The python library _winreg not found.')
+
+
+def GetVisualStudioVersion():
+  """Return GYP_MSVS_VERSION of Visual Studio, default to 2013 for now.
+  """
+  return os.environ.get('GYP_MSVS_VERSION', '2013')
+
+
+def DetectVisualStudioPath():
+  """Return path to the GYP_MSVS_VERSION of Visual Studio.
+  """
+
+  # Note that this code is used from
+  # build/toolchain/win/setup_toolchain.py as well.
+  version_as_year = GetVisualStudioVersion()
+  year_to_version = {
+      '2013': '12.0',
+      '2015': '14.0',
+  }
+  if version_as_year not in year_to_version:
+    raise Exception(('Visual Studio version %s (from GYP_MSVS_VERSION)'
+                     ' not supported. Supported versions are: %s') % (
+                       version_as_year, ', '.join(year_to_version.keys())))
+  version = year_to_version[version_as_year]
+  keys = [r'HKLM\Software\Microsoft\VisualStudio\%s' % version,
+          r'HKLM\Software\Wow6432Node\Microsoft\VisualStudio\%s' % version]
+  for key in keys:
+    path = _RegistryGetValue(key, 'InstallDir')
+    if not path:
+      continue
+    path = os.path.normpath(os.path.join(path, '..', '..'))
+    return path
+
+  raise Exception(('Visual Studio Version %s (from GYP_MSVS_VERSION)'
+                   ' not found.') % (version_as_year))
 
 
 def _VersionNumber():
   """Gets the standard version number ('120', '140', etc.) based on
   GYP_MSVS_VERSION."""
-  if os.environ['GYP_MSVS_VERSION'] == '2013':
+  vs_version = GetVisualStudioVersion()
+  if vs_version == '2013':
     return '120'
-  elif os.environ['GYP_MSVS_VERSION'] == '2015':
+  elif vs_version == '2015':
     return '140'
   else:
     raise ValueError('Unexpected GYP_MSVS_VERSION')
@@ -115,7 +182,7 @@ def _CopyRuntime(target_dir, source_dir, target_cpu, debug):
   """Copy the VS runtime DLLs, only if the target doesn't exist, but the target
   directory does exist. Handles VS 2013 and VS 2015."""
   suffix = "d.dll" if debug else ".dll"
-  if os.environ.get('GYP_MSVS_VERSION') == '2015':
+  if GetVisualStudioVersion() == '2015':
     _CopyRuntime2015(target_dir, source_dir, '%s140' + suffix)
   else:
     _CopyRuntime2013(target_dir, source_dir, 'msvc%s120' + suffix)
@@ -194,8 +261,8 @@ def CopyDlls(target_dir, configuration, target_cpu):
 def _GetDesiredVsToolchainHashes():
   """Load a list of SHA1s corresponding to the toolchains that we want installed
   to build with."""
-  if os.environ.get('GYP_MSVS_VERSION') == '2015':
-    return ['8c3265958030a53f93f9cf027cfa5d5d9717fbf6'] # Update 1
+  if GetVisualStudioVersion() == '2015':
+    return ['17c7ddb3595be5c6b9c98b6f930adad7e4456671'] # Update 1
   else:
     # Default to VS2013.
     return ['9ff97c632ae1fee0c98bcd53e71770eb3a0d8deb']
@@ -251,7 +318,7 @@ runtime_dirs = "%s"
 ''' % (
       os.environ['GYP_MSVS_OVERRIDE_PATH'],
       os.environ['WINDOWSSDKDIR'],
-      os.environ['GYP_MSVS_VERSION'],
+      GetVisualStudioVersion(),
       os.environ.get('WDK_DIR', ''),
       ';'.join(runtime_dll_dirs or ['None']))
 
