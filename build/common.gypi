@@ -88,6 +88,9 @@
           # Enable Wayland display server support.
           'enable_wayland_server%' : 0,
 
+          # Enable Wi-Fi Display support.
+          'enable_wifi_display%' : 0,
+
           # By default we build against a stable sysroot image to avoid
           # depending on the packages installed on the local machine. Set this
           # to 0 to build against locally installed headers and libraries (e.g.
@@ -166,6 +169,7 @@
         'enable_hidpi%': '<(enable_hidpi)',
         'enable_topchrome_md%': '<(enable_topchrome_md)',
         'enable_wayland_server%': '<(enable_wayland_server)',
+        'enable_wifi_display%': '<(enable_wifi_display)',
         'buildtype%': '<(buildtype)',
         'branding%': '<(branding)',
         'branding_path_component%': '<(branding)',
@@ -351,6 +355,7 @@
       'enable_hidpi%': '<(enable_hidpi)',
       'enable_topchrome_md%': '<(enable_topchrome_md)',
       'enable_wayland_server%': '<(enable_wayland_server)',
+      'enable_wifi_display%': '<(enable_wifi_display)',
       'android_channel%': '<(android_channel)',
       'use_goma%': '<(use_goma)',
       'gomadir%': '<(gomadir)',
@@ -482,6 +487,9 @@
       # Enable crash reporting via Kasko.
       'kasko%': 0,
 
+      # Enable hang reports in Kasko.
+      'kasko_hang_reports%': 0,
+
       # Enable building with LSan (Clang's -fsanitize=leak option).
       # -fsanitize=leak only works with clang, but lsan=1 implies clang=1
       # See https://sites.google.com/a/chromium.org/dev/developers/testing/leaksanitizer
@@ -604,9 +612,6 @@
 
       # Enables used resource whitelist generation; disabled by default.
       'enable_resource_whitelist_generation%': 0,
-
-      # Enables BidrectionalSteam; disabled by default.
-      'enable_bidirectional_stream': 0,
 
       # Enable FILE support by default.
       'disable_file_support%': 0,
@@ -1011,7 +1016,7 @@
           'use_openmax_dl_fft%': 0,
         }],
         ['OS=="win" or OS=="linux"', {
-            'enable_mdns%' : 1,
+          'enable_mdns%' : 1,
         }],
 
         # Disable various features by default on embedded.
@@ -1153,6 +1158,7 @@
     'enable_hidpi%': '<(enable_hidpi)',
     'enable_topchrome_md%': '<(enable_topchrome_md)',
     'enable_wayland_server%': '<(enable_wayland_server)',
+    'enable_wifi_display%': '<(enable_wifi_display)',
     'image_loader_extension%': '<(image_loader_extension)',
     'fastbuild%': '<(fastbuild)',
     'dont_embed_build_metadata%': '<(dont_embed_build_metadata)',
@@ -1192,6 +1198,7 @@
     'use_sanitizer_options%': '<(use_sanitizer_options)',
     'syzyasan%': '<(syzyasan)',
     'kasko%': '<(kasko)',
+    'kasko_hang_reports%': '<(kasko_hang_reports)',
     'syzygy_optimize%': '<(syzygy_optimize)',
     'lsan%': '<(lsan)',
     'msan%': '<(msan)',
@@ -1232,7 +1239,6 @@
     'enable_captive_portal_detection%': '<(enable_captive_portal_detection)',
     'disable_file_support%': '<(disable_file_support)',
     'disable_ftp_support%': '<(disable_ftp_support)',
-    'enable_bidirectional_stream%': '<(enable_bidirectional_stream)',
     'enable_task_manager%': '<(enable_task_manager)',
     'sas_dll_path%': '<(sas_dll_path)',
     'wix_path%': '<(wix_path)',
@@ -1548,9 +1554,6 @@
     # Force disable libstdc++ debug mode.
     'disable_glibcxx_debug%': 0,
 
-    # Set to 1 to compile with MSE support for MPEG2 TS
-    'enable_mpeg2ts_stream_parser%': 0,
-
     # Support ChromeOS touchpad gestures with ozone.
     'use_evdev_gestures%': 0,
 
@@ -1616,26 +1619,6 @@
         ],
       }, {
         'binutils_version%': 0,
-      }],
-      # The version of GCC in use, set later in platforms that use GCC and have
-      # not explicitly chosen to build with clang. Currently, this means all
-      # platforms except Windows, Mac and iOS.
-      # TODO(glider): set clang to 1 earlier for ASan and TSan builds so that
-      # it takes effect here.
-      ['os_posix==1 and OS!="mac" and OS!="ios" and clang==0 and asan==0 and lsan==0 and tsan==0 and msan==0 and ubsan_vptr==0', {
-        'conditions': [
-          ['OS=="android"', {
-            'host_gcc_version%': '<!pymod_do_main(compiler_version host compiler)',
-            # We directly set the gcc version since we know what we use.
-            'gcc_version%': 49,
-          }, {
-            'host_gcc_version%': '<!pymod_do_main(compiler_version host compiler)',
-            'gcc_version%': '<!pymod_do_main(compiler_version target compiler)',
-          }],
-        ],
-      }, {
-        'host_gcc_version%': 0,
-        'gcc_version%': 0,
       }],
       ['OS=="win" and "<!pymod_do_main(dir_exists <(directx_sdk_default_path))"=="True"', {
         'directx_sdk_path%': '<(directx_sdk_default_path)',
@@ -1885,7 +1868,6 @@
         'use_system_fontconfig%': 1,
       }],
       ['chromecast==1', {
-        'enable_mpeg2ts_stream_parser%': 1,
         'use_custom_freetype%': 0,
         'use_playready%': 0,
         'conditions': [
@@ -1943,18 +1925,16 @@
           # based on mac_sdk_min will be bypassed entirely.
           'conditions': [
             ['OS=="ios"', {
-              'mac_sdk_min%': '10.8',
               # The iOS build can use Xcode's clang, and that will complain
               # about -stdlib=libc++ if the deployment target is not at least
               # 10.7.
               'mac_deployment_target%': '10.7',
             }, {  # else OS!="ios"
-              'mac_sdk_min%': '10.10',
               'mac_deployment_target%': '10.6',
             }],
           ],
+          'mac_sdk_min': '10.10',
           'mac_sdk_path%': '',
-
         },
 
         'mac_sdk_min': '<(mac_sdk_min)',
@@ -2633,6 +2613,12 @@
       'clang_warning_flags': [
         '-Wheader-hygiene',
 
+        # TODO(thakis): Add -Wfor-loop-analysis to -Wall in clang, remove this:
+        '-Wfor-loop-analysis',
+
+        # TODO(thakis): Consider -Wloop-analysis (turns on
+        # -Wrange-loop-analysis too).
+
         # Don't die on dtoa code that uses a char as an array index.
         # This is required solely for base/third_party/dmg_fp/dtoa.cc.
         '-Wno-char-subscripts',
@@ -2667,9 +2653,6 @@
 
         # TODO(thakis): Enable this, crbug.com/507717
         '-Wno-shift-negative-value',
-
-        # TODO(thakis): Consider enabling this?
-        '-Wno-bitfield-width',
       ],
     },
     'includes': [ 'set_clang_warning_flags.gypi', ],
@@ -2774,11 +2757,6 @@
       }],
       ['proprietary_codecs==1', {
         'defines': ['USE_PROPRIETARY_CODECS'],
-        'conditions': [
-          ['enable_mpeg2ts_stream_parser==1', {
-            'defines': ['ENABLE_MPEG2TS_STREAM_PARSER'],
-          }],
-        ],
       }],
       ['enable_viewport==1', {
         'defines': ['ENABLE_VIEWPORT'],
@@ -2803,6 +2781,9 @@
       }],
       ['enable_wayland_server==1', {
         'defines': ['ENABLE_WAYLAND_SERVER=1'],
+      }],
+      ['enable_wifi_display==1', {
+        'defines': ['ENABLE_WIFI_DISPLAY=1'],
       }],
       ['use_udev==1', {
         'defines': ['USE_UDEV'],
@@ -2895,14 +2876,6 @@
             'SYZYASAN',
             'MEMORY_TOOL_REPLACES_ALLOCATOR',
             'MEMORY_SANITIZER_INITIAL_SIZE',
-        ],
-      }],
-      ['kasko==1', {
-        'defines': [
-            'KASKO',
-        ],
-        'include_dirs': [
-          '<(DEPTH)/third_party/kasko/include',
         ],
       }],
       ['OS=="win"', {
@@ -3140,39 +3113,22 @@
         },
         'conditions': [
           [ 'os_posix==1 and OS!="mac" and OS!="ios"', {
-            # We don't want to get warnings from third-party code,
-            # so remove any existing warning-enabling flags like -Wall.
-            'cflags!': [
-              '-Wall',
-              '-Wextra',
-            ],
+            # Remove -Wextra for third-party code.
+            'cflags!': [ '-Wextra' ],
             'cflags_cc': [
               # Don't warn about hash_map in third-party code.
               '-Wno-deprecated',
             ],
-            'cflags': [
-              # Don't warn about printf format problems.
-              # This is off by default in gcc but on in Ubuntu's gcc(!).
-              '-Wno-format',
-            ],
-            'cflags_cc!': [
-              # Necessary because llvm.org/PR10448 is WONTFIX (crbug.com/90453).
-              '-Wsign-compare',
-            ]
+          }],
+          [ 'os_posix==1 and clang!=1 and OS!="mac" and OS!="ios"', {
+            # When we don't control the compiler, don't use -Wall for
+            # third-party code either.
+            'cflags!': [ '-Wall' ],
           }],
           # TODO: Fix all warnings on chromeos too.
           [ 'os_posix==1 and OS!="mac" and OS!="ios" and (clang!=1 or chromeos==1)', {
             'cflags!': [
               '-Werror',
-            ],
-          }],
-          [ 'os_posix==1 and os_bsd!=1 and OS!="mac" and OS!="android"', {
-            'cflags': [
-              # Don't warn about ignoring the return value from e.g. close().
-              # This is off by default in some gccs but on by default in others.
-              # BSD systems do not support this option, since they are usually
-              # using gcc 4.2.1, which does not have this flag yet.
-              '-Wno-unused-result',
             ],
           }],
           [ 'OS=="win"', {
@@ -3210,7 +3166,7 @@
 
           [ 'OS=="mac" or OS=="ios"', {
             'xcode_settings': {
-              'WARNING_CFLAGS!': ['-Wall', '-Wextra'],
+              'WARNING_CFLAGS!': ['-Wextra'],
             },
             'conditions': [
               ['buildtype=="Official"', {
@@ -3222,10 +3178,6 @@
           }],
           [ 'OS=="ios"', {
             'xcode_settings': {
-              # TODO(ios): Fix remaining warnings in third-party code, then
-              # remove this; the Mac cleanup didn't get everything that's
-              # flagged in an iOS build.
-              'GCC_TREAT_WARNINGS_AS_ERRORS': 'NO',
               'RUN_CLANG_STATIC_ANALYZER': 'NO',
               # Several internal ios directories generate numerous warnings for
               # -Wobjc-missing-property-synthesis.
@@ -3442,6 +3394,16 @@
             'PreprocessorDefinitions': ['_DEBUG'],
           },
         },
+        'variables': {
+          'clang_warning_flags': [
+            # Allow comparing the address of references and 'this' against 0
+            # in debug builds. Technically, these can never be null in
+            # well-defined C/C++ and Clang can optimize such checks away in
+            # release builds, but they may be used in asserts in debug builds.
+            '-Wno-undefined-bool-conversion',
+            '-Wno-tautological-undefined-compare',
+          ],
+        },
         'conditions': [
           ['OS=="linux" or OS=="android"', {
             'target_conditions': [
@@ -3463,30 +3425,6 @@
               'OTHER_CFLAGS': [
                 '-fstack-protector-all',  # Implies -fstack-protector
               ],
-            },
-          }],
-          ['clang==1', {
-            'cflags': [
-              # Allow comparing the address of references and 'this' against 0
-              # in debug builds. Technically, these can never be null in
-              # well-defined C/C++ and Clang can optimize such checks away in
-              # release builds, but they may be used in asserts in debug builds.
-              '-Wno-undefined-bool-conversion',
-              '-Wno-tautological-undefined-compare',
-            ],
-            'xcode_settings': {
-              'OTHER_CFLAGS': [
-                '-Wno-undefined-bool-conversion',
-                '-Wno-tautological-undefined-compare',
-              ],
-            },
-            'msvs_settings': {
-              'VCCLCompilerTool': {
-                'AdditionalOptions': [
-                  '-Wno-undefined-bool-conversion',
-                  '-Wno-tautological-undefined-compare',
-                ],
-              },
             },
           }],
         ],
@@ -3621,6 +3559,11 @@
               'NS_BLOCK_ASSERTIONS=1',
             ],
           }],
+          # Force disable blink assertions on Cast device builds (overriding DCHECK_ALWAYS_ON)
+          # Only defined for Release builds (NDEBUG), otherwise blink won't compile.
+          ['chromecast==1 and OS=="linux" and is_cast_desktop_build==0', {
+            'defines': ['ENABLE_ASSERT=0'],
+          }],
         ],
       },
       #
@@ -3723,6 +3666,10 @@
         'variables': {
           'werror%': '-Werror',
           'libraries_for_target%': '',
+          'conditions' : [
+            # Enable -Wextra for chromium_code when we control the compiler.
+            ['clang==1', { 'wextra': '-Wextra' }, { 'wextra': '-Wno-extra' }],
+          ],
         },
         'defines': [
           '_FILE_OFFSET_BITS=64',
@@ -3732,6 +3679,7 @@
           '-pthread',
           '-fno-strict-aliasing',  # See http://crbug.com/32204
           '-Wall',
+          '<(wextra)',
           # Don't warn about unused function params.  We use those everywhere.
           '-Wno-unused-parameter',
           # Don't warn about the "struct foo f = {0};" initialization pattern.
@@ -3748,9 +3696,6 @@
           # Make inline functions have hidden visiblity by default.
           # Surprisingly, not covered by -fvisibility=hidden.
           '-fvisibility-inlines-hidden',
-          # GCC turns on -Wsign-compare for C++ under -Wall, but clang doesn't,
-          # so we specify it explicitly.  (llvm.org/PR10448, crbug.com/90453)
-          '-Wsign-compare',
         ],
         'ldflags': [
           '-pthread', '-Wl,-z,noexecstack',
@@ -3813,10 +3758,7 @@
                 'cflags': ['-fno-unwind-tables', '-fno-asynchronous-unwind-tables'],
                 'defines': ['NO_UNWIND_TABLES'],
               }],
-              # TODO(mostynb): shuffle clang/gcc_version/binutils_version
-              # definitions in to the right scope to use them when setting
-              # linux_use_debug_fission, so it can be used here alone.
-              ['linux_use_debug_fission==1 and linux_use_gold_flags==1 and (clang==1 or gcc_version>=48) and binutils_version>=223', {
+              ['linux_use_debug_fission==1 and linux_use_gold_flags==1 and binutils_version>=223', {
                 'cflags': ['-gsplit-dwarf'],
               }],
             ],
@@ -4096,17 +4038,6 @@
                         '-fuse-ld=gold',
                     ],
                     'conditions': [
-                      ['gcc_version==48 and clang==0', {
-                        'cflags': [
-                          # The following 5 options are disabled to save on
-                          # binary size in GCC 4.8.
-                          '-fno-partial-inlining',
-                          '-fno-early-inlining',
-                          '-fno-tree-copy-prop',
-                          '-fno-tree-loop-optimize',
-                          '-fno-move-loop-invariants',
-                        ],
-                      }],
                       ['arm_thumb==1', {
                         'cflags': [ '-mthumb-interwork' ],
                       }],
@@ -4165,6 +4096,10 @@
                       # We want to statically link libstdc++/libgcc.
                       '-static-libstdc++',
                       '-static-libgcc',
+                      # Don't allow visible symbols from libraries that contain
+                      # assembly code with symbols that aren't hidden properly.
+                      # http://b/26390825
+                      '-Wl,--exclude-libs=libffmpeg.a',
                     ],
                     'cflags!': [
                       # Some components in Chromium (e.g. v8, skia, ffmpeg)
@@ -4355,16 +4290,18 @@
               }]]
           }],
           ['clang==1', {
-            'cflags': [
-              # TODO(thakis): Remove, http://crbug.com/263960
-              '-Wno-reserved-user-defined-literal',
-            ],
             'cflags_cc': [
               # gnu++11 instead of c++11 is needed because some code uses
               # typeof() (a GNU extension).
               # TODO(thakis): Eventually switch this to c++11 instead,
               # http://crbug.com/427584
               '-std=gnu++11',
+            ],
+          }],
+          ['clang==1 and chromeos==1', {
+            'cflags': [
+              # TODO(thakis): Remove, http://crbug.com/263960
+              '-Wno-reserved-user-defined-literal',
             ],
           }],
           ['clang==0 and host_clang==1', {
@@ -4745,26 +4682,42 @@
               '-Wl,--disable-new-dtags',
             ],
           }],
-          ['gcc_version>=47 and clang==0', {
+          ['clang==0', {
             'target_conditions': [
               ['_toolset=="target"', {
                 'cflags_cc': [
                   '-std=gnu++11',
                   # See comment for -Wno-c++11-narrowing.
                   '-Wno-narrowing',
-                  # TODO(thakis): Remove, http://crbug.com/263960
-                  '-Wno-literal-suffix',
                 ],
               }],
             ],
           }],
-          ['host_gcc_version>=47 and clang==0 and host_clang==0', {
+          ['clang==0 and host_clang==0', {
             'target_conditions': [
               ['_toolset=="host"', {
                 'cflags_cc': [
                   '-std=gnu++11',
                   # See comment for -Wno-c++11-narrowing.
                   '-Wno-narrowing',
+                ],
+              }],
+            ],
+          }],
+          ['clang==0 and chromeos==1', {
+            'target_conditions': [
+              ['_toolset=="target"', {
+                'cflags_cc': [
+                  # TODO(thakis): Remove, http://crbug.com/263960
+                  '-Wno-literal-suffix',
+                ],
+              }],
+            ],
+          }],
+          ['clang==0 and host_clang==0 and chromeos==1', {
+            'target_conditions': [
+              ['_toolset=="host"', {
+                'cflags_cc': [
                   # TODO(thakis): Remove, http://crbug.com/263960
                   '-Wno-literal-suffix',
                 ],
@@ -5078,8 +5031,12 @@
         'mac_bundle': 0,
         'xcode_settings': {
           'ALWAYS_SEARCH_USER_PATHS': 'NO',
+          'CLANG_CXX_LANGUAGE_STANDARD': 'c++11',  # -std=c++11
           # Don't link in libarclite_macosx.a, see http://crbug.com/156530.
           'CLANG_LINK_OBJC_RUNTIME': 'NO',          # -fno-objc-link-runtime
+          # Warn if automatic synthesis is triggered with
+          # the -Wobjc-missing-property-synthesis flag.
+          'CLANG_WARN_OBJC_MISSING_PROPERTY_SYNTHESIS': 'YES',
           'COPY_PHASE_STRIP': 'NO',
           'GCC_C_LANGUAGE_STANDARD': 'c99',         # -std=c99
           'GCC_CW_ASM_SYNTAX': 'NO',                # No -fasm-blocks
@@ -5089,11 +5046,9 @@
           # GCC_INLINES_ARE_PRIVATE_EXTERN maps to -fvisibility-inlines-hidden
           'GCC_INLINES_ARE_PRIVATE_EXTERN': 'YES',
           'GCC_OBJC_CALL_CXX_CDTORS': 'YES',        # -fobjc-call-cxx-cdtors
-          'GCC_SYMBOLS_PRIVATE_EXTERN': 'YES',      # -fvisibility=hidden
           'GCC_THREADSAFE_STATICS': 'NO',           # -fno-threadsafe-statics
           'GCC_TREAT_WARNINGS_AS_ERRORS': 'YES',    # -Werror
-          'GCC_VERSION': '4.2',
-          'GCC_WARN_ABOUT_MISSING_NEWLINE': 'YES',  # -Wnewline-eof
+          'GCC_VERSION': 'com.apple.compilers.llvm.clang.1_0',
           'USE_HEADERMAP': 'NO',
           'WARNING_CFLAGS': [
             '-Wall',
@@ -5103,6 +5058,11 @@
             # Don't warn about the "struct foo f = {0};" initialization
             # pattern.
             '-Wno-missing-field-initializers',
+            # This warns on selectors from Cocoa headers (-length, -set).
+            # cfe-dev is currently discussing the merits of this warning.
+            # TODO(thakis): Reevaluate what to do with this, based on the
+            # cfe-dev discussion.
+            '-Wno-selector-type-mismatch',
           ],
           'conditions': [
             ['chromium_mac_pch', {'GCC_PRECOMPILE_PREFIX_HEADER': 'YES'},
@@ -5110,25 +5070,9 @@
             ],
             # Note that the prebuilt Clang binaries should not be used for iOS
             # development except for ASan builds.
-            ['clang==1', {
-              'CLANG_CXX_LANGUAGE_STANDARD': 'c++11',  # -std=c++11
-              # Warn if automatic synthesis is triggered with
-              # the -Wobjc-missing-property-synthesis flag.
-              'CLANG_WARN_OBJC_MISSING_PROPERTY_SYNTHESIS': 'YES',
-              'GCC_VERSION': 'com.apple.compilers.llvm.clang.1_0',
-              'WARNING_CFLAGS': [
-                # This warns on selectors from Cocoa headers (-length, -set).
-                # cfe-dev is currently discussing the merits of this warning.
-                # TODO(thakis): Reevaluate what to do with this, based one
-                # cfe-dev discussion.
-                '-Wno-selector-type-mismatch',
-              ],
-              'conditions': [
-                ['clang_xcode==0', {
-                  'CC': '$(SOURCE_ROOT)/<(clang_dir)/clang',
-                  'LDPLUSPLUS': '$(SOURCE_ROOT)/<(clang_dir)/clang++',
-                }],
-              ],
+            ['clang_xcode==0', {
+              'CC': '$(SOURCE_ROOT)/<(clang_dir)/clang',
+              'LDPLUSPLUS': '$(SOURCE_ROOT)/<(clang_dir)/clang++',
             }],
             ['clang==1 and clang_xcode==0 and clang_use_chrome_plugins==1', {
               'OTHER_CFLAGS': [
@@ -5201,6 +5145,29 @@
                 ],
               }],
             ],
+          }],
+          ['OS=="mac"', {
+            'xcode_settings': {
+              'GCC_SYMBOLS_PRIVATE_EXTERN': 'YES',    # -fvisibility=hidden
+            },
+          }],
+          ['OS=="ios"', {
+            'configurations': {
+              'Debug': {
+                'xcode_settings': {
+                  # XCTests inject a dynamic library into the application. If
+                  # fvisibility is set to hidden, then some symbols needed by
+                  # XCTests are not available. Disable this setting for
+                  # Debug configuration.
+                  'GCC_SYMBOLS_PRIVATE_EXTERN': 'NO',
+                },
+              },
+              'Release': {
+                'xcode_settings': {
+                  'GCC_SYMBOLS_PRIVATE_EXTERN': 'YES',    # -fvisibility=hidden
+                },
+              },
+            },
           }],
         ],
         'target_conditions': [
@@ -6043,14 +6010,12 @@
     # Don't warn about the "typedef 'foo' locally defined but not used"
     # for gcc 4.8 and higher.
     # TODO: remove this flag once all builds work. See crbug.com/227506
-    ['gcc_version>=48 and clang==0', {
+    ['clang==0', {
       'target_defaults': {
-        'cflags': [
-          '-Wno-unused-local-typedefs',
-        ],
+        'cflags': [ '-Wno-unused-local-typedefs' ],
       },
     }],
-    ['gcc_version>=48 and clang==0 and host_clang==1', {
+    ['clang==0 and host_clang==1', {
       'target_defaults': {
         'target_conditions': [
           ['_toolset=="host"', { 'cflags!': [ '-Wno-unused-local-typedefs' ]}],
@@ -6374,6 +6339,7 @@
       # configured SDK to show properly in the Xcode UI, SDKROOT must be set
       # here at the project level.
       ['OS=="mac"', {
+        'ARCHS': [ 'x86_64' ],
         'conditions': [
           ['mac_sdk_path==""', {
             'SDKROOT': 'macosx<(mac_sdk)',  # -isysroot
@@ -6383,6 +6349,8 @@
         ],
       }],
       ['OS=="ios"', {
+        # Target both iPhone and iPad.
+        'TARGETED_DEVICE_FAMILY': '1,2',
         'conditions': [
           ['ios_sdk_path==""', {
             'conditions': [
@@ -6395,23 +6363,6 @@
             ],
           }, {
             'SDKROOT': '<(ios_sdk_path)',  # -isysroot
-          }],
-        ],
-      }],
-      ['OS=="ios"', {
-        # Target both iPhone and iPad.
-        'TARGETED_DEVICE_FAMILY': '1,2',
-      }, {  # OS!="ios"
-        'conditions': [
-          ['target_arch=="x64"', {
-            'ARCHS': [
-              'x86_64'
-            ],
-          }],
-          ['target_arch=="ia32"', {
-            'ARCHS': [
-              'i386'
-            ],
           }],
         ],
       }],

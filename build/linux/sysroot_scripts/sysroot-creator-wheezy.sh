@@ -25,6 +25,8 @@ DEBIAN_PACKAGES="\
   libattr1
   libavahi-client3
   libavahi-common3
+  libbrlapi0.5
+  libbrlapi-dev
   libc6
   libc6-dev
   libcairo2
@@ -142,6 +144,7 @@ DEBIAN_PACKAGES="\
   libxdamage1
   libxdamage-dev
   libxdmcp6
+  libxdmcp-dev
   libxext6
   libxext-dev
   libxfixes3
@@ -175,6 +178,7 @@ DEBIAN_PACKAGES="\
   x11proto-render-dev
   x11proto-scrnsaver-dev
   x11proto-xext-dev
+  x11proto-xinerama-dev
   zlib1g
   zlib1g-dev
 "

@@ -90,7 +90,7 @@ void TestWithScope::SetupToolchain(Toolchain* toolchain) {
   asm_tool->set_source_extensions({Value(nullptr, "asm"), Value(nullptr, "s"), Value(nullptr, "arm")});
   asm_tool->set_outputs(SubstitutionList::MakeForTest(
       "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o"));
-  toolchain->SetTool(Toolchain::TYPE_ASM, asm_tool.Pass());
+  toolchain->SetTool(Toolchain::TYPE_ASM, std::move(asm_tool));
 
   // Don't use RC tools in unit tests yet. Add here if needed.
 

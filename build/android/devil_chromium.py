@@ -5,9 +5,14 @@
 """Configures devil for use in chromium."""
 
 import os
+import sys
+
+from pylib.constants import host_paths
+
+if host_paths.DEVIL_PATH not in sys.path:
+  sys.path.append(host_paths.DEVIL_PATH)
 
 from devil import devil_env
-
 
 _DEVIL_CONFIG = os.path.abspath(
     os.path.join(os.path.dirname(__file__), 'devil_chromium.json'))
@@ -47,7 +52,7 @@ _DEVIL_BUILD_PRODUCT_DEPS = {
   ],
   'forwarder_host': [
     {
-      'platform': 'linux',
+      'platform': 'linux2',
       'arch': 'x86_64',
       'name': 'host_forwarder',
     },
@@ -86,7 +91,7 @@ _DEVIL_BUILD_PRODUCT_DEPS = {
   ],
   'md5sum_host': [
     {
-      'platform': 'linux',
+      'platform': 'linux2',
       'arch': 'x86_64',
       'name': 'md5sum_bin_host',
     },
@@ -126,6 +131,7 @@ def Initialize(output_directory=None, custom_deps=None):
     'dependencies': {},
   }
   if output_directory:
+    output_directory = os.path.abspath(output_directory)
     devil_dynamic_config['dependencies'] = {
       dep_name: {
         'file_info': {

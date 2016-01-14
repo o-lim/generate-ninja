@@ -5,6 +5,7 @@
 # pylint: disable=unused-argument
 
 import logging
+import os
 import re
 import shutil
 import tempfile
@@ -151,7 +152,9 @@ class LogcatMonitor(object):
     until |StopRecording| is called.
     """
     def record_to_file():
-      with open(self._record_file.name, 'a') as f:
+      # Write the log with line buffering so the consumer sees each individual
+      # line.
+      with open(self._record_file.name, 'a', 1) as f:
         for data in self._adb.Logcat(filter_specs=self._filter_specs,
                                      logcat_format='threadtime'):
           if self._stop_recording_event.isSet():
@@ -191,6 +194,7 @@ class LogcatMonitor(object):
     """
     self._StopRecording()
     if self._record_file and self._output_file:
+      os.makedirs(os.path.dirname(self._output_file))
       shutil.copy(self._record_file.name, self._output_file)
 
   def Close(self):

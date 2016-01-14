@@ -1954,7 +1954,7 @@
 
 ```
 
-### **Arguments**:
+### **Arguments**
 
 ```
   input
@@ -1988,6 +1988,12 @@
   string or a list of strings). All relative and source-absolute file
   names will be converted to be relative to the requested output
   System-absolute paths will be unchanged.
+
+  Whether an output path will end in a slash will match whether the
+  corresponding input path ends in a slash. It will return "." or
+  "./" (depending on whether the input ends in a slash) to avoid
+  returning empty strings. This means if you want a root path
+  ("//" or "/") not ending in a slash, you can add a dot ("//.").
 
 ```
 
@@ -5188,7 +5194,8 @@
       string           = `"` { char | escape | expansion } `"` .
       escape           = `\` ( "$" | `"` | char ) .
       BracketExpansion = "{" ( identifier | ArrayAccess | ScopeAccess ) "}" .
-      expansion        = "$" ( identifier | BracketExpansion ) .
+      Hex              = "0x" [0-9A-Fa-f][0-9A-Fa-f]
+      expansion        = "$" ( identifier | BracketExpansion | Hex ) .
       char             = /* any character except "$", `"`, or newline */ .
 
   After a backslash, certain sequences represent special characters:
@@ -5198,6 +5205,9 @@
           \\    U+005C    backslash
 
   All other backslashes represent themselves.
+
+  To insert an arbitrary byte value, use $0xFF. For example, to
+  insert a newline character: "Line one$0x0ALine two".
 
 ```
 

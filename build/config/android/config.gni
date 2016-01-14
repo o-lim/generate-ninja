@@ -40,6 +40,11 @@ if (is_android) {
         "//third_party/android_tools:google_play_services_default_resources"
   }
 
+  if (!defined(webview_framework_jar)) {
+    webview_framework_jar =
+        "//third_party/android_platform/webview/frameworks_6.0.jar"
+  }
+
   declare_args() {
     android_sdk_root = default_android_sdk_root
     android_sdk_version = default_android_sdk_version
@@ -72,6 +77,9 @@ if (is_android) {
     # run_findbugs is false.
     findbugs_verbose = false
 
+    # Enables verbose proguard output (summaries and unfiltered output).
+    proguard_verbose = false
+
     # Set to true to enable the Errorprone compiler
     use_errorprone_java_compiler = false
 
@@ -103,9 +111,6 @@ if (is_android) {
     # Adds intrumentation to each function. Writes a file with the order that
     # functions are called at startup.
     use_order_profiling = false
-
-    # Use the internal version of the framework to build Android WebView.
-    use_webview_internal_framework = false
   }
 
   # Host stuff -----------------------------------------------------------------

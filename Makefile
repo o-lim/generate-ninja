@@ -7,7 +7,7 @@ clean:
 	@rm -rf out out_bootstrap
 
 .PHONY: gn_all
-gn_all: gn gn_unittests generate_test_gn_data
+gn_all: gn gn_unittests
 
 .PHONY: bootstrap
 bootstrap:
@@ -33,12 +33,6 @@ out/Release/gn_unittests: build.ninja
 
 .PHONY: gn_unittests
 gn_unittests: out/Release/gn_unittests
-
-out/Release/generate_test_gn_data: build.ninja
-	@ninja -C out/Release generate_test_gn_data
-
-.PHONY: generate_test_gn_data
-generate_test_gn_data: out/Release/generate_test_gn_data
 
 out/Release/gn_unittests.pass: out/Release/gn_unittests
 	@$<

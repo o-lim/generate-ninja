@@ -109,22 +109,17 @@ config("android_system_libs") {
 # to be linked in where they wouldn't have otherwise. This does not include
 # test code (test support and anything in the test directory) which should use
 # source_set as is recommended for GN targets).
-if (is_component_build) {
-  base_target_type = "shared_library"
-} else {
+component("base") {
   # TODO(phosek) bug 570839: If field_trial.cc is in a static library,
   # hacl_helper_nonsfi doesn't link properly on Linux in debug builds. The
   # reasons for this seem to involve obscure toolchain bugs. This should be
   # fixed and this target should always be a static_library in the
   # non-component case.
-  if (is_nacl_nonsfi) {
-    base_target_type = "source_set"
-  } else {
-    base_target_type = "static_library"
-  }
-}
-target(base_target_type, "base") {
+  component_never_use_source_set = !is_nacl_nonsfi
+
   sources = [
+    "allocator/allocator_check.cc",
+    "allocator/allocator_check.h",
     "allocator/allocator_extension.cc",
     "allocator/allocator_extension.h",
     "android/animation_frame_time_histogram.cc",
@@ -218,6 +213,7 @@ target(base_target_type, "base") {
     "bind_helpers.h",
     "bind_internal.h",
     "bind_internal_win.h",
+    "bit_cast.h",
     "bits.h",
     "build_time.cc",
     "build_time.h",
@@ -245,6 +241,8 @@ target(base_target_type, "base") {
     "debug/alias.h",
     "debug/asan_invalid_access.cc",
     "debug/asan_invalid_access.h",
+    "debug/close_handle_hook_win.cc",
+    "debug/close_handle_hook_win.h",
     "debug/crash_logging.cc",
     "debug/crash_logging.h",
     "debug/debugger.cc",
@@ -849,11 +847,8 @@ target(base_target_type, "base") {
     "trace_event/process_memory_dump.h",
     "trace_event/process_memory_maps.cc",
     "trace_event/process_memory_maps.h",
-    "trace_event/process_memory_maps_dump_provider.h",
     "trace_event/process_memory_totals.cc",
     "trace_event/process_memory_totals.h",
-    "trace_event/process_memory_totals_dump_provider.cc",
-    "trace_event/process_memory_totals_dump_provider.h",
     "trace_event/trace_buffer.cc",
     "trace_event/trace_buffer.h",
     "trace_event/trace_config.cc",
@@ -909,8 +904,6 @@ target(base_target_type, "base") {
     "win/iunknown_impl.h",
     "win/message_window.cc",
     "win/message_window.h",
-    "win/metro.cc",
-    "win/metro.h",
     "win/object_watcher.cc",
     "win/object_watcher.h",
     "win/process_startup_helper.cc",
@@ -953,6 +946,7 @@ target(base_target_type, "base") {
   configs += [
     ":base_flags",
     ":base_implementation",
+    "//base/allocator:allocator_shim_define",  # for allocator_check.cc.
     "//build/config:precompiled_headers",
   ]
 
@@ -994,7 +988,6 @@ target(base_target_type, "base") {
       "sys_info_linux.cc",
       "trace_event/malloc_dump_provider.cc",
       "trace_event/malloc_dump_provider.h",
-      "trace_event/process_memory_maps_dump_provider.cc",
     ]
     set_sources_assignment_filter(sources_assignment_filter)
 
@@ -1061,7 +1054,6 @@ target(base_target_type, "base") {
       "sync_socket_posix.cc",
       "sys_info.cc",
       "sys_info_posix.cc",
-      "trace_event/process_memory_totals_dump_provider.cc",
       "trace_event/trace_event_system_stats_monitor.cc",
     ]
 
@@ -1190,7 +1182,6 @@ target(base_target_type, "base") {
     sources += [
       "trace_event/malloc_dump_provider.cc",
       "trace_event/malloc_dump_provider.h",
-      "trace_event/process_memory_maps_dump_provider.cc",
     ]
 
     if (is_asan || is_lsan || is_msan || is_tsan) {
@@ -1827,7 +1818,6 @@ test("base_unittests") {
     "trace_event/memory_allocator_dump_unittest.cc",
     "trace_event/memory_dump_manager_unittest.cc",
     "trace_event/process_memory_dump_unittest.cc",
-    "trace_event/process_memory_totals_dump_provider_unittest.cc",
     "trace_event/trace_config_memory_test_util.h",
     "trace_event/trace_config_unittest.cc",
     "trace_event/trace_event_argument_unittest.cc",
@@ -1891,6 +1881,7 @@ test("base_unittests") {
     deps += [
       ":base_java",
       ":base_java_unittest_support",
+      "//base/android/jni_generator:jni_generator_tests",
     ]
 
     # TODO(brettw) I think this should not be here, we should not be using
@@ -1939,10 +1930,6 @@ test("base_unittests") {
       # Set rpath to find libmalloc_wrapper.so even in a non-component build.
       configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
     }
-  }
-
-  if (is_linux || is_android) {
-    sources += [ "trace_event/process_memory_maps_dump_provider_unittest.cc" ]
   }
 
   if (!is_linux || use_ozone) {

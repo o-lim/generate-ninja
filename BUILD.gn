@@ -20,7 +20,6 @@ group("gn_all") {
 
   deps = [
     "//tools/gn",
-    "//tools/gn:generate_test_gn_data",
     "//tools/gn:gn_unittests",
   ]
 

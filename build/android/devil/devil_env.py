@@ -4,31 +4,28 @@
 
 import contextlib
 import json
-import logging
 import os
 import platform
 import sys
 import tempfile
 import threading
 
-# TODO(jbudorick): Update this once dependency_manager moves to catapult.
-CATAPULT_BASE_PATH = os.path.abspath(os.path.join(
-    os.path.dirname(__file__), os.pardir, os.pardir, os.pardir,
-    'tools', 'telemetry'))
+CATAPULT_ROOT_PATH = os.path.abspath(os.path.join(
+    os.path.dirname(__file__), '..', '..', '..', 'third_party', 'catapult'))
+DEPENDENCY_MANAGER_PATH = os.path.join(
+    CATAPULT_ROOT_PATH, 'dependency_manager')
 
 @contextlib.contextmanager
 def SysPath(path):
   sys.path.append(path)
   yield
   if sys.path[-1] != path:
-    logging.debug('Expected %s at the end of sys.path. Full sys.path: %s',
-                  path, str(sys.path))
     sys.path.remove(path)
   else:
     sys.path.pop()
 
-with SysPath(CATAPULT_BASE_PATH):
-  from catapult_base import dependency_manager # pylint: disable=import-error
+with SysPath(DEPENDENCY_MANAGER_PATH):
+  import dependency_manager # pylint: disable=import-error
 
 _ANDROID_BUILD_TOOLS = {'aapt', 'dexdump', 'split-select'}
 
@@ -38,11 +35,11 @@ _DEVIL_DEFAULT_CONFIG = os.path.abspath(os.path.join(
 _LEGACY_ENVIRONMENT_VARIABLES = {
   'ADB_PATH': {
     'dependency_name': 'adb',
-    'platform': 'linux_x86_64',
+    'platform': 'linux2_x86_64',
   },
   'ANDROID_SDK_ROOT': {
     'dependency_name': 'android_sdk',
-    'platform': 'linux_x86_64',
+    'platform': 'linux2_x86_64',
   },
 }
 
@@ -139,7 +136,7 @@ class _Environment(object):
 def GetPlatform(arch=None, device=None):
   if device:
     return 'android_%s' % (arch or device.product_cpu_abi)
-  return 'linux_%s' % platform.machine()
+  return '%s_%s' % (sys.platform, platform.machine())
 
 
 config = _Environment()

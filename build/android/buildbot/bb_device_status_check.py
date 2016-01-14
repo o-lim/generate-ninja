@@ -17,16 +17,18 @@ import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import devil_chromium
+from devil import devil_env
 from devil.android import battery_utils
 from devil.android import device_blacklist
 from devil.android import device_errors
 from devil.android import device_list
 from devil.android import device_utils
 from devil.android.sdk import adb_wrapper
+from devil.constants import exit_codes
 from devil.utils import lsusb
 from devil.utils import reset_usb
 from devil.utils import run_tests_helper
-from pylib import constants
+from pylib.constants import host_paths
 
 _RE_DEVICE_ID = re.compile(r'Device ID = (\d+)')
 
@@ -297,12 +299,14 @@ def main():
   parser = argparse.ArgumentParser()
   parser.add_argument('--out-dir',
                       help='Directory where the device path is stored',
-                      default=os.path.join(constants.DIR_SOURCE_ROOT, 'out'))
+                      default=os.path.join(host_paths.DIR_SOURCE_ROOT, 'out'))
   parser.add_argument('--restart-usb', action='store_true',
                       help='DEPRECATED. '
                            'This script now always tries to reset USB.')
   parser.add_argument('--json-output',
                       help='Output JSON information into a specified file.')
+  parser.add_argument('--adb-path',
+                      help='Absolute path to the adb binary to use.')
   parser.add_argument('--blacklist-file', help='Device blacklist JSON file.')
   parser.add_argument('-v', '--verbose', action='count', default=1,
                       help='Log more information.')
@@ -311,7 +315,15 @@ def main():
 
   run_tests_helper.SetLogLevel(args.verbose)
 
-  devil_chromium.Initialize()
+  devil_custom_deps = None
+  if args.adb_path:
+    devil_custom_deps = {
+      'adb': {
+        devil_env.GetPlatform(): [args.adb_path],
+      },
+    }
+
+  devil_chromium.Initialize(custom_deps=devil_custom_deps)
 
   blacklist = (device_blacklist.Blacklist(args.blacklist_file)
                if args.blacklist_file
@@ -324,6 +336,9 @@ def main():
         device_list.GetPersistentDeviceList(last_devices_path))
   except IOError:
     expected_devices = set()
+  logging.info('Expected devices:')
+  for device in expected_devices:
+    logging.info('  %s', device)
 
   usb_devices = set(lsusb.get_android_devices())
   devices = [device_utils.DeviceUtils(s)
@@ -390,7 +405,7 @@ def main():
                       and not _IsBlacklisted(status['serial'], blacklist))]
 
   # If all devices failed, or if there are no devices, it's an infra error.
-  return 0 if live_devices else constants.INFRA_EXIT_CODE
+  return 0 if live_devices else exit_codes.INFRA
 
 
 if __name__ == '__main__':

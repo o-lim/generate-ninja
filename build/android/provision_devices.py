@@ -22,6 +22,7 @@ import sys
 import time
 
 import devil_chromium
+from devil import devil_env
 from devil.android import battery_utils
 from devil.android import device_blacklist
 from devil.android import device_errors
@@ -33,6 +34,7 @@ from devil.utils import run_tests_helper
 from devil.utils import timeout_retry
 from pylib import constants
 from pylib import device_settings
+from pylib.constants import host_paths
 
 _SYSTEM_WEBVIEW_PATHS = ['/system/app/webview', '/system/app/WebViewGoogle']
 _CHROME_PACKAGE_REGEX = re.compile('.*chrom.*')
@@ -427,7 +429,7 @@ def _PushAndLaunchAdbReboot(device, target):
   device.KillAll('adb_reboot', blocking=True, timeout=2, quiet=True)
   # Push adb_reboot
   logging.info('  Pushing adb_reboot ...')
-  adb_reboot = os.path.join(constants.DIR_SOURCE_ROOT,
+  adb_reboot = os.path.join(host_paths.DIR_SOURCE_ROOT,
                             'out/%s/adb_reboot' % target)
   device.PushChangedFiles([(adb_reboot, '/data/local/tmp/')])
   # Launch adb_reboot
@@ -442,7 +444,7 @@ def _LaunchHostHeartbeat():
   KillHostHeartbeat()
   # Launch a new host_heartbeat
   logging.info('Spawning host heartbeat...')
-  subprocess.Popen([os.path.join(constants.DIR_SOURCE_ROOT,
+  subprocess.Popen([os.path.join(host_paths.DIR_SOURCE_ROOT,
                                  'build/android/host_heartbeat.py')])
 
 def KillHostHeartbeat():
@@ -469,6 +471,8 @@ def main():
   parser.add_argument('-d', '--device', metavar='SERIAL',
                       help='the serial number of the device to be provisioned'
                       ' (the default is to provision all devices attached)')
+  parser.add_argument('--adb-path',
+                      help='Absolute path to the adb binary to use.')
   parser.add_argument('--blacklist-file', help='Device blacklist JSON file.')
   parser.add_argument('--phase', action='append', choices=_PHASES.ALL,
                       dest='phases',
@@ -518,7 +522,15 @@ def main():
 
   run_tests_helper.SetLogLevel(args.verbose)
 
-  devil_chromium.Initialize()
+  devil_custom_deps = None
+  if args.adb_path:
+    devil_custom_deps = {
+      'adb': {
+        devil_env.GetPlatform(): [args.adb_path],
+      },
+    }
+
+  devil_chromium.Initialize(custom_deps=devil_custom_deps)
 
   return ProvisionDevices(args)
 

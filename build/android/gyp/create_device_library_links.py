@@ -27,7 +27,7 @@ from devil.android import apk_helper
 from pylib import constants
 
 def RunShellCommand(device, cmd):
-  output = device.RunShellCommand(cmd)
+  output = device.RunShellCommand(cmd, check_return=True)
 
   if output:
     raise Exception(
@@ -66,7 +66,7 @@ def TriggerSymlinkScript(options):
   mkdir_cmd = ('if [ ! -e %(dir)s ]; then mkdir -p %(dir)s; fi ' %
       { 'dir': device_dir })
   RunShellCommand(device, mkdir_cmd)
-  device.PushChangedFiles([(options.script_host_path,
+  device.PushChangedFiles([(os.path.abspath(options.script_host_path),
                             options.script_device_path)])
 
   trigger_cmd = (
