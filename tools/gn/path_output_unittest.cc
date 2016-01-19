@@ -72,6 +72,25 @@ TEST(PathOutput, BasicInRoot) {
   }
 }
 
+// Same as basic but the output dir is outside of the root.
+TEST(PathOutput, BasicOutOfRoot) {
+  SourceDir build_dir("/source/out/Debug/");
+  base::StringPiece source_root("/source/root");
+  PathOutput writer(build_dir, source_root, ESCAPE_NONE);
+  {
+    // Normal source-root path.
+    std::ostringstream out;
+    writer.WriteFile(out, SourceFile("//foo/bar.cc"));
+    EXPECT_EQ("/source/root/foo/bar.cc", out.str());
+  }
+  {
+    // File in the root dir.
+    std::ostringstream out;
+    writer.WriteFile(out, SourceFile("//foo.cc"));
+    EXPECT_EQ("/source/root/foo.cc", out.str());
+  }
+}
+
 TEST(PathOutput, NinjaEscaping) {
   SourceDir build_dir("//out/Debug/");
   base::StringPiece source_root("/source/root");

@@ -14,7 +14,10 @@ PathOutput::PathOutput(const SourceDir& current_dir,
                        const base::StringPiece& source_root,
                        EscapingMode escaping)
     : current_dir_(current_dir) {
-  inverse_current_dir_ = RebasePath("//", current_dir, source_root);
+  if (current_dir.is_system_absolute())
+    inverse_current_dir_ = source_root.as_string();
+  else
+    inverse_current_dir_ = RebasePath("//", current_dir, source_root);
   if (!EndsWithSlash(inverse_current_dir_))
     inverse_current_dir_.push_back('/');
   options_.mode = escaping;
