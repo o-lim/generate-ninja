@@ -49,8 +49,8 @@ syn keyword     gnVariable cppflags_objc cppflags_objcc command configs
 syn keyword     gnVariable description data data_deps defines depfile deps
 syn keyword     gnVariable depsformat include_dirs inputs ldflags lib_dirs libs
 syn keyword     gnVariable output_extension output_name outputs public
-syn keyword     gnVariable public_configs public_deps scripte sources testonly
-syn keyword     gnVariable visibility
+syn keyword     gnVariable public_configs public_deps rspfile rspfile_content
+syn keyword     gnVariable script sources testonly visibility
 hi def link     gnVariable          Keyword
 
 " Strings
