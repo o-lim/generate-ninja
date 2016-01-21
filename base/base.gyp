@@ -551,6 +551,7 @@
         'metrics/histogram_snapshot_manager_unittest.cc',
         'metrics/histogram_unittest.cc',
         'metrics/metrics_hashes_unittest.cc',
+        'metrics/persistent_memory_allocator_unittest.cc',
         'metrics/sample_map_unittest.cc',
         'metrics/sample_vector_unittest.cc',
         'metrics/sparse_histogram_unittest.cc',
@@ -1489,9 +1490,6 @@
           'variables': {
             'package_name': 'org/chromium/base/multidex',
             'template_deps': [],
-            'additional_gcc_preprocess_options': [
-              '--defines', 'MULTIDEX_CONFIGURATION_<(CONFIGURATION_NAME)',
-            ],
           },
           'includes': ['../build/android/java_cpp_template.gypi'],
         },
@@ -1510,7 +1508,10 @@
           'type': 'none',
           'variables': {
             'java_in_dir': 'android/java',
-            'jar_excluded_classes': [ '*/NativeLibraries.class' ],
+            'jar_excluded_classes': [
+              '*/ChromiumMultiDex.class',
+              '*/NativeLibraries.class',
+            ],
           },
           'dependencies': [
             'base_java_application_state',
@@ -1522,6 +1523,11 @@
             '../third_party/android_tools/android_tools.gyp:android_support_multidex_javalib',
             '../third_party/jsr-305/jsr-305.gyp:jsr_305_javalib',
           ],
+          'all_dependent_settings': {
+            'variables': {
+              'generate_multidex_config': 1,
+            },
+          },
           'includes': [ '../build/java.gypi' ],
         },
         {
@@ -1583,6 +1589,7 @@
           'target_name': 'base_junit_test_support',
           'type': 'none',
           'dependencies': [
+            'base_multidex_gen',
             '../testing/android/junit/junit_test.gyp:junit_test_support',
             '../third_party/android_tools/android_tools.gyp:android_support_multidex_javalib',
           ],

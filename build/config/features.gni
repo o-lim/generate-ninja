@@ -31,18 +31,9 @@ declare_args() {
 
   # Enables Native Client support.
   # TODO(GYP): Get NaCl linking on other platforms.
-  # Also, see if we can always get rid of enable_nacl_untrusted and
-  # enable_pnacl and always build them if enable_nacl is true.
   # Eventually we want this to be just the first line.
   enable_nacl = !is_ios && !is_android && !is_chromecast &&
                 current_cpu != "mipsel" && !(is_win && current_cpu != "x64")
-
-  # These default to the non-Boolean "" so that code below can default
-  # them to the explicitly-set value of enable_nacl, whereas initializing
-  # them here uses the default value of enable_nacl above and ignores any
-  # args.gn setting.
-  enable_nacl_untrusted = ""
-  enable_pnacl = ""
 
   # If debug_devtools is set to true, JavaScript files for DevTools are stored
   # as is and loaded from disk. Otherwise, a concatenated file is stored in
@@ -120,15 +111,6 @@ declare_args() {
   enable_wifi_display = false
 }
 
-# Default these based on the explicit value of enable_nacl, not just
-# the default value seen inside the declare_args() context.
-if (enable_nacl_untrusted == "") {
-  enable_nacl_untrusted = enable_nacl
-}
-if (enable_pnacl == "") {
-  enable_pnacl = enable_nacl
-}
-
 # Additional dependent variables -----------------------------------------------
 
 # Set the version of CLD.
@@ -157,13 +139,14 @@ enable_print_preview = !is_android && !is_chromecast && !is_ios && !is_headless
 enable_pepper_cdms =
     enable_plugins && (is_linux || is_mac || is_win) && !is_chromecast
 
-# The seccomp-bpf sandbox is only supported on three architectures
+# The seccomp-bpf sandbox is only supported on five architectures
 # currently.
 # Do not disable seccomp_bpf anywhere without talking to
 # security@chromium.org!
-use_seccomp_bpf = (is_linux || is_android) &&
-                  (current_cpu == "x86" || current_cpu == "x64" ||
-                   current_cpu == "arm" || current_cpu == "mipsel")
+use_seccomp_bpf =
+    (is_linux || is_android) &&
+    (current_cpu == "x86" || current_cpu == "x64" || current_cpu == "arm" ||
+     current_cpu == "arm64" || current_cpu == "mipsel")
 
 # Enable notifications everywhere except iOS.
 enable_notifications = !is_ios

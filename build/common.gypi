@@ -176,6 +176,10 @@
         'host_arch%': '<(host_arch)',
         'target_arch%': '<(target_arch)',
 
+        # Set to true to instrument the code with function call logger.
+        # See src/third_party/cygprofile/cyg-profile.cc for details.
+        'order_profiling%': 0,
+
         'target_subarch%': '',
 
         # The channel to build on Android: stable, beta, dev, canary, or
@@ -368,11 +372,7 @@
       'sysroot%': '<(sysroot)',
       'chroot_cmd%': '<(chroot_cmd)',
       'system_libdir%': '<(system_libdir)',
-
-      # Set to 1 to enable fast builds. Set to 2 for even faster builds
-      # (it disables debug info for fastest compilation - only for use
-      # on compile-only bots).
-      'fastbuild%': 0,
+      'order_profiling%': '<(order_profiling)',
 
       # Set to 1 to not store any build metadata, e.g. ifdef out all __DATE__
       # and __TIME__. Set to 0 to reenable the use of these macros in the code
@@ -402,7 +402,9 @@
       # Set NEON compilation flags.
       'arm_neon%': 1,
 
-      # Detect NEON support at run-time.
+      # Detect NEON support at run-time. TODO(pasko): This variable is no longer
+      # set to non-zero, remove it when the last official build with NEON
+      # runtime detection propagates to Stable channel.
       'arm_neon_optional%': 0,
 
       # Use libjpeg-turbo as the JPEG codec used by Chromium.
@@ -536,10 +538,6 @@
       # stdlibc++ as standard library. This is intended to use for instrumented
       # builds.
       'use_custom_libcxx%': 0,
-
-      # Set to true to instrument the code with function call logger.
-      # See src/third_party/cygprofile/cyg-profile.cc for details.
-      'order_profiling%': 0,
 
       # Use the provided profiled order file to link Chrome image with it.
       # This makes Chrome faster by better using CPU cache when executing code.
@@ -832,8 +830,6 @@
           'cld2_table_size%': 0,
           'enable_themes%': 0,
           'remoting%': 0,
-          'arm_neon%': 0,
-          'arm_neon_optional%': 1,
           'enable_basic_printing%': 1,
           'enable_print_preview%': 0,
           'enable_task_manager%':0,
@@ -1046,6 +1042,18 @@
           'enable_webvr%': 1,
         }, {
           'enable_webvr%': 0,
+        }],
+
+        ['order_profiling==0', {
+          # Set to 1 to enable fast builds. Set to 2 for even faster builds
+          # (it disables debug info for fastest compilation - only for use
+          # on compile-only bots).
+          'fastbuild%': 0,
+        }, {
+          # With instrumentation enabled, debug info puts libchrome.so over 4gb,
+          # which causes the linker to produce an invalid ELF.
+          # http://crbug.com/574476
+          'fastbuild%': 2,
         }],
       ],
 
@@ -3314,17 +3322,17 @@
             'MinimumRequiredVersion': '5.02',  # Server 2003.
             'TargetMachine': '17', # x86 - 64
             'AdditionalLibraryDirectories!':
-              ['<(windows_sdk_path)/Lib/10.0.10240.0/um/x86'],
+              ['<(windows_sdk_path)/Lib/10.0.10586.0/um/x86'],
             'AdditionalLibraryDirectories':
-              ['<(windows_sdk_path)/Lib/10.0.10240.0/um/x64'],
+              ['<(windows_sdk_path)/Lib/10.0.10586.0/um/x64'],
             # Doesn't exist x64 SDK. Should use oleaut32 in any case.
             'IgnoreDefaultLibraryNames': [ 'olepro32.lib' ],
           },
           'VCLibrarianTool': {
             'AdditionalLibraryDirectories!':
-              ['<(windows_sdk_path)/Lib/10.0.10240.0/um/x86'],
+              ['<(windows_sdk_path)/Lib/10.0.10586.0/um/x86'],
             'AdditionalLibraryDirectories':
-              ['<(windows_sdk_path)/Lib/10.0.10240.0/um/x64'],
+              ['<(windows_sdk_path)/Lib/10.0.10586.0/um/x64'],
             'TargetMachine': '17', # x64
           },
         },
@@ -5512,7 +5520,9 @@
                   'DEPLOYMENT_POSTPROCESSING': 'YES',
                   'STRIP_INSTALLED_PRODUCT': 'YES',
                   'conditions': [
-                    ['buildtype!="Official"', {
+                    ['buildtype=="Official"', {
+                      'DEBUG_INFORMATION_FORMAT': 'dwarf-with-dsym',
+                    }, {
                       # Remove dSYM to reduce build time.
                       'DEBUG_INFORMATION_FORMAT': 'dwarf',
                     }],
@@ -5655,9 +5665,9 @@
           }],
         ],
         'msvs_system_include_dirs': [
-          '<(windows_sdk_path)/Include/10.0.10240.0/shared',
-          '<(windows_sdk_path)/Include/10.0.10240.0/um',
-          '<(windows_sdk_path)/Include/10.0.10240.0/winrt',
+          '<(windows_sdk_path)/Include/10.0.10586.0/shared',
+          '<(windows_sdk_path)/Include/10.0.10586.0/um',
+          '<(windows_sdk_path)/Include/10.0.10586.0/winrt',
           '$(VSInstallDir)/VC/atlmfc/include',
         ],
         'msvs_cygwin_shell': 0,
