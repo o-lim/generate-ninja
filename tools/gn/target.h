@@ -21,6 +21,7 @@
 #include "tools/gn/ordered_set.h"
 #include "tools/gn/output_file.h"
 #include "tools/gn/source_file.h"
+#include "tools/gn/toolchain.h"
 #include "tools/gn/unique_vector.h"
 
 class DepsIteratorRange;
@@ -66,8 +67,15 @@ class Target : public Item {
   OutputType output_type() const { return output_type_; }
   void set_output_type(OutputType t) { output_type_ = t; }
 
+  // True for targets that compile source code (all types of libaries and
+  // executables).
+  bool IsBinary() const;
+
   // Can be linked into other targets.
   bool IsLinkable() const;
+
+  // True for targets that are linked such as executables or shared objects.
+  bool IsLinkedBinary() const;
 
   // True if the target links dependencies rather than propogated up the graph.
   // This is also true of action and copy steps even though they don't link
@@ -135,14 +143,6 @@ class Target : public Item {
     return output_type_ == ACTION ||
            output_type_ == ACTION_FOREACH ||
            output_type_ == COPY_FILES;
-  }
-
-  // Returns true if target generates a linked output such as an executable
-  // or shared object.
-  bool linked_output() const {
-    return output_type_ == EXECUTABLE ||
-           output_type_ == SHARED_LIBRARY ||
-           output_type_ == LOADABLE_MODULE;
   }
 
   // Returns the iterator range which can be used in range-based for loops
@@ -252,6 +252,18 @@ class Target : public Item {
   const OutputFile& dependency_output_file() const {
     return dependency_output_file_;
   }
+
+  // Computes the set of output files resulting from compiling the given source
+  // file. If the file can be compiled and the tool exists, fills the outputs
+  // in and writes the tool type to computed_tool_type. If the file is not
+  // compilable, returns false.
+  //
+  // The function can succeed with a "NONE" tool type for object files which
+  // are just passed to the output. The output will always be overwritten, not
+  // appended to.
+  bool GetOutputFilesForSource(const SourceFile& source,
+                               Toolchain::ToolType* computed_tool_type,
+                               std::vector<OutputFile>* outputs) const;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(Target, ResolvePrecompiledHeaders);

@@ -21,6 +21,10 @@ json_data_file = os.path.join(script_dir, 'win_toolchain.json')
 import gyp
 
 
+# Use MSVS2013 as the default toolchain.
+CURRENT_DEFAULT_TOOLCHAIN_VERSION = '2013'
+
+
 def SetEnvironmentAndGetRuntimeDllDirs():
   """Sets up os.environ to use the depot_tools VS toolchain with gyp, and
   returns the location of the VS runtime DLLs so they can be copied into
@@ -33,7 +37,7 @@ def SetEnvironmentAndGetRuntimeDllDirs():
   # been downloaded before (in which case json_data_file will exist).
   if ((sys.platform in ('win32', 'cygwin') or os.path.exists(json_data_file))
       and depot_tools_win_toolchain):
-    if not os.path.exists(json_data_file):
+    if ShouldUpdateToolchain():
       Update()
     with open(json_data_file, 'r') as tempf:
       toolchain_data = json.load(tempf)
@@ -67,6 +71,8 @@ def SetEnvironmentAndGetRuntimeDllDirs():
   elif sys.platform == 'win32' and not depot_tools_win_toolchain:
     if not 'GYP_MSVS_OVERRIDE_PATH' in os.environ:
       os.environ['GYP_MSVS_OVERRIDE_PATH'] = DetectVisualStudioPath()
+    if not 'GYP_MSVS_VERSION' in os.environ:
+      os.environ['GYP_MSVS_VERSION'] = GetVisualStudioVersion()
 
   return vs_runtime_dll_dirs
 
@@ -99,9 +105,9 @@ def _RegistryGetValue(key, value):
 
 
 def GetVisualStudioVersion():
-  """Return GYP_MSVS_VERSION of Visual Studio, default to 2013 for now.
+  """Return GYP_MSVS_VERSION of Visual Studio.
   """
-  return os.environ.get('GYP_MSVS_VERSION', '2013')
+  return os.environ.get('GYP_MSVS_VERSION', CURRENT_DEFAULT_TOOLCHAIN_VERSION)
 
 
 def DetectVisualStudioPath():
@@ -184,6 +190,9 @@ def _CopyRuntime(target_dir, source_dir, target_cpu, debug):
   suffix = "d.dll" if debug else ".dll"
   if GetVisualStudioVersion() == '2015':
     _CopyRuntime2015(target_dir, source_dir, '%s140' + suffix)
+    if debug:
+      _CopyRuntimeImpl(os.path.join(target_dir, 'ucrtbased.dll'),
+                       os.path.join(source_dir, 'ucrtbased.dll'))
   else:
     _CopyRuntime2013(target_dir, source_dir, 'msvc%s120' + suffix)
 
@@ -262,10 +271,24 @@ def _GetDesiredVsToolchainHashes():
   """Load a list of SHA1s corresponding to the toolchains that we want installed
   to build with."""
   if GetVisualStudioVersion() == '2015':
-    return ['17c7ddb3595be5c6b9c98b6f930adad7e4456671'] # Update 1
+    # Update 1 with Debuggers, UCRT installers and ucrtbased.dll
+    return ['524956ec6e64e68fead3773e3ce318537657b404']
   else:
     # Default to VS2013.
     return ['9ff97c632ae1fee0c98bcd53e71770eb3a0d8deb']
+
+
+def ShouldUpdateToolchain():
+  """Check if the toolchain should be upgraded."""
+  if not os.path.exists(json_data_file):
+    return True
+  with open(json_data_file, 'r') as tempf:
+    toolchain_data = json.load(tempf)
+  version = toolchain_data['version']
+  env_version = GetVisualStudioVersion()
+  # If there's a mismatch between the version set in the environment and the one
+  # in the json file then the toolchain should be updated.
+  return version != env_version
 
 
 def Update(force=False):
