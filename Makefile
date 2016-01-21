@@ -10,10 +10,7 @@ clean:
 gn_all: gn gn_unittests
 
 .PHONY: bootstrap
-bootstrap:
-	@(cd tools/gn/bootstrap && python bootstrap.py -s --no-clean)
-
-out_bootstrap/gn: tools/gn/bootstrap/bootstrap.py
+bootstrap out_bootstrap/gn: tools/gn/bootstrap/bootstrap.py
 	@(cd tools/gn/bootstrap && python bootstrap.py -s --no-clean)
 
 out/Release/build.ninja: out_bootstrap/gn
