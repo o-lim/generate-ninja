@@ -160,6 +160,52 @@ TEST(NinjaActionTargetWriter, ActionWithSources) {
   EXPECT_EQ(expected_linux, out.str());
 }
 
+TEST(NinjaActionTargetWriter, ActionWithCommandAndDescription) {
+  TestWithScope setup;
+  Err err;
+
+  setup.build_settings()->SetBuildDir(SourceDir("//out/Debug/"));
+  Target target(setup.settings(), Label(SourceDir("//foo/"), "bar"));
+  target.set_output_type(Target::ACTION);
+
+  SubstitutionPattern command;
+  command.Parse(Value(nullptr, "cmd {{inputs}}"), &err);
+  target.action_values().set_command(command);
+
+  SubstitutionPattern desc;
+  desc.Parse(Value(nullptr, "CMD ACTION {{output}}"), &err);
+  target.action_values().set_description(desc);
+
+  target.sources().push_back(SourceFile("//foo/source.txt"));
+  target.inputs().push_back(SourceFile("//foo/included.txt"));
+
+  target.action_values().outputs() =
+      SubstitutionList::MakeForTest("//out/Debug/foo.out");
+
+  target.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  setup.build_settings()->set_python_path(base::FilePath(FILE_PATH_LITERAL(
+      "/usr/bin/python")));
+
+  std::ostringstream out;
+  NinjaActionTargetWriter writer(&target, out);
+  writer.Run();
+
+  const char expected_linux[] =
+      "rule __foo_bar___rule\n"
+      "  command = cmd ${in}\n"
+      "  description = CMD ACTION ${out}\n"
+      "  restat = 1\n"
+      "build obj/foo/bar.inputdeps.stamp: stamp "
+          "../../foo/included.txt ../../foo/source.txt\n"
+      "\n"
+      "build foo.out: __foo_bar___rule | obj/foo/bar.inputdeps.stamp\n"
+      "\n"
+      "build obj/foo/bar.stamp: stamp foo.out\n";
+  EXPECT_EQ(expected_linux, out.str());
+}
+
 TEST(NinjaActionTargetWriter, ForEach) {
   TestWithScope setup;
   Err err;
