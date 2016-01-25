@@ -378,6 +378,7 @@
       Shows the labels of configs applied to targets that depend on this
       one (either directly or all of them).
 
+  command
   script
   args
   depfile
@@ -817,9 +818,9 @@
 ## **action**: Declare a target that runs a script a single time.
 
 ```
-  This target type allows you to run a script a single time to produce
-  or more output files. If you want to run a script once for each of a
-  set of input files, see "gn help action_foreach".
+  This target type allows you to run a script or command a single time
+  to produce one or more output files. If you want to run a script once
+  for each of a set of input files, see "gn help action_foreach".
 
 ```
 
@@ -831,7 +832,7 @@
   handling. If you want to pass the sources to your script, you must do
   so explicitly by including them in the "args". Note also that this
   means there is no special handling of paths since GN doesn't know
-  which of the args are paths and not. You will want to use
+  which of the args are paths and which are not. You will want to use
   rebase_path() to convert paths to be relative to the root_build_dir.
 
   You can dynamically write input dependencies (for incremental rebuilds
@@ -852,6 +853,10 @@
   action are started. This can give additional parallelism in the build
   for runtime-only dependencies.
 
+  The "interpreter" for an action specifies the interpreter to use to
+  run the script with. If "interpreter" is not specified, the default
+  Python interpreter is used (see "gn help python_path").
+
 ```
 
 ### **Outputs**
@@ -860,12 +865,12 @@
   You should specify files created by your script by specifying them in
   the "outputs".
 
-  The script will be executed with the given arguments with the current
-  directory being that of the root build directory. If you pass files
-  to your script, see "gn help rebase_path" for how to convert
-  file names to be relative to the build directory (file names in the
-  sources, outputs, and inputs will be all treated as relative to the
-  current build file and converted as needed automatically).
+  The script or command will be executed with the given arguments with
+  the current directory being that of the root build directory. If you
+  pass files to your script, see "gn help rebase_path" for how to
+  convert file names to be relative to the build directory (file names
+  in the sources, outputs, and inputs will be all treated as relative
+  to the current build file and converted as needed automatically).
 
 ```
 
@@ -882,8 +887,8 @@
 ### **Variables**
 
 ```
-  args, console, data, data_deps, depfile, deps, inputs, outputs*,
-  response_file_contents, script*, sources
+  args, command, console, data, data_deps, depfile, deps, description,
+  inputs, interpreter, outputs*, response_file_contents, script, sources
   * = required
 
 ```
@@ -911,9 +916,9 @@
 ## **action_foreach**: Declare a target that runs a script over a set of files.
 
 ```
-  This target type allows you to run a script once-per-file over a set
-  of sources. If you want to run a script once that takes many files as
-  input, see "gn help action".
+  This target type allows you to run a script or command once-per-file
+  over a set of sources. If you want to run a script once that takes
+  many files as input, see "gn help action".
 
 ```
 
@@ -945,17 +950,21 @@
   action are started. This can give additional parallelism in the build
   for runtime-only dependencies.
 
+  The "interpreter" for an action specifies the interpreter to use to
+  run the script with. If "interpreter" is not specified, the default
+  Python interpreter is used (see "gn help python_path").
+
 ```
 
 ### **Outputs**
 
 ```
-  The script will be executed with the given arguments with the current
-  directory being that of the root build directory. If you pass files
-  to your script, see "gn help rebase_path" for how to convert
-  file names to be relative to the build directory (file names in the
-  sources, outputs, and inputs will be all treated as relative to the
-  current build file and converted as needed automatically).
+  The script or command will be executed with the given arguments with
+  the current directory being that of the root build directory. If you
+  pass files to your script, see "gn help rebase_path" for how to
+  convert file names to be relative to the build directory (file names
+  in the sources, outputs, and inputs will be all treated as relative
+  to the current build file and converted as needed automatically).
 
 ```
 
@@ -972,8 +981,8 @@
 ### **Variables**
 
 ```
-  args, console, data, data_deps, depfile, deps, inputs, outputs*,
-  response_file_contents, script*, sources*
+  args, command, console, data, data_deps, depfile, deps, description,
+  inputs, interpreter, outputs*, response_file_contents, script, sources
   * = required
 
 ```
@@ -1233,7 +1242,8 @@
   exec_script(filename,
               arguments = [],
               input_conversion = "",
-              file_dependencies = [])
+              file_dependencies = [],
+              interpreter = python_path)
 
   Runs the given script, returning the stdout of the script. The build
   generation will fail if the script does not exist or returns a nonzero
@@ -1250,8 +1260,8 @@
 
 ```
   filename:
-      File name of python script to execute. Non-absolute names will
-      be treated as relative to the current build file.
+      File name of the script to execute. Non-absolute names will be
+      treated as relative to the current build file.
 
   arguments:
       A list of strings to be passed to the script as arguments.
@@ -1272,6 +1282,13 @@
 
       The script itself will be an implicit dependency so you do not
       need to list it.
+
+  interpreter:
+      (Optional) The interpreter to use to run the script with.
+      See "gn help interpreter".
+
+      If unspecified, the default Python interpreter is used.
+      See "gn help python_path".
 
 ```
 
@@ -3719,8 +3736,8 @@
 ## **command**: Command to run for actions.
 
 ```
-  The command to run for actions and action_foreach targets (see"see
-  gn help action" and "gn help action_foreach").
+  The command to run for actions and action_foreach targets (see
+  "gn help action" and "gn help action_foreach").
 
 
 ```
@@ -4224,7 +4241,8 @@
 ## **description**: Description of the action.
 
 ```
-  What to print when then action is run  gn help action" and "gn help action_foreach").
+  What to print when then action is run (see "gn help action" and
+  "gn help action_foreach").
 
 
 ```
@@ -4342,6 +4360,17 @@
     script = "domything.py"
     inputs = [ "input.data" ]
   }
+
+
+```
+## **interpreter**: Interpreter to use for action scripts.
+
+```
+  Path to the interpreter to run an action script with. This must be
+  either an absolute system path (not a source absolute path) or an
+  executable found in the environment search path. If unspecified, the
+  default Python interpreter is used (see "gn help python_path",
+  "gn help action" and "gn help action_foreach").
 
 
 ```
