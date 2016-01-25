@@ -1251,8 +1251,8 @@ const char kCommand_HelpShort[] =
 const char kCommand_Help[] =
     "command: Command to run for actions.\n"
     "\n"
-    "  The command to run for actions and action_foreach targets (see\"see\n"
-    "  gn help action\" and \"gn help action_foreach\").\n";
+    "  The command to run for actions and action_foreach targets (see\n"
+    "  \"gn help action\" and \"gn help action_foreach\").\n";
 
 const char kDescription[] = "description";
 const char kDescription_HelpShort[] =
@@ -1260,8 +1260,8 @@ const char kDescription_HelpShort[] =
 const char kDescription_Help[] =
     "description: Description of the action.\n"
     "\n"
-    "  What to print when then action is run"
-    "  gn help action\" and \"gn help action_foreach\").\n";
+    "  What to print when then action is run (see \"gn help action\" and\n"
+    "  \"gn help action_foreach\").\n";
 
 const char kResponseFileContents[] = "response_file_contents";
 const char kResponseFileContents_HelpShort[] =

@@ -62,12 +62,12 @@ Value ExecuteGenericTarget(const char* target_type,
 
 // Common help paragraph on script runtime execution directories.
 #define SCRIPT_EXECUTION_CONTEXT \
-    "  The script will be executed with the given arguments with the current\n"\
-    "  directory being that of the root build directory. If you pass files\n"\
-    "  to your script, see \"gn help rebase_path\" for how to convert\n" \
-    "  file names to be relative to the build directory (file names in the\n" \
-    "  sources, outputs, and inputs will be all treated as relative to the\n" \
-    "  current build file and converted as needed automatically).\n"
+    "  The script or command will be executed with the given arguments with\n"\
+    "  the current directory being that of the root build directory. If you\n"\
+    "  pass files to your script, see \"gn help rebase_path\" for how to\n" \
+    "  convert file names to be relative to the build directory (file names\n" \
+    "  in the sources, outputs, and inputs will be all treated as relative\n"\
+    "  to the current build file and converted as needed automatically).\n"
 
 // Common help paragraph on script output directories.
 #define SCRIPT_EXECUTION_OUTPUTS \
@@ -90,9 +90,9 @@ const char kAction_HelpShort[] =
 const char kAction_Help[] =
     "action: Declare a target that runs a script a single time.\n"
     "\n"
-    "  This target type allows you to run a script a single time to produce\n"
-    "  or more output files. If you want to run a script once for each of a\n"
-    "  set of input files, see \"gn help action_foreach\".\n"
+    "  This target type allows you to run a script or command a single time\n"
+    "  to produce one or more output files. If you want to run a script once\n"
+    "  for each of a set of input files, see \"gn help action_foreach\".\n"
     "\n"
     "Inputs\n"
     "\n"
@@ -101,7 +101,7 @@ const char kAction_Help[] =
     "  handling. If you want to pass the sources to your script, you must do\n"
     "  so explicitly by including them in the \"args\". Note also that this\n"
     "  means there is no special handling of paths since GN doesn't know\n"
-    "  which of the args are paths and not. You will want to use\n"
+    "  which of the args are paths and which are not. You will want to use\n"
     "  rebase_path() to convert paths to be relative to the root_build_dir.\n"
     "\n"
     "  You can dynamically write input dependencies (for incremental rebuilds\n"
@@ -130,8 +130,8 @@ const char kAction_Help[] =
     "\n"
     "Variables\n"
     "\n"
-    "  args, console, data, data_deps, depfile, deps, inputs, outputs*,\n"
-    "  response_file_contents, script*, sources\n"
+    "  args, command, console, data, data_deps, depfile, deps, description,\n"
+    "  inputs, outputs*, response_file_contents, script, sources\n"
     "  * = required\n"
     "\n"
     "Example\n"
@@ -168,9 +168,9 @@ const char kActionForEach_HelpShort[] =
 const char kActionForEach_Help[] =
     "action_foreach: Declare a target that runs a script over a set of files.\n"
     "\n"
-    "  This target type allows you to run a script once-per-file over a set\n"
-    "  of sources. If you want to run a script once that takes many files as\n"
-    "  input, see \"gn help action\".\n"
+    "  This target type allows you to run a script or command once-per-file\n"
+    "  over a set of sources. If you want to run a script once that takes\n"
+    "  many files as input, see \"gn help action\".\n"
     "\n"
     "Inputs\n"
     "\n"
@@ -204,8 +204,8 @@ const char kActionForEach_Help[] =
     "\n"
     "Variables\n"
     "\n"
-    "  args, console, data, data_deps, depfile, deps, inputs, outputs*,\n"
-    "  response_file_contents, script*, sources*\n"
+    "  args, command, console, data, data_deps, depfile, deps, description,\n"
+    "  inputs, outputs*, response_file_contents, script, sources\n"
     "  * = required\n"
     "\n"
     "Example\n"

@@ -517,6 +517,7 @@ const char kDesc_Help[] =
     "      Shows the labels of configs applied to targets that depend on this\n"
     "      one (either directly or all of them).\n"
     "\n"
+    "  command\n"
     "  script\n"
     "  args\n"
     "  depfile\n"
