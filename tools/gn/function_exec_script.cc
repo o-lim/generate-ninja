@@ -68,7 +68,8 @@ const char kExecScript_Help[] =
     "  exec_script(filename,\n"
     "              arguments = [],\n"
     "              input_conversion = \"\",\n"
-    "              file_dependencies = [])\n"
+    "              file_dependencies = [],\n"
+    "              interpreter = python_path)\n"
     "\n"
     "  Runs the given script, returning the stdout of the script. The build\n"
     "  generation will fail if the script does not exist or returns a nonzero\n"
@@ -82,8 +83,8 @@ const char kExecScript_Help[] =
     "Arguments:\n"
     "\n"
     "  filename:\n"
-    "      File name of python script to execute. Non-absolute names will\n"
-    "      be treated as relative to the current build file.\n"
+    "      File name of the script to execute. Non-absolute names will be\n"
+    "      treated as relative to the current build file.\n"
     "\n"
     "  arguments:\n"
     "      A list of strings to be passed to the script as arguments.\n"
@@ -105,6 +106,13 @@ const char kExecScript_Help[] =
     "      The script itself will be an implicit dependency so you do not\n"
     "      need to list it.\n"
     "\n"
+    "  interpreter:\n"
+    "      (Optional) The interpreter to use to run the script with.\n"
+    "      See \"gn help interpreter\".\n"
+    "\n"
+    "      If unspecified, the default Python interpreter is used.\n"
+    "      See \"gn help python_path\".\n"
+    "\n"
     "Example:\n"
     "\n"
     "  all_lines = exec_script(\n"
@@ -119,7 +127,7 @@ Value RunExecScript(Scope* scope,
                     const FunctionCallNode* function,
                     const std::vector<Value>& args,
                     Err* err) {
-  if (args.size() < 1 || args.size() > 4) {
+  if (args.size() < 1 || args.size() > 5) {
     *err = Err(function->function(), "Wrong number of arguments to exec_script",
                "I expected between one and four arguments.");
     return Value();
@@ -132,7 +140,7 @@ Value RunExecScript(Scope* scope,
   if (!CheckExecScriptPermissions(build_settings, function, err))
     return Value();
 
-  // Find the python script to run.
+  // Find the script to run.
   SourceFile script_source =
       cur_dir.ResolveRelativeFile(args[0], err,
           scope->settings()->build_settings()->root_path_utf8());
@@ -151,7 +159,7 @@ Value RunExecScript(Scope* scope,
   // Add all dependencies of this script, including the script itself, to the
   // build deps.
   g_scheduler->AddGenDependency(script_path);
-  if (args.size() == 4) {
+  if (args.size() >= 4) {
     const Value& deps_value = args[3];
     if (!deps_value.VerifyTypeIs(Value::LIST, err))
       return Value();
@@ -168,9 +176,18 @@ Value RunExecScript(Scope* scope,
     }
   }
 
+  // Determine which script interpreter to use
+  base::FilePath interpreter_path = build_settings->python_path();
+  if (args.size() >= 5) {
+    // Optional command-line argument specifying the interpreter.
+    const Value& interpreter = args[4];
+    if (!interpreter.VerifyTypeIs(Value::STRING, err))
+      return Value();
+    interpreter_path = base::FilePath(interpreter.string_value());
+  }
+
   // Make the command line.
-  const base::FilePath& python_path = build_settings->python_path();
-  base::CommandLine cmdline(python_path);
+  base::CommandLine cmdline(interpreter_path);
   cmdline.AppendArgPath(script_path);
 
   if (args.size() >= 2) {
@@ -190,10 +207,10 @@ Value RunExecScript(Scope* scope,
   base::TimeTicks begin_exec;
   if (g_scheduler->verbose_logging()) {
 #if defined(OS_WIN)
-    g_scheduler->Log("Pythoning",
+    g_scheduler->Log("Scripting",
                      base::UTF16ToUTF8(cmdline.GetCommandLineString()));
 #else
-    g_scheduler->Log("Pythoning", cmdline.GetCommandLineString());
+    g_scheduler->Log("Scripting", cmdline.GetCommandLineString());
 #endif
     begin_exec = base::TimeTicks::Now();
   }
@@ -216,12 +233,12 @@ Value RunExecScript(Scope* scope,
   int exit_code = 0;
   if (!internal::ExecProcess(
           cmdline, startup_dir, &output, &stderr_output, &exit_code)) {
-    *err = Err(function->function(), "Could not execute python.",
-        "I was trying to execute \"" + FilePathToUTF8(python_path) + "\".");
+    *err = Err(function->function(), "Could not execute script.",
+        "I was trying to execute \"" + FilePathToUTF8(interpreter_path) + "\".");
     return Value();
   }
   if (g_scheduler->verbose_logging()) {
-    g_scheduler->Log("Pythoning", script_source.value() + " took " +
+    g_scheduler->Log("Scripting", script_source.value() + " took " +
         base::Int64ToString(
             (base::TimeTicks::Now() - begin_exec).InMilliseconds()) +
         "ms");
