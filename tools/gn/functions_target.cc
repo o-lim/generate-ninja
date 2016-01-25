@@ -84,6 +84,11 @@ Value ExecuteGenericTarget(const char* target_type,
     "  action are started. This can give additional parallelism in the build\n"\
     "  for runtime-only dependencies.\n"
 
+#define ACTION_INTERPRETER \
+    "  The \"interpreter\" for an action specifies the interpreter to use to\n"\
+    "  run the script with. If \"interpreter\" is not specified, the default\n"\
+    "  Python interpreter is used (see \"gn help python_path\").\n"
+
 const char kAction[] = "action";
 const char kAction_HelpShort[] =
     "action: Declare a target that runs a script a single time.";
@@ -117,6 +122,8 @@ const char kAction_Help[] =
     "\n"
     ACTION_DEPS
     "\n"
+    ACTION_INTERPRETER
+    "\n"
     "Outputs\n"
     "\n"
     "  You should specify files created by your script by specifying them in\n"
@@ -131,7 +138,7 @@ const char kAction_Help[] =
     "Variables\n"
     "\n"
     "  args, command, console, data, data_deps, depfile, deps, description,\n"
-    "  inputs, outputs*, response_file_contents, script, sources\n"
+    "  inputs, interpreter, outputs*, response_file_contents, script, sources\n"
     "  * = required\n"
     "\n"
     "Example\n"
@@ -194,6 +201,8 @@ const char kActionForEach_Help[] =
     "\n"
     ACTION_DEPS
     "\n"
+    ACTION_INTERPRETER
+    "\n"
     "Outputs\n"
     "\n"
     SCRIPT_EXECUTION_CONTEXT
@@ -205,7 +214,7 @@ const char kActionForEach_Help[] =
     "Variables\n"
     "\n"
     "  args, command, console, data, data_deps, depfile, deps, description,\n"
-    "  inputs, outputs*, response_file_contents, script, sources\n"
+    "  inputs, interpreter, outputs*, response_file_contents, script, sources\n"
     "  * = required\n"
     "\n"
     "Example\n"

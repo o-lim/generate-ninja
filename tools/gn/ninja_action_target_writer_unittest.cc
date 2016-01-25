@@ -206,6 +206,48 @@ TEST(NinjaActionTargetWriter, ActionWithCommandAndDescription) {
   EXPECT_EQ(expected_linux, out.str());
 }
 
+TEST(NinjaActionTargetWriter, ActionWithInterpreter) {
+  TestWithScope setup;
+  Err err;
+
+  setup.build_settings()->SetBuildDir(SourceDir("//out/Debug/"));
+  Target target(setup.settings(), Label(SourceDir("//foo/"), "bar"));
+  target.set_output_type(Target::ACTION);
+
+  target.action_values().set_interpreter("lua");
+
+  target.action_values().set_script(SourceFile("//foo/script.lua"));
+
+  target.sources().push_back(SourceFile("//foo/source.txt"));
+  target.inputs().push_back(SourceFile("//foo/included.txt"));
+
+  target.action_values().outputs() =
+      SubstitutionList::MakeForTest("//out/Debug/foo.out");
+
+  target.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  setup.build_settings()->set_python_path(base::FilePath(FILE_PATH_LITERAL(
+      "/usr/bin/python")));
+
+  std::ostringstream out;
+  NinjaActionTargetWriter writer(&target, out);
+  writer.Run();
+
+  const char expected_linux[] =
+      "rule __foo_bar___rule\n"
+      "  command = lua ../../foo/script.lua\n"
+      "  description = ACTION //foo:bar()\n"
+      "  restat = 1\n"
+      "build obj/foo/bar.inputdeps.stamp: stamp ../../foo/script.lua "
+          "../../foo/included.txt ../../foo/source.txt\n"
+      "\n"
+      "build foo.out: __foo_bar___rule | obj/foo/bar.inputdeps.stamp\n"
+      "\n"
+      "build obj/foo/bar.stamp: stamp foo.out\n";
+  EXPECT_EQ(expected_linux, out.str());
+}
+
 TEST(NinjaActionTargetWriter, ForEach) {
   TestWithScope setup;
   Err err;

@@ -354,6 +354,12 @@ void PrintCommand(const Target* target, bool display_header) {
   OutputString("  " + target->action_values().command().AsString() + "\n");
 }
 
+void PrintInterpreter(const Target* target, bool display_header) {
+  if (display_header)
+    OutputString("\ninterpreter:\n");
+  OutputString("  " + target->action_values().interpreter() + "\n");
+}
+
 void PrintScript(const Target* target, bool display_header) {
   if (display_header)
     OutputString("\nscript:\n");
@@ -659,6 +665,8 @@ int RunDesc(const std::vector<std::string>& args) {
       PrintInputs(target, false);
     } else if (what == variables::kCommand) {
       PrintCommand(target, false);
+    } else if (what == variables::kInterpreter) {
+      PrintInterpreter(target, false);
     } else if (what == variables::kScript) {
       PrintScript(target, false);
     } else if (what == variables::kArgs) {
@@ -763,8 +771,11 @@ int RunDesc(const std::vector<std::string>& args) {
       target->output_type() == Target::ACTION_FOREACH) {
     if (target->action_values().script().is_null())
       PrintCommand(target, true);
-    else
+    else {
+      if (target->action_values().has_interpreter())
+        PrintInterpreter(target, true);
       PrintScript(target, true);
+    }
     PrintArgs(target, true);
     PrintDepfile(target, true);
   }

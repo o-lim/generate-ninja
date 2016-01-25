@@ -135,7 +135,10 @@ std::string NinjaActionTargetWriter::WriteRuleDefinition() {
 
   out_ << "  command = ";
   if (!target_->action_values().script().is_null()) {
-    path_output_.WriteFile(out_, settings_->build_settings()->python_path());
+    if (target_->action_values().has_interpreter())
+      out_ << target_->action_values().interpreter();
+    else
+      path_output_.WriteFile(out_, settings_->build_settings()->python_path());
     out_ << " ";
     path_output_.WriteFile(out_, target_->action_values().script());
   } else {

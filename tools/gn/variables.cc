@@ -1263,6 +1263,18 @@ const char kDescription_Help[] =
     "  What to print when then action is run (see \"gn help action\" and\n"
     "  \"gn help action_foreach\").\n";
 
+const char kInterpreter[] = "interpreter";
+const char kInterpreter_HelpShort[] =
+    "interpreter: [string, optional] Interpreter to use for action scripts.";
+const char kInterpreter_Help[] =
+    "interpreter: Interpreter to use for action scripts.\n"
+    "\n"
+    "  Path to the interpreter to run an action script with. This must be\n"
+    "  either an absolute system path (not a source absolute path) or an\n"
+    "  executable found in the environment search path. If unspecified, the\n"
+    "  default Python interpreter is used (see \"gn help python_path\",\n"
+    "  \"gn help action\" and \"gn help action_foreach\").\n";
+
 const char kResponseFileContents[] = "response_file_contents";
 const char kResponseFileContents_HelpShort[] =
     "response_file_contents: [string list] Contents of .rsp file for actions.";
@@ -1506,6 +1518,7 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(ResponseFileContents)
     INSERT_VARIABLE(Script)
     INSERT_VARIABLE(Command)
+    INSERT_VARIABLE(Interpreter)
     INSERT_VARIABLE(Description)
     INSERT_VARIABLE(Sources)
     INSERT_VARIABLE(Testonly)

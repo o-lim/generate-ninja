@@ -46,6 +46,9 @@ void ActionTargetGenerator::DoRun() {
   if (!FillCommandOrScript())
     return;
 
+  if (!FillInterpreter())
+    return;
+
   if (!FillArgs())
     return;
 
@@ -124,6 +127,16 @@ bool ActionTargetGenerator::FillCommand() {
   return true;
 }
 
+bool ActionTargetGenerator::FillInterpreter() {
+  const Value* value = scope_->GetValue(variables::kInterpreter, true);
+  if (!value)
+    return true;
+  if (!value->VerifyTypeIs(Value::STRING, err_))
+    return false;
+  target_->action_values().set_interpreter(value->string_value());
+  return true;
+}
+
 bool ActionTargetGenerator::FillDescription() {
   const Value* value = scope_->GetValue(variables::kDescription, true);
   if (!value)
@@ -138,9 +151,8 @@ bool ActionTargetGenerator::FillDescription() {
 
 bool ActionTargetGenerator::FillScript() {
   const Value* value = scope_->GetValue(variables::kScript, true);
-  if (!value) {
+  if (!value)
     return false;
-  }
   if (!value->VerifyTypeIs(Value::STRING, err_))
     return false;
 

@@ -64,9 +64,15 @@ class ActionValues {
   const SubstitutionPattern & description() const { return description_; }
   void set_description(const SubstitutionPattern & desc) { description_ = desc; }
 
+  // Description option
+  bool has_interpreter() const { return !interpreter_.empty(); }
+  const std::string & interpreter() const { return interpreter_; }
+  void set_interpreter(const std::string & inter) { interpreter_ = inter; }
+
  private:
   SubstitutionPattern command_;
   SubstitutionPattern description_;
+  std::string interpreter_;
   SourceFile script_;
   SubstitutionList args_;
   SubstitutionList outputs_;
