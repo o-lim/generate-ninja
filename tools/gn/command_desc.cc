@@ -761,8 +761,10 @@ int RunDesc(const std::vector<std::string>& args) {
 
   if (target->output_type() == Target::ACTION ||
       target->output_type() == Target::ACTION_FOREACH) {
-    PrintCommand(target, true);
-    PrintScript(target, true);
+    if (target->action_values().script().is_null())
+      PrintCommand(target, true);
+    else
+      PrintScript(target, true);
     PrintArgs(target, true);
     PrintDepfile(target, true);
   }
