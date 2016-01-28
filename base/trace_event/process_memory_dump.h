@@ -26,7 +26,8 @@
 // resident memory.
 // TODO(crbug.com/542671): COUNT_RESIDENT_BYTES_SUPPORTED is disabled on iOS
 // as it cause memory corruption on iOS 9.0+ devices.
-#if defined(OS_POSIX) && !defined(OS_NACL) && !defined(OS_IOS)
+#if (defined(OS_POSIX) && !defined(OS_NACL) && !defined(OS_IOS)) || \
+    defined(OS_WIN)
 #define COUNT_RESIDENT_BYTES_SUPPORTED
 #endif
 
@@ -96,6 +97,15 @@ class BASE_EXPORT ProcessMemoryDump {
   // global scope, in order to reference the same dump from multiple processes.
   // See the design doc goo.gl/keU6Bf for reference usage patterns.
   MemoryAllocatorDump* CreateSharedGlobalAllocatorDump(
+      const MemoryAllocatorDumpGuid& guid);
+
+  // Creates a shared MemoryAllocatorDump as CreateSharedGlobalAllocatorDump,
+  // but with a WEAK flag. A weak dump will be discarded unless a non-weak dump
+  // is created using CreateSharedGlobalAllocatorDump by at least one process.
+  // The WEAK flag does not apply if a non-weak dump with the same GUID already
+  // exists or is created later. All owners and children of the discarded dump
+  // will also be discarded transitively.
+  MemoryAllocatorDump* CreateWeakSharedGlobalAllocatorDump(
       const MemoryAllocatorDumpGuid& guid);
 
   // Looks up a shared MemoryAllocatorDump given its guid.
