@@ -138,7 +138,7 @@ def write_ninja(path, options):
     else:
       cflags.extend(['-O2', '-g0'])
 
-    cflags.extend(['-D_FILE_OFFSET_BITS=64', '-pthread', '-pipe'])
+    cflags.extend(['-D_FILE_OFFSET_BITS=64', '-DNO_TCMALLOC', '-pthread', '-pipe'])
     cflags_cc.extend(['-std=c++11', '-Wno-c++11-narrowing'])
 
   static_libraries = {

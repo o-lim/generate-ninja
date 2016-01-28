@@ -8,7 +8,7 @@ if (is_android || current_cpu == "mipsel" || is_mac || is_ios || is_asan ||
     is_lsan || is_tsan || is_msan || is_win || is_syzyasan) {
   _default_allocator = "none"
 } else {
-  _default_allocator = "tcmalloc"
+  _default_allocator = "none"
 }
 
 declare_args() {

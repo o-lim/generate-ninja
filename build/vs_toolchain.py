@@ -272,7 +272,7 @@ def _GetDesiredVsToolchainHashes():
   to build with."""
   if GetVisualStudioVersion() == '2015':
     # Update 1 with Debuggers, UCRT installers and ucrtbased.dll
-    return ['524956ec6e64e68fead3773e3ce318537657b404']
+    return ['5a85cf1ce842f7cc96b9d17039a445a9dc9cf0dd']
   else:
     # Default to VS2013.
     return ['9ff97c632ae1fee0c98bcd53e71770eb3a0d8deb']
@@ -329,7 +329,7 @@ def GetToolchainDir():
 
   # If WINDOWSSDKDIR is not set, search the default SDK path and set it.
   if not 'WINDOWSSDKDIR' in os.environ:
-    default_sdk_path = 'C:\\Program Files (x86)\\Windows Kits\\8.1'
+    default_sdk_path = 'C:\\Program Files (x86)\\Windows Kits\\10'
     if os.path.isdir(default_sdk_path):
       os.environ['WINDOWSSDKDIR'] = default_sdk_path
 

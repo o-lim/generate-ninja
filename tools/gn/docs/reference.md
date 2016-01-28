@@ -1359,7 +1359,8 @@
 ## **forward_variables_from**: Copies variables from a different scope.
 
 ```
-  forward_variables_from(from_scope, variable_list_or_star)
+  forward_variables_from(from_scope, variable_list_or_star,
+                         variables_to_not_forward_list = [])
 
   Copies the given variables from the given scope to the local scope
   if they exist. This is normally used in the context of templates to
@@ -1385,6 +1386,10 @@
   The sources assignment filter (see "gn help set_sources_assignment_filter")
   is never applied by this function. It's assumed than any desired
   filtering was already done when sources was set on the from_scope.
+
+  If variables_to_not_forward_list is non-empty, then it must contains
+  a list of variable names that will not be forwarded. This is mostly
+  useful when variable_list_or_star has a value of "*".
 
 ```
 
@@ -1415,7 +1420,19 @@
     target(my_wrapper_target_type, target_name) {
       forward_variables_from(invoker, "*")
     }
- }
+  }
+
+  # A template that wraps another. It adds behavior based on one
+  # variable, and forwards all others to the nested target.
+  template("my_ios_test_app") {
+    ios_test_app(target_name) {
+      forward_variables_from(invoker, "*", ["test_bundle_name"])
+      if (!defined(extra_substitutions)) {
+        extra_substitutions = []
+      }
+      extra_substitutions += [ "BUNDLE_ID_TEST_NAME=$test_bundle_name" ]
+    }
+  }
 
 
 ```
@@ -3502,6 +3519,51 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
+
+
+```
+## **assert_no_deps**: Ensure no deps on these targets.
+
+```
+  A list of label patterns.
+
+  This list is a list of patterns that must not match any of the
+  transitive dependencies of the target. These include all public,
+  private, and data dependencies, and cross shared library boundaries.
+  This allows you to express that undesirable code isn't accidentally
+  added to downstream dependencies in a way that might otherwise be
+  difficult to notice.
+
+  Checking does not cross executable boundaries. If a target depends on
+  an executable, it's assumed that the executable is a tool that is
+  producing part of the build rather than something that is linked and
+  distributed. This allows assert_no_deps to express what is distributed
+  in the final target rather than depend on the internal build steps
+  (which may include non-distributable code).
+
+  See "gn help label_pattern" for the format of the entries in the
+  list. These patterns allow blacklisting individual targets or whole
+  directory hierarchies.
+
+  Sometimes it is desirable to enforce that many targets have no
+  dependencies on a target or set of targets. One efficient way to
+  express this is to create a group with the assert_no_deps rule on
+  it, and make that group depend on all targets you want to apply that
+  assertion to.
+
+```
+
+### **Example**
+
+```
+  executable("doom_melon") {
+    deps = [ "//foo:bar" ]
+    ...
+    assert_no_deps = [
+      "//evil/*",  # Don't link any code from the evil directory.
+      "//foo:test_support",  # This target is also disallowed.
+    ]
+  }
 
 
 ```

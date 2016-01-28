@@ -238,6 +238,9 @@ class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
     // Callback passed to the initial call to CreateProcessDump().
     MemoryDumpCallback callback;
 
+    // The |success| field that will be passed as argument to the |callback|.
+    bool dump_successful;
+
     // The thread on which FinalizeDumpAndAddToTrace() (and hence |callback|)
     // should be invoked. This is the thread on which the initial
     // CreateProcessDump() request was called.
@@ -263,6 +266,9 @@ class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
   static void SetInstanceForTesting(MemoryDumpManager* instance);
   static void FinalizeDumpAndAddToTrace(
       scoped_ptr<ProcessMemoryDumpAsyncState> pmd_async_state);
+
+  // Enable heap profiling if kEnableHeapProfiling is specified.
+  void EnableHeapProfilingIfNeeded();
 
   // Internal, used only by MemoryDumpManagerDelegate.
   // Creates a memory dump for the current process and appends it to the trace.
