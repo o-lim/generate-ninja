@@ -1799,7 +1799,8 @@
 ## **mark_used_from**: Marks variables as used from a different scope.
 
 ```
-  mark_used_from(from_scope, variable_list_or_star)
+  mark_used_from(from_scope, variable_list_or_star,
+                 variables_to_not_mark_list = [])
 
   Marks the given variables from the given scope as used if they exist.
   This is normally used in the context of templates to prevent
@@ -1813,6 +1814,10 @@
   "*", all variables from the given scope will be marked used. "*"
   only marks variables used that exist directly on the from_scope, not
   enclosing ones. Otherwise it would mark all global variables as used.
+
+  If variables_to_not_mark_list is non-empty, then it must contains a
+  list of variable names that will not be marked used. This is mostly
+  useful when variable_list_or_star has a value of "*".
 
   See also "forward_variables_from" for copying variables from a.
   different scope.
@@ -1853,6 +1858,17 @@
   template("my_wrapper") {
     target(my_wrapper_target_type, target_name) {
       mark_used_from(invoker, "*")
+    }
+
+  # A template that wraps another. It adds behavior based on one
+  # variable, and forwards all others to the nested target.
+  template("my_ios_test_app") {
+    ios_test_app(target_name) {
+      mark_used_from(invoker, "*", ["test_bundle_name"])
+      if (!defined(extra_substitutions)) {
+        extra_substitutions = []
+      }
+      extra_substitutions += [ "BUNDLE_ID_TEST_NAME=$test_bundle_name" ]
     }
  }
 

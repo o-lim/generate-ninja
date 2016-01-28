@@ -64,13 +64,27 @@ TEST(FunctionMarkUsedFrom, ErrorCases) {
   EXPECT_TRUE(err.has_error());
   EXPECT_EQ("Not a valid list of variables to mark used.", err.message());
 
-  // Programmatic values should not error.
-  TestParseInput prog(
+  // Type check the exclusion list.
+  TestParseInput invalid_exclusion_list(
     "template(\"c\") {\n"
-    "  mark_used_from(invoker, [\"root_out_dir\"])\n"
+    "  mark_used_from(invoker, \"*\", 42)\n"
     "  print(\"$target_name\")\n"
     "}\n"
     "c(\"target\") {\n"
+    "}\n");
+  ASSERT_FALSE(invalid_exclusion_list.has_error());
+  err = Err();
+  invalid_exclusion_list.parsed()->Execute(setup.scope(), &err);
+  EXPECT_TRUE(err.has_error());
+  EXPECT_EQ("Not a valid list of variables to exclude.", err.message());
+
+  // Programmatic values should not error.
+  TestParseInput prog(
+    "template(\"d\") {\n"
+    "  mark_used_from(invoker, [\"root_out_dir\"])\n"
+    "  print(\"$target_name\")\n"
+    "}\n"
+    "d(\"target\") {\n"
     "}\n");
   ASSERT_FALSE(prog.has_error());
   err = Err();
@@ -99,6 +113,51 @@ TEST(FunctionMarkUsedFrom, Star) {
   Err err;
   input.parsed()->Execute(setup.scope(), &err);
   EXPECT_FALSE(err.has_error()) << err.message();
+
+  EXPECT_EQ("target\n", setup.print_output());
+  setup.print_output().clear();
+}
+
+TEST(FunctionMarkUsedFrom, StarWithExclusion) {
+  Scheduler scheduler;
+  TestWithScope setup;
+
+  // Defines a template mark all values except z used.
+  TestParseInput input(
+    "template(\"a\") {\n"
+    "  mark_used_from(invoker, \"*\", [\"z\"])\n"
+    "  print(\"$target_name\")\n"
+    "}\n"
+    "a(\"target\") {\n"
+    "  x = 1\n"
+    "  y = 2\n"
+    "  z = 3\n"
+    "  print(\"$z\")\n"
+    "}\n");
+
+  ASSERT_FALSE(input.has_error());
+
+  Err err;
+  input.parsed()->Execute(setup.scope(), &err);
+  ASSERT_FALSE(err.has_error()) << err.message();
+
+  EXPECT_EQ("3\ntarget\n", setup.print_output());
+  setup.print_output().clear();
+
+  // Instantiates a template that marks all values except z used.
+  // z should have an "Assignment had not effect." error.
+  TestParseInput input2(
+    "a(\"target\") {\n"
+    "  x = 1\n"
+    "  y = 2\n"
+    "  z = 3\n"
+    "}\n");
+
+  ASSERT_FALSE(input.has_error());
+
+  err = Err();
+  input2.parsed()->Execute(setup.scope(), &err);
+  EXPECT_EQ("Assignment had no effect.", err.message());
 
   EXPECT_EQ("target\n", setup.print_output());
   setup.print_output().clear();

@@ -27,7 +27,7 @@ void ForwardAllValues(const FunctionCallNode* function,
   options.excluded_values = exclusion_set;
   source->NonRecursiveMergeTo(dest, options, function,
                               "source scope", err);
-  source->MarkAllUsed();
+  source->MarkAllUsedExcept(exclusion_set);
 }
 
 void ForwardValuesFromList(Scope* source,

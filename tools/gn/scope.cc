@@ -204,6 +204,12 @@ void Scope::MarkAllUsed() {
   for (auto& cur : values_)
     cur.second.used = true;
 }
+void Scope::MarkAllUsedExcept(const std::set<std::string> & excluded_values) {
+  for (auto& cur : values_) {
+    if (excluded_values.find(cur.first.as_string()) == excluded_values.end())
+      cur.second.used = true;
+  }
+}
 
 void Scope::MarkUnused(const base::StringPiece& ident) {
   RecordMap::iterator found = values_.find(ident);

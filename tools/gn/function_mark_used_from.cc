@@ -12,8 +12,9 @@ namespace functions {
 namespace {
 
 void MarkUsedAllValues(const FunctionCallNode* function,
-                       Scope* source) {
-  source->MarkAllUsed();
+                       Scope* source,
+                       const std::set<std::string>& exclusion_set) {
+  source->MarkAllUsedExcept(exclusion_set);
 }
 
 void MarkUsedFromList(Scope* source,
@@ -34,7 +35,8 @@ const char kMarkUsedFrom_HelpShort[] =
 const char kMarkUsedFrom_Help[] =
     "mark_used_from: Marks variables as used from a different scope.\n"
     "\n"
-    "  mark_used_from(from_scope, variable_list_or_star)\n"
+    "  mark_used_from(from_scope, variable_list_or_star,\n"
+    "                 variables_to_not_mark_list = [])\n"
     "\n"
     "  Marks the given variables from the given scope as used if they exist.\n"
     "  This is normally used in the context of templates to prevent\n"
@@ -48,6 +50,10 @@ const char kMarkUsedFrom_Help[] =
     "  \"*\", all variables from the given scope will be marked used. \"*\"\n"
     "  only marks variables used that exist directly on the from_scope, not\n"
     "  enclosing ones. Otherwise it would mark all global variables as used.\n"
+    "\n"
+    "  If variables_to_not_mark_list is non-empty, then it must contains a\n"
+    "  list of variable names that will not be marked used. This is mostly\n"
+    "  useful when variable_list_or_star has a value of \"*\".\n"
     "\n"
     "  See also \"forward_variables_from\" for copying variables from a.\n"
     "  different scope.\n"
@@ -87,6 +93,18 @@ const char kMarkUsedFrom_Help[] =
     "    target(my_wrapper_target_type, target_name) {\n"
     "      mark_used_from(invoker, \"*\")\n"
     "    }\n"
+    "\n"
+    "  # A template that wraps another. It adds behavior based on one\n"
+    "  # variable, and forwards all others to the nested target.\n"
+    "  template(\"my_ios_test_app\") {\n"
+    "    ios_test_app(target_name) {\n"
+    "      mark_used_from(invoker, \"*\", [\"test_bundle_name\"])\n"
+    "      if (!defined(extra_substitutions)) {\n"
+    "        extra_substitutions = []\n"
+    "      }\n"
+    "      extra_substitutions += [ \"BUNDLE_ID_TEST_NAME=$test_bundle_name\" "
+                                                                          "]\n"
+    "    }\n"
     " }\n";
 
 // This function takes a ListNode rather than a resolved vector of values
@@ -97,9 +115,9 @@ Value RunMarkUsedFrom(Scope* scope,
                       const ListNode* args_list,
                       Err* err) {
   const std::vector<const ParseNode*>& args_vector = args_list->contents();
-  if (args_vector.size() != 2) {
+  if (args_vector.size() != 2 && args_vector.size() != 3) {
     *err = Err(function, "Wrong number of arguments.",
-               "Expecting exactly two.");
+               "Expecting two or three arguments.");
     return Value();
   }
 
@@ -123,13 +141,34 @@ Value RunMarkUsedFrom(Scope* scope,
     return Value();
   Scope* source = value->scope_value();
 
+  // Extract the exclusion list if defined.
+  std::set<std::string> exclusion_set;
+  if (args_vector.size() == 3) {
+    Value exclusion_value = args_vector[2]->Execute(scope, err);
+    if (err->has_error())
+      return Value();
+
+    if (exclusion_value.type() != Value::LIST) {
+      *err = Err(exclusion_value, "Not a valid list of variables to exclude.",
+                 "Expecting a list of strings.");
+      return Value();
+    }
+
+    for (const Value& cur : exclusion_value.list_value()) {
+      if (!cur.VerifyTypeIs(Value::STRING, err))
+        return Value();
+
+      exclusion_set.insert(cur.string_value());
+    }
+  }
+
   // Extract the list. If all_values is not set, the what_value will be a list.
   Value what_value = args_vector[1]->Execute(scope, err);
   if (err->has_error())
     return Value();
   if (what_value.type() == Value::STRING) {
     if (what_value.string_value() == "*") {
-      MarkUsedAllValues(function, source);
+      MarkUsedAllValues(function, source, exclusion_set);
       return Value();
     }
   } else {
