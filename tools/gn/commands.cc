@@ -43,9 +43,6 @@ bool ResolveTargetsFromCommandLinePattern(
   }
 
   if (!all_toolchains) {
-    // By default a pattern with an empty toolchain will match all toolchains.
-    // If the caller wants to default to the main toolchain only, set it
-    // explicitly.
     if (pattern.toolchain().is_null()) {
       // No explicit toolchain set.
       pattern.set_toolchain(setup->loader()->default_toolchain_label());
@@ -70,16 +67,17 @@ bool ResolveStringFromCommandLineInput(
     UniqueVector<const Config*>* config_matches,
     UniqueVector<const Toolchain*>* toolchain_matches,
     UniqueVector<SourceFile>* file_matches) {
-  if (LabelPattern::HasWildcard(input)) {
+  std::vector<const Target*> target_match_vector;
+  if (!ResolveTargetsFromCommandLinePattern(setup, input, all_toolchains,
+                                            &target_match_vector))
+    return false;
+  for (const Target* target : target_match_vector)
+    target_matches->push_back(target);
+
+  if (LabelPattern::HasWildcard(input) || !target_match_vector.empty()) {
     // For now, only match patterns against targets. It might be nice in the
     // future to allow the user to specify which types of things they want to
     // match, but it should probably only match targets by default.
-    std::vector<const Target*> target_match_vector;
-    if (!ResolveTargetsFromCommandLinePattern(setup, input, all_toolchains,
-                                              &target_match_vector))
-      return false;
-    for (const Target* target : target_match_vector)
-      target_matches->push_back(target);
     return true;
   }
 
@@ -105,7 +103,7 @@ bool ResolveStringFromCommandLineInput(
     if (const Config* as_config = item->AsConfig())
       config_matches->push_back(as_config);
     else if (const Target* as_target = item->AsTarget())
-      target_matches->push_back(as_target);
+      (void)(as_target); // do nothing, should be already captured from resolve targets above
     else if (const Toolchain* as_toolchain = item->AsToolchain())
       toolchain_matches->push_back(as_toolchain);
   } else {
