@@ -699,6 +699,30 @@ SourceDir GetToolchainOutputDir(const BuildSettings* build_settings,
   return SourceDir(SourceDir::SWAP_IN, &result);
 }
 
+SourceDir GetToolchainObjDir(const Settings* settings) {
+  return GetToolchainObjDirAsOutputFile(settings).AsSourceDir(
+      settings->build_settings());
+}
+
+OutputFile GetToolchainObjDirAsOutputFile(const Settings* settings) {
+  OutputFile result(settings->toolchain_output_subdir());
+  result.value().append("obj/");
+  return result;
+}
+
+OutputFile GetToolchainObjDirAsOutputFile(const Label& toolchain_label,
+                                          bool is_default) {
+  OutputFile result(GetOutputSubdirName(toolchain_label, is_default));
+  result.value().append("obj/");
+  return result;
+}
+
+SourceDir GetToolchainObjDir(const BuildSettings* build_settings,
+                             const Label& toolchain_label, bool is_default) {
+  return GetToolchainObjDirAsOutputFile(
+      toolchain_label, is_default).AsSourceDir(build_settings);
+}
+
 SourceDir GetToolchainGenDir(const Settings* settings) {
   return GetToolchainGenDirAsOutputFile(settings).AsSourceDir(
       settings->build_settings());
@@ -766,8 +790,8 @@ OutputFile GetOutputDirForSourceDirAsOutputFile(
     const SourceDir& source_dir,
     const Label& toolchain_label,
     bool is_default_toolchain) {
-  OutputFile result(GetOutputSubdirName(toolchain_label, is_default_toolchain));
-  result.value().append("obj/");
+  OutputFile result = GetToolchainObjDirAsOutputFile(toolchain_label,
+                                                     is_default_toolchain);
 
   if (source_dir.is_source_absolute()) {
     // The source dir is source-absolute, so we trim off the two leading

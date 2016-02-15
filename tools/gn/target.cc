@@ -705,8 +705,12 @@ void Target::CheckSourcesGenerated() const {
 }
 
 void Target::CheckSourceGenerated(const SourceFile& source) const {
-  if (!IsStringInOutputDir(settings()->build_settings()->build_dir(),
-                           source.value()))
+  const SourceDir& build_dir = settings()->build_settings()->build_dir();
+  const base::FilePath& root_path = settings()->build_settings()->root_path();
+  if (!IsStringInOutputDir(build_dir, source.value()) ||
+      (build_dir.Resolve(root_path) == root_path &&
+       !IsStringInOutputDir(GetToolchainObjDir(settings()), source.value()) &&
+       !IsStringInOutputDir(GetToolchainGenDir(settings()), source.value())))
     return;  // Not in output dir, this is OK.
 
   // Tell the scheduler about unknown files. This will be noted for later so
