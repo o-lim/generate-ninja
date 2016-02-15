@@ -274,17 +274,11 @@ char kTSanDefaultSuppressions[] =
 // https://crbug.com/454655
 "race:content::BrowserTestBase::PostTaskToInProcessRendererAndWait\n"
 
-// https://crbug.com/539315
-"race:MojoCreateMessagePipe\n"
-
 // https://crbug.com/569682
 "race:blink::ThreadState::visitStackRoots\n"
 
-// http://crbug.com/571735
-"deadlock:mojo::edk::RawChannel::Init\n"
-
-// http://crbug.com/571735
-"deadlock:mojo::edk::MessagePipeDispatcher::TransportStarted\n"
+// http://crbug.com/582274
+"race:usrsctp_close\n"
 
 // End of suppressions.
 ;  // Please keep this semicolon.

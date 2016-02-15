@@ -21,6 +21,7 @@
 
 namespace base {
 
+class BucketRanges;
 class DictionaryValue;
 class HistogramBase;
 class HistogramSamples;
@@ -81,6 +82,13 @@ class BASE_EXPORT HistogramBase {
     // to shortcut looking up the callback if it doesn't exist.
     kCallbackExists = 0x20,
 
+    // Indicates that the histogram is held in "persistent" memory and may
+    // be accessible between processes. This is only possible if such a
+    // memory segment has been created/attached, used to create a Persistent-
+    // MemoryAllocator, and that loaded into the Histogram module before this
+    // histogram is created.
+    kIsPersistent = 0x40,
+
     // Only for Histogram and its sub classes: fancy bucket-naming support.
     kHexRangePrintingFlag = 0x8000,
   };
@@ -119,9 +127,10 @@ class BASE_EXPORT HistogramBase {
   // Whether the histogram has construction arguments as parameters specified.
   // For histograms that don't have the concept of minimum, maximum or
   // bucket_count, this function always returns false.
-  virtual bool HasConstructionArguments(Sample expected_minimum,
-                                        Sample expected_maximum,
-                                        size_t expected_bucket_count) const = 0;
+  virtual bool HasConstructionArguments(
+      Sample expected_minimum,
+      Sample expected_maximum,
+      uint32_t expected_bucket_count) const = 0;
 
   virtual void Add(Sample value) = 0;
 

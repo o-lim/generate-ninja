@@ -134,19 +134,6 @@ class TraceEventTestFixture : public testing::Test {
                    base::Unretained(flush_complete_event)));
   }
 
-  void FlushMonitoring() {
-    WaitableEvent flush_complete_event(false, false);
-    FlushMonitoring(&flush_complete_event);
-    flush_complete_event.Wait();
-  }
-
-  void FlushMonitoring(WaitableEvent* flush_complete_event) {
-    TraceLog::GetInstance()->FlushButLeaveBufferIntact(
-        base::Bind(&TraceEventTestFixture::OnTraceDataCollected,
-                   base::Unretained(static_cast<TraceEventTestFixture*>(this)),
-                   base::Unretained(flush_complete_event)));
-  }
-
   void SetUp() override {
     const char* name = PlatformThread::GetName();
     old_thread_name_ = name ? strdup(name) : NULL;
@@ -501,14 +488,22 @@ void TraceWithAllMacroVariants(WaitableEvent* task_complete_event) {
                                               0x2128506);
     trackable.snapshot("world");
 
+    TRACE_EVENT_OBJECT_CREATED_WITH_ID(
+        "all", "tracked object 3", TRACE_ID_WITH_SCOPE("scope", 0x42));
+    TRACE_EVENT_OBJECT_SNAPSHOT_WITH_ID(
+        "all", "tracked object 3", TRACE_ID_WITH_SCOPE("scope", 0x42), "hello");
+    TRACE_EVENT_OBJECT_DELETED_WITH_ID(
+        "all", "tracked object 3", TRACE_ID_WITH_SCOPE("scope", 0x42));
+
     TRACE_EVENT1(kControlCharacters, kControlCharacters,
                  kControlCharacters, kControlCharacters);
 
-    TraceContext context(reinterpret_cast<TraceContext>(0x20151021));
-    TRACE_EVENT_ENTER_CONTEXT("all", "TRACE_EVENT_ENTER_CONTEXT call", context);
-    TRACE_EVENT_LEAVE_CONTEXT("all", "TRACE_EVENT_LEAVE_CONTEXT call", context);
+    TRACE_EVENT_ENTER_CONTEXT("all", "TRACE_EVENT_ENTER_CONTEXT call",
+                              TRACE_ID_WITH_SCOPE("scope", 0x20151021));
+    TRACE_EVENT_LEAVE_CONTEXT("all", "TRACE_EVENT_LEAVE_CONTEXT call",
+                              TRACE_ID_WITH_SCOPE("scope", 0x20151021));
     TRACE_EVENT_SCOPED_CONTEXT("all", "TRACE_EVENT_SCOPED_CONTEXT call",
-                               context);
+                               0x20151021);
   }  // Scope close causes TRACE_EVENT0 etc to send their END events.
 
   if (task_complete_event)
@@ -806,6 +801,7 @@ void ValidateAllTraceMacrosCreatedData(const ListValue& trace_parsed) {
 
     EXPECT_TRUE((item && item->GetString("ph", &phase)));
     EXPECT_EQ("N", phase);
+    EXPECT_FALSE((item && item->HasKey("scope")));
     EXPECT_TRUE((item && item->GetString("id", &id)));
     EXPECT_EQ("0x42", id);
 
@@ -813,6 +809,7 @@ void ValidateAllTraceMacrosCreatedData(const ListValue& trace_parsed) {
     EXPECT_TRUE(item);
     EXPECT_TRUE(item && item->GetString("ph", &phase));
     EXPECT_EQ("O", phase);
+    EXPECT_FALSE((item && item->HasKey("scope")));
     EXPECT_TRUE(item && item->GetString("id", &id));
     EXPECT_EQ("0x42", id);
     EXPECT_TRUE(item && item->GetString("args.snapshot", &snapshot));
@@ -822,6 +819,7 @@ void ValidateAllTraceMacrosCreatedData(const ListValue& trace_parsed) {
     EXPECT_TRUE(item);
     EXPECT_TRUE(item && item->GetString("ph", &phase));
     EXPECT_EQ("D", phase);
+    EXPECT_FALSE((item && item->HasKey("scope")));
     EXPECT_TRUE(item && item->GetString("id", &id));
     EXPECT_EQ("0x42", id);
   }
@@ -854,6 +852,41 @@ void ValidateAllTraceMacrosCreatedData(const ListValue& trace_parsed) {
     EXPECT_EQ("0x2128506", id);
   }
 
+  EXPECT_FIND_("tracked object 3");
+  {
+    std::string phase;
+    std::string scope;
+    std::string id;
+    std::string snapshot;
+
+    EXPECT_TRUE((item && item->GetString("ph", &phase)));
+    EXPECT_EQ("N", phase);
+    EXPECT_TRUE((item && item->GetString("scope", &scope)));
+    EXPECT_EQ("scope", scope);
+    EXPECT_TRUE((item && item->GetString("id", &id)));
+    EXPECT_EQ("0x42", id);
+
+    item = FindTraceEntry(trace_parsed, "tracked object 3", item);
+    EXPECT_TRUE(item);
+    EXPECT_TRUE(item && item->GetString("ph", &phase));
+    EXPECT_EQ("O", phase);
+    EXPECT_TRUE((item && item->GetString("scope", &scope)));
+    EXPECT_EQ("scope", scope);
+    EXPECT_TRUE(item && item->GetString("id", &id));
+    EXPECT_EQ("0x42", id);
+    EXPECT_TRUE(item && item->GetString("args.snapshot", &snapshot));
+    EXPECT_EQ("hello", snapshot);
+
+    item = FindTraceEntry(trace_parsed, "tracked object 3", item);
+    EXPECT_TRUE(item);
+    EXPECT_TRUE(item && item->GetString("ph", &phase));
+    EXPECT_EQ("D", phase);
+    EXPECT_TRUE((item && item->GetString("scope", &scope)));
+    EXPECT_EQ("scope", scope);
+    EXPECT_TRUE(item && item->GetString("id", &id));
+    EXPECT_EQ("0x42", id);
+  }
+
   EXPECT_FIND_(kControlCharacters);
   EXPECT_SUB_FIND_(kControlCharacters);
 
@@ -863,7 +896,10 @@ void ValidateAllTraceMacrosCreatedData(const ListValue& trace_parsed) {
     EXPECT_TRUE((item && item->GetString("ph", &ph)));
     EXPECT_EQ("(", ph);
 
+    std::string scope;
     std::string id;
+    EXPECT_TRUE((item && item->GetString("scope", &scope)));
+    EXPECT_EQ("scope", scope);
     EXPECT_TRUE((item && item->GetString("id", &id)));
     EXPECT_EQ("0x20151021", id);
   }
@@ -874,7 +910,10 @@ void ValidateAllTraceMacrosCreatedData(const ListValue& trace_parsed) {
     EXPECT_TRUE((item && item->GetString("ph", &ph)));
     EXPECT_EQ(")", ph);
 
+    std::string scope;
     std::string id;
+    EXPECT_TRUE((item && item->GetString("scope", &scope)));
+    EXPECT_EQ("scope", scope);
     EXPECT_TRUE((item && item->GetString("id", &id)));
     EXPECT_EQ("0x20151021", id);
   }
@@ -889,6 +928,7 @@ void ValidateAllTraceMacrosCreatedData(const ListValue& trace_parsed) {
     EXPECT_EQ("(", ph);
 
     std::string id;
+    EXPECT_FALSE((item && item->HasKey("scope")));
     EXPECT_TRUE((item && item->GetString("id", &id)));
     EXPECT_EQ("0x20151021", id);
   }
@@ -900,6 +940,7 @@ void ValidateAllTraceMacrosCreatedData(const ListValue& trace_parsed) {
     EXPECT_EQ(")", ph);
 
     std::string id;
+    EXPECT_FALSE((item && item->HasKey("scope")));
     EXPECT_TRUE((item && item->GetString("id", &id)));
     EXPECT_EQ("0x20151021", id);
   }
@@ -1221,25 +1262,6 @@ TEST_F(TraceEventTestFixture, AddMetadataEvent) {
   BeginTrace();
   EndTraceAndFlush();
   ASSERT_EQ(1, num_calls);
-
-  // Flushing should cause |AppendAsTraceFormat| to be called, but if the buffer
-  // is left intact, it the flush at the end of the trace should still call it;
-  // the metadata event should not be removed.
-  TraceLog::GetInstance()->SetEnabled(
-      TraceConfig(kRecordAllCategoryFilter,
-                  "record-until-full,enable-sampling"),
-      TraceLog::MONITORING_MODE);
-  TRACE_EVENT_API_ADD_METADATA_EVENT("metadata_event_name", "metadata_arg_name",
-                                     convertable);
-  FlushMonitoring();
-  ASSERT_EQ(2, num_calls);
-
-  // Flushing the trace at this point will case |AppendAsTraceFormat| to be
-  // called twice: once for the event that was added by the monitoring flush,
-  // and once for the end trace flush; the metadata event will be duplicated.
-  // This is consistent with the other metadata events.
-  EndTraceAndFlush();
-  ASSERT_EQ(4, num_calls);
 }
 
 // Test that categories work.
@@ -1513,14 +1535,16 @@ TEST_F(TraceEventTestFixture, StaticStringVsString) {
     // Test that string arguments are copied.
     TraceEventHandle handle1 =
         trace_event_internal::AddTraceEvent(
-            TRACE_EVENT_PHASE_INSTANT, category_group_enabled, "name1", 0, 0,
-            trace_event_internal::kNoId,
+            TRACE_EVENT_PHASE_INSTANT, category_group_enabled, "name1",
+            trace_event_internal::kGlobalScope, trace_event_internal::kNoId,
+            0, trace_event_internal::kNoId,
             "arg1", std::string("argval"), "arg2", std::string("argval"));
     // Test that static TRACE_STR_COPY string arguments are copied.
     TraceEventHandle handle2 =
         trace_event_internal::AddTraceEvent(
-            TRACE_EVENT_PHASE_INSTANT, category_group_enabled, "name2", 0, 0,
-            trace_event_internal::kNoId,
+            TRACE_EVENT_PHASE_INSTANT, category_group_enabled, "name2",
+            trace_event_internal::kGlobalScope, trace_event_internal::kNoId,
+            0, trace_event_internal::kNoId,
             "arg1", TRACE_STR_COPY("argval"),
             "arg2", TRACE_STR_COPY("argval"));
     EXPECT_GT(tracer->GetStatus().event_count, 1u);
@@ -1542,16 +1566,18 @@ TEST_F(TraceEventTestFixture, StaticStringVsString) {
     // Test that static literal string arguments are not copied.
     TraceEventHandle handle1 =
         trace_event_internal::AddTraceEvent(
-            TRACE_EVENT_PHASE_INSTANT, category_group_enabled, "name1", 0, 0,
-            trace_event_internal::kNoId,
+            TRACE_EVENT_PHASE_INSTANT, category_group_enabled, "name1",
+            trace_event_internal::kGlobalScope, trace_event_internal::kNoId,
+            0, trace_event_internal::kNoId,
             "arg1", "argval", "arg2", "argval");
     // Test that static TRACE_STR_COPY NULL string arguments are not copied.
     const char* str1 = NULL;
     const char* str2 = NULL;
     TraceEventHandle handle2 =
         trace_event_internal::AddTraceEvent(
-            TRACE_EVENT_PHASE_INSTANT, category_group_enabled, "name2", 0, 0,
-            trace_event_internal::kNoId,
+            TRACE_EVENT_PHASE_INSTANT, category_group_enabled, "name2",
+            trace_event_internal::kGlobalScope, trace_event_internal::kNoId,
+            0, trace_event_internal::kNoId,
             "arg1", TRACE_STR_COPY(str1),
             "arg2", TRACE_STR_COPY(str2));
     EXPECT_GT(tracer->GetStatus().event_count, 1u);
@@ -2001,52 +2027,6 @@ TEST_F(TraceEventTestFixture, TraceSamplingScope) {
   EndTraceAndFlush();
 }
 
-TEST_F(TraceEventTestFixture, TraceContinuousSampling) {
-  TraceLog::GetInstance()->SetEnabled(
-    TraceConfig(kRecordAllCategoryFilter, "record-until-full,enable-sampling"),
-    TraceLog::MONITORING_MODE);
-
-  TRACE_EVENT_SET_SAMPLING_STATE_FOR_BUCKET(1, "category", "AAA");
-  TraceLog::GetInstance()->WaitSamplingEventForTesting();
-  TRACE_EVENT_SET_SAMPLING_STATE_FOR_BUCKET(1, "category", "BBB");
-  TraceLog::GetInstance()->WaitSamplingEventForTesting();
-
-  FlushMonitoring();
-
-  // Make sure we can get the profiled data.
-  EXPECT_TRUE(FindNamePhase("AAA", "P"));
-  EXPECT_TRUE(FindNamePhase("BBB", "P"));
-
-  Clear();
-  TraceLog::GetInstance()->WaitSamplingEventForTesting();
-
-  TRACE_EVENT_SET_SAMPLING_STATE_FOR_BUCKET(1, "category", "CCC");
-  TraceLog::GetInstance()->WaitSamplingEventForTesting();
-  TRACE_EVENT_SET_SAMPLING_STATE_FOR_BUCKET(1, "category", "DDD");
-  TraceLog::GetInstance()->WaitSamplingEventForTesting();
-
-  FlushMonitoring();
-
-  // Make sure the profiled data is accumulated.
-  EXPECT_TRUE(FindNamePhase("AAA", "P"));
-  EXPECT_TRUE(FindNamePhase("BBB", "P"));
-  EXPECT_TRUE(FindNamePhase("CCC", "P"));
-  EXPECT_TRUE(FindNamePhase("DDD", "P"));
-
-  Clear();
-
-  TraceLog::GetInstance()->SetDisabled();
-
-  // Make sure disabling the continuous sampling thread clears
-  // the profiled data.
-  EXPECT_FALSE(FindNamePhase("AAA", "P"));
-  EXPECT_FALSE(FindNamePhase("BBB", "P"));
-  EXPECT_FALSE(FindNamePhase("CCC", "P"));
-  EXPECT_FALSE(FindNamePhase("DDD", "P"));
-
-  Clear();
-}
-
 class MyData : public ConvertableToTraceFormat {
  public:
   MyData() {}
@@ -2456,6 +2436,7 @@ class TraceEventCallbackTest : public TraceEventTestFixture {
                        char phase,
                        const unsigned char* category_group_enabled,
                        const char* name,
+                       const char* scope,
                        unsigned long long id,
                        int num_args,
                        const char* const arg_names[],

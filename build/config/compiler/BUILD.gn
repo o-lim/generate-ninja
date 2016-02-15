@@ -70,6 +70,10 @@ declare_args() {
     # The patch is preapplied to the internal toolchain and hence all bots.
     msvs_xtree_patched = false
   }
+
+  # Omit unwind support in official builds to save space.
+  # We can use breakpad for these builds.
+  exclude_unwind_tables = is_chrome_branded && is_official_build
 }
 
 # Apply the default logic for these values if they were not set explicitly.
@@ -159,7 +163,9 @@ config("compiler") {
     } else if (is_posix && !is_chromeos && !is_nacl) {
       # TODO(phajdan.jr): Use -fstack-protector-strong when our gcc supports it.
       cflags += [ "--param=ssp-buffer-size=4" ]
-      if (is_android && (current_cpu == "arm64" || current_cpu == "x86")) {
+
+      # The x86 toolchain currently has problems with stack-protector.
+      if (is_android && current_cpu == "x86") {
         cflags += [ "-fno-stack-protector" ]
       } else {
         cflags += [ "-fstack-protector" ]
@@ -225,9 +231,7 @@ config("compiler") {
     }
 
     if (!is_nacl) {
-      # Omit unwind support in official builds to save space.
-      # We can use breakpad for these builds.
-      if (is_chrome_branded && is_official_build) {
+      if (exclude_unwind_tables) {
         cflags += [
           "-fno-unwind-tables",
           "-fno-asynchronous-unwind-tables",
@@ -305,6 +309,15 @@ config("compiler") {
   # ------------------------------------
   if (is_clang) {
     cflags += [ "-fcolor-diagnostics" ]
+  }
+
+  # Makes builds independent of absolute file path.
+  # clang-cl (used if is_win) doesn't expose this flag.
+  # Currently disabled for nacl since its toolchain lacks this flag (too old).
+  # TODO(zforman): Once nacl's toolchain is updated, remove check.
+  if (is_clang && !is_win && !is_nacl) {
+    absolute_path = rebase_path("//.")
+    cflags += [ "-fdebug-prefix-map=$absolute_path=." ]
   }
 
   # C++11 compiler flags setup.
@@ -841,9 +854,6 @@ config("default_warnings") {
 
   if (is_clang) {
     cflags += [
-      # TODO(thakis): Add -Wfor-loop-analysis to -Wall in clang, remove this:
-      "-Wfor-loop-analysis",
-
       # TODO(thakis): Consider -Wloop-analysis (turns on
       # -Wrange-loop-analysis too).
 
@@ -1084,7 +1094,10 @@ if (is_win) {
   common_optimize_on_ldflags = []
 
   if (is_android) {
-    if (!using_sanitizer) {
+    # We don't omit frame pointers on arm64 since they are required
+    # to correctly unwind stackframes which contain system library
+    # function frames (crbug.com/391706).
+    if (!using_sanitizer && target_cpu != "arm64") {
       common_optimize_on_cflags += [ "-fomit-frame-pointer" ]
     }
 
@@ -1155,7 +1168,11 @@ config("no_optimize") {
       "-fdata-sections",
       "-ffunction-sections",
     ]
-    if (!using_sanitizer) {
+
+    # We don't omit frame pointers on arm64 since they are required
+    # to correctly unwind stackframes which contain system library
+    # function frames (crbug.com/391706).
+    if (!using_sanitizer && target_cpu != "arm64") {
       cflags += [ "-fomit-frame-pointer" ]
     }
 

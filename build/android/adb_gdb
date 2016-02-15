@@ -104,6 +104,7 @@ PULL_LIBS_DIR=
 SANDBOXED=
 SANDBOXED_INDEX=
 START=
+ATTACH_DELAY=1
 SU_PREFIX=
 SYMBOL_DIR=
 TARGET_ARCH=
@@ -178,13 +179,16 @@ for opt; do
     --start)
       START=true
       ;;
+    --attach-delay=*)
+      ATTACH_DELAY=$optarg
+      ;;
     --su-prefix=*)
       SU_PREFIX=$optarg
       ;;
     --symbol-dir=*)
       SYMBOL_DIR=$optarg
       ;;
-    --output-dir=*)
+    --output-directory=*)
       CHROMIUM_OUTPUT_DIR=$optarg
       ;;
     --out-dir=*)
@@ -209,7 +213,7 @@ for opt; do
       BUILDTYPE=Release
       ;;
     -*)
-      panic "Unknown option $OPT, see --help." >&2
+      panic "Unknown option $opt, see --help." >&2
       ;;
     *)
       if [ "$PACKAGE_NAME" ]; then
@@ -266,7 +270,7 @@ shared libraries under one of the following directories:
   \$CHROMIUM_SRC/<out>/lib.unstripped/     (used by GN builds)
 
 Where <out> is 'out' is determined by CHROMIUM_OUT_DIR, CHROMIUM_OUTPUT_DIR, or
-the --out-dir, --output-dir flags.
+the --out-dir, --output-directory flags.
 
 You can restrict this search by using --release or --debug to specify the
 build type, or simply use --symbol-dir=<path> to specify the file manually.
@@ -311,7 +315,7 @@ Valid options:
   --sandboxed=<num>     Debug specific sandboxed process.
   --symbol-dir=<path>   Specify directory with symbol shared libraries.
   --out-dir=<path>      Specify the out directory (e.g. "out").
-  --output-dir=<path>   Specify the output directory (e.g. "out/Debug").
+  --output-directory=<path> Specify the output directory (e.g. "out/Debug").
   --package-name=<name> Specify package name (alternative to 1st argument).
   --privileged          Debug first privileged process we find.
   --privileged=<num>    Debug specific privileged process.
@@ -319,6 +323,9 @@ Valid options:
   --pid=<pid>           Specify application process pid.
   --force               Kill any previous debugging session, if any.
   --start               Start package's activity on device.
+  --attach-delay=<num>  Seconds to wait for gdbserver to attach to the
+                        remote process before starting gdb. Default 1.
+                        <num> may be a float if your sleep(1) supports it.
   --ui                  Use gdbtui instead of gdb
   --activity=<name>     Activity name for --start [$DEFAULT_ACTIVITY].
   --annotate=<num>      Enable gdb annotation.
@@ -348,6 +355,20 @@ fi
 
 if [ -z "$PACKAGE_NAME" ]; then
   panic "Please specify a package name on the command line. See --help."
+fi
+
+if [[ -z "$CHROMIUM_OUTPUT_DIR" && -z "$CHROMIUM_OUT_DIR" ]]; then
+  if [[ -e "build.ninja" ]]; then
+    CHROMIUM_OUTPUT_DIR=$PWD
+  else
+    panic "Please specify an output directory by using one of:
+       --output-directory=out/Debug
+       --out-dir=out/
+       CHROMIUM_OUTPUT_DIR=out/Debug
+       CHROMIUM_OUT_DIR=out
+       Setting working directory to an output directory.
+       See --help."
+   fi
 fi
 
 if [ -z "$NDK_DIR" ]; then
@@ -997,13 +1018,14 @@ GDBSERVER_PID=$!
 echo "$GDBSERVER_PID" > $GDBSERVER_PIDFILE
 log "background job pid: $GDBSERVER_PID"
 
-# Check that it is still running after a few seconds. If not, this means we
-# could not properly attach to it
-sleep 2
+# Sleep to allow gdbserver to attach to the remote process and be
+# ready to connect to.
+log "Sleeping ${ATTACH_DELAY}s to allow gdbserver to attach."
+sleep "$ATTACH_DELAY"
 log "Job control: $(jobs -l)"
 STATE=$(jobs -l | awk '$2 == "'$GDBSERVER_PID'" { print $3; }')
 if [ "$STATE" != "Running" ]; then
-  echo "ERROR: GDBServer could not attach to PID $PID!"
+  echo "ERROR: GDBServer either failed to run or attach to PID $PID!"
   if [ $(adb_shell su -c getenforce) != "Permissive" ];  then
     echo "Device mode is Enforcing. Changing Device mode to Permissive "
     $(adb_shell su -c setenforce 0)
