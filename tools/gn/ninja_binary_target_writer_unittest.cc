@@ -134,8 +134,6 @@ TEST(NinjaBinaryTargetWriter, SourceSet) {
         // There are no sources so there are no params to alink. (In practice
         // this will probably fail in the archive tool.)
         "build obj/foo/libstlib.a: alink || obj/foo/bar.stamp\n"
-        "  ldflags =\n"
-        "  libs =\n"
         "  output_extension = \n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str);
@@ -163,8 +161,6 @@ TEST(NinjaBinaryTargetWriter, SourceSet) {
             "obj/foo/bar.input2.o ../../foo/input3.o ../../foo/input4.obj "
             "obj/foo/bar.input5.o obj/foo/bar.input6.o obj/foo/bar.input7.o "
             "|| obj/foo/bar.stamp\n"
-        "  ldflags =\n"
-        "  libs =\n"
         "  output_extension = \n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str);
@@ -211,13 +207,12 @@ TEST(NinjaBinaryTargetWriter, ProductExtensionAndInputDeps) {
       "target_out_dir = obj/foo\n"
       "target_output_name = libshlib\n"
       "\n"
-      "build obj/foo/shlib.inputdeps.stamp: stamp obj/foo/action.stamp\n"
       "build obj/foo/libshlib.input1.o: cxx ../../foo/input1.cc"
-        " || obj/foo/shlib.inputdeps.stamp\n"
+        " || obj/foo/action.stamp\n"
         "  source_name_part = input1\n"
         "  source_out_dir = obj/foo\n"
       "build obj/foo/libshlib.input2.o: cxx ../../foo/input2.cc"
-        " || obj/foo/shlib.inputdeps.stamp\n"
+        " || obj/foo/action.stamp\n"
         "  source_name_part = input2\n"
         "  source_out_dir = obj/foo\n"
       "\n"

@@ -136,8 +136,11 @@ SharedMemoryHandle SharedMemory::DuplicateHandle(
   BOOL success =
       ::DuplicateHandle(process, handle.GetHandle(), process, &duped_handle, 0,
                         FALSE, DUPLICATE_SAME_ACCESS);
-  if (success)
-    return SharedMemoryHandle(duped_handle, GetCurrentProcId());
+  if (success) {
+    base::SharedMemoryHandle handle(duped_handle, GetCurrentProcId());
+    handle.SetOwnershipPassesToIPC(true);
+    return handle;
+  }
   return SharedMemoryHandle();
 }
 
@@ -292,6 +295,7 @@ bool SharedMemory::ShareToProcessCommon(ProcessHandle process,
     return false;
   }
   *new_handle = SharedMemoryHandle(result, base::GetProcId(process));
+  new_handle->SetOwnershipPassesToIPC(true);
   return true;
 }
 

@@ -39,7 +39,7 @@ hw.cpu.arch={hw.cpu.arch}
 hw.device.hash=-708107041
 hw.camera.back=none
 disk.dataPartition.size=800M
-hw.gpu.enabled=yes
+hw.gpu.enabled={gpu}
 skin.path=720x1280
 skin.dynamic=yes
 hw.keyboard=yes
@@ -158,7 +158,8 @@ def _GetAvailablePort():
 
 def LaunchTempEmulators(emulator_count, abi, api_level, enable_kvm=False,
                         kill_and_launch=True, sdcard_size=DEFAULT_SDCARD_SIZE,
-                        storage_size=DEFAULT_STORAGE_SIZE, wait_for_boot=True):
+                        storage_size=DEFAULT_STORAGE_SIZE, wait_for_boot=True,
+                        headless=False):
   """Create and launch temporary emulators and wait for them to boot.
 
   Args:
@@ -166,6 +167,7 @@ def LaunchTempEmulators(emulator_count, abi, api_level, enable_kvm=False,
     abi: the emulator target platform
     api_level: the api level (e.g., 19 for Android v4.4 - KitKat release)
     wait_for_boot: whether or not to wait for emulators to boot up
+    headless: running emulator with no ui
 
   Returns:
     List of emulators.
@@ -178,7 +180,8 @@ def LaunchTempEmulators(emulator_count, abi, api_level, enable_kvm=False,
     logging.info('Emulator launch %d with avd_name=%s and api=%d',
         n, avd_name, api_level)
     emulator = Emulator(avd_name, abi, enable_kvm=enable_kvm,
-                        sdcard_size=sdcard_size, storage_size=storage_size)
+                        sdcard_size=sdcard_size, storage_size=storage_size,
+                        headless=headless)
     emulator.CreateAVD(api_level)
     emulator.Launch(kill_all_emulators=(n == 0 and kill_and_launch))
     t.Stop()
@@ -187,24 +190,27 @@ def LaunchTempEmulators(emulator_count, abi, api_level, enable_kvm=False,
   if wait_for_boot:
     for emulator in emulators:
       emulator.ConfirmLaunch(True)
+    logging.info('All emulators are fully booted')
   return emulators
 
 
 def LaunchEmulator(avd_name, abi, kill_and_launch=True, enable_kvm=False,
                    sdcard_size=DEFAULT_SDCARD_SIZE,
-                   storage_size=DEFAULT_STORAGE_SIZE):
+                   storage_size=DEFAULT_STORAGE_SIZE, headless=False):
   """Launch an existing emulator with name avd_name.
 
   Args:
     avd_name: name of existing emulator
     abi: the emulator target platform
+    headless: running emulator with no ui
 
   Returns:
     emulator object.
   """
   logging.info('Specified emulator named avd_name=%s launched', avd_name)
   emulator = Emulator(avd_name, abi, enable_kvm=enable_kvm,
-                      sdcard_size=sdcard_size, storage_size=storage_size)
+                      sdcard_size=sdcard_size, storage_size=storage_size,
+                      headless=headless)
   emulator.Launch(kill_all_emulators=kill_and_launch)
   emulator.ConfirmLaunch(True)
   return emulator
@@ -242,7 +248,7 @@ class Emulator(object):
 
   def __init__(self, avd_name, abi, enable_kvm=False,
                sdcard_size=DEFAULT_SDCARD_SIZE,
-               storage_size=DEFAULT_STORAGE_SIZE):
+               storage_size=DEFAULT_STORAGE_SIZE, headless=False):
     """Init an Emulator.
 
     Args:
@@ -259,6 +265,7 @@ class Emulator(object):
     self.sdcard_size = sdcard_size
     self.storage_size = storage_size
     self.enable_kvm = enable_kvm
+    self.headless = headless
 
   @staticmethod
   def _DeviceName():
@@ -325,6 +332,7 @@ class Emulator(object):
       custom_config = custom_config.replace(key, replacements[key])
     custom_config = custom_config.replace('{api.level}', str(api_level))
     custom_config = custom_config.replace('{sdcard.size}', self.sdcard_size)
+    custom_config.replace('{gpu}', 'no' if self.headless else 'yes')
 
     with open(new_config_ini, 'w') as new_config_ini:
       new_config_ini.write(custom_config)
@@ -375,13 +383,24 @@ class Emulator(object):
         self.emulator,
         # Speed up emulator launch by 40%.  Really.
         '-no-boot-anim',
+        ]
+    if self.headless:
+      emulator_command.extend([
+        '-no-skin',
+        '-no-audio',
+        '-no-window'
+        ])
+    else:
+      emulator_command.extend([
+          '-gpu', 'on'
+        ])
+    emulator_command.extend([
         # Use a familiar name and port.
         '-avd', self.avd_name,
         '-port', str(port),
-        # Enable GPU by default.
-        '-gpu', 'on',
+        # all the argument after qemu are sub arguments for qemu
         '-qemu', '-m', '1024',
-        ]
+        ])
     if self.abi == 'x86' and self.enable_kvm:
       emulator_command.extend([
           # For x86 emulator --enable-kvm will fail early, avoiding accidental
@@ -447,6 +466,7 @@ class Emulator(object):
       # Now that we checked for obvious problems, wait for a boot complete.
       # Waiting for the package manager is sometimes problematic.
       device.WaitUntilFullyBooted(timeout=self._WAITFORBOOT_TIMEOUT)
+      logging.info('%s is now fully booted', self.avd_name)
 
   def Shutdown(self):
     """Shuts down the process started by launch."""
