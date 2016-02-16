@@ -6,6 +6,7 @@
 #define TOOLS_GN_NINJA_BINARY_TARGET_WRITER_H_
 
 #include "base/macros.h"
+#include "base/synchronization/lock.h"
 #include "tools/gn/config_values.h"
 #include "tools/gn/ninja_target_writer.h"
 #include "tools/gn/toolchain.h"
@@ -140,6 +141,9 @@ class NinjaBinaryTargetWriter : public NinjaTargetWriter {
 
   // Cached version of the prefix used for rule types for this toolchain.
   std::string rule_prefix_;
+
+  static base::Lock lock_;
+  static std::set<std::string> pch_files_written_;
 
   DISALLOW_COPY_AND_ASSIGN(NinjaBinaryTargetWriter);
 };

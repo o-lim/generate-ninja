@@ -256,6 +256,9 @@ void AddSourceSetObjectFiles(const Target* source_set,
 
 }  // namespace
 
+base::Lock NinjaBinaryTargetWriter::lock_;
+std::set<std::string> NinjaBinaryTargetWriter::pch_files_written_;
+
 NinjaBinaryTargetWriter::NinjaBinaryTargetWriter(const Target* target,
                                                  std::ostream& out)
     : NinjaTargetWriter(target, out),
@@ -551,6 +554,15 @@ void NinjaBinaryTargetWriter::WriteGCCPCHCommand(
 
   gch_files->insert(gch_files->end(), outputs.begin(), outputs.end());
 
+  {
+    // Avoid generating duplicate pch rules
+    base::AutoLock lock(lock_);
+    if (pch_files_written_.find(outputs[0].value()) != pch_files_written_.end())
+      return;
+
+    pch_files_written_.insert(outputs[0].value());
+  }
+
   // Build line to compile the file.
   WriteCompilerBuildLine(target_->config_values().precompiled_source(),
                          std::vector<OutputFile>(), order_only_dep, tool_type,
@@ -598,6 +610,15 @@ void NinjaBinaryTargetWriter::WriteWindowsPCHCommand(
     return;
 
   object_files->insert(object_files->end(), outputs.begin(), outputs.end());
+
+  {
+    // Avoid generating duplicate pch rules
+    base::AutoLock lock(lock_);
+    if (pch_files_written_.find(outputs[0].value()) != pch_files_written_.end())
+      return;
+
+    pch_files_written_.insert(outputs[0].value());
+  }
 
   // Build line to compile the file.
   WriteCompilerBuildLine(target_->config_values().precompiled_source(),
