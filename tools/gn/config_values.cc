@@ -45,8 +45,8 @@ void ConfigValues::AppendValues(const ConfigValues& append) {
   // throw an error if there are conflicting precompiled headers, but that
   // requires piping through some context of the actual configs involved, and
   // conflicts here should be very unusual. Instead, use the first value.
-  if (!append.precompiled_header_.empty() && !precompiled_header_.empty())
+  if (!append.precompiled_header_.empty() && precompiled_header_.empty())
     precompiled_header_ = append.precompiled_header_;
-  if (!append.precompiled_source_.is_null() && !precompiled_source_.is_null())
+  if (!append.precompiled_source_.is_null() && precompiled_source_.is_null())
     precompiled_source_ = append.precompiled_source_;
 }
