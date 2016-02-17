@@ -7,18 +7,19 @@
 
 #include <stdint.h>
 #include <atomic>
-#include <string>
 
 #include "base/atomicops.h"
 #include "base/base_export.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/scoped_ptr.h"
+#include "base/strings/string_piece.h"
 
 namespace base {
 
 class HistogramBase;
 class MemoryMappedFile;
+class SharedMemory;
 
 // Simple allocator for pieces of a memory block that may be persistent
 // to some storage or shared across multiple processes. This class resides
@@ -104,7 +105,7 @@ class BASE_EXPORT PersistentMemoryAllocator {
   // method below) before construction if the definition of the segment can
   // vary in any way at run-time. Invalid memory segments will cause a crash.
   PersistentMemoryAllocator(void* base, size_t size, size_t page_size,
-                            uint64_t id, const std::string& name,
+                            uint64_t id, base::StringPiece name,
                             bool readonly);
   virtual ~PersistentMemoryAllocator();
 
@@ -129,7 +130,12 @@ class BASE_EXPORT PersistentMemoryAllocator {
   // for allocator of |name| (which can simply be the result of Name()). This
   // is done seperately from construction for situations such as when the
   // histograms will be backed by memory provided by this very allocator.
-  void CreateTrackingHistograms(const std::string& name);
+  //
+  // IMPORTANT: Callers must update tools/metrics/histograms/histograms.xml
+  // with the following histograms:
+  //    UMA.PersistentAllocator.name.Allocs
+  //    UMA.PersistentAllocator.name.UsedPct
+  void CreateTrackingHistograms(base::StringPiece name);
 
   // Direct access to underlying memory segment. If the segment is shared
   // across threads or processes, reading data through these values does
@@ -301,11 +307,36 @@ class BASE_EXPORT LocalPersistentMemoryAllocator
     : public PersistentMemoryAllocator {
  public:
   LocalPersistentMemoryAllocator(size_t size, uint64_t id,
-                                 const std::string& name);
+                                 base::StringPiece name);
   ~LocalPersistentMemoryAllocator() override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(LocalPersistentMemoryAllocator);
+};
+
+
+// This allocator takes a shared-memory object and performs allocation from
+// it. The memory must be previously mapped via Map() or MapAt(). The allocator
+// takes ownership of the memory object.
+class BASE_EXPORT SharedPersistentMemoryAllocator
+    : public PersistentMemoryAllocator {
+ public:
+  SharedPersistentMemoryAllocator(scoped_ptr<SharedMemory> memory, uint64_t id,
+                                  base::StringPiece name, bool read_only);
+  ~SharedPersistentMemoryAllocator() override;
+
+  SharedMemory* shared_memory() { return shared_memory_.get(); }
+
+  // Ensure that the memory isn't so invalid that it won't crash when passing it
+  // to the allocator. This doesn't guarantee the data is valid, just that it
+  // won't cause the program to abort. The existing IsCorrupt() call will handle
+  // the rest.
+  static bool IsSharedMemoryAcceptable(const SharedMemory& memory);
+
+ private:
+  scoped_ptr<SharedMemory> shared_memory_;
+
+  DISALLOW_COPY_AND_ASSIGN(SharedPersistentMemoryAllocator);
 };
 
 
@@ -315,18 +346,20 @@ class BASE_EXPORT LocalPersistentMemoryAllocator
 class BASE_EXPORT FilePersistentMemoryAllocator
     : public PersistentMemoryAllocator {
  public:
-  FilePersistentMemoryAllocator(MemoryMappedFile* file, uint64_t id,
-                                const std::string& name);
+  FilePersistentMemoryAllocator(scoped_ptr<MemoryMappedFile> file, uint64_t id,
+                                base::StringPiece name);
   ~FilePersistentMemoryAllocator() override;
 
   // Ensure that the file isn't so invalid that it won't crash when passing it
   // to the allocator. This doesn't guarantee the file is valid, just that it
-  // won't cause program to abort. The existing IsCorrupt() call will handle
+  // won't cause the program to abort. The existing IsCorrupt() call will handle
   // the rest.
   static bool IsFileAcceptable(const MemoryMappedFile& file);
 
  private:
   scoped_ptr<MemoryMappedFile> mapped_file_;
+
+  DISALLOW_COPY_AND_ASSIGN(FilePersistentMemoryAllocator);
 };
 
 }  // namespace base

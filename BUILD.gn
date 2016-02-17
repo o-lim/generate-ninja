@@ -236,7 +236,14 @@ group("both_gn_and_gyp") {
   }
 
   if (use_aura) {
-    deps += [ "//ui/wm:wm_unittests" ]
+    deps += [
+      "//ash:ash_shell_with_content",
+      "//ash:ash_unittests",
+      "//ui/aura:aura_unittests",
+      "//ui/aura:bench",
+      "//ui/aura:demo",
+      "//ui/wm:wm_unittests",
+    ]
   }
 
   if (use_ozone) {
@@ -464,16 +471,6 @@ group("both_gn_and_gyp") {
     if (media_use_ffmpeg && !is_android) {
       deps += [ "//media:ffmpeg_regression_tests" ]
     }
-
-    if (use_aura) {
-      deps += [
-        "//ash:ash_shell_with_content",
-        "//ash:ash_unittests",
-        "//ui/aura:aura_unittests",
-        "//ui/aura:bench",
-        "//ui/aura:demo",
-      ]
-    }
   }
 
   if (is_android || (is_linux && !is_chromeos)) {
@@ -599,6 +596,7 @@ group("mojo_apptests") {
   if (is_win || is_linux) {
     deps += [
       "//components/filesystem:apptests",
+      "//components/leveldb:apptests",
       "//components/mus/ws:tests",
       "//components/resource_provider:apptests",
       "//components/resource_provider:resource_provider_unittests",

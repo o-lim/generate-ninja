@@ -24,6 +24,7 @@
         'allocator/allocator.gyp:allocator',
         'base_debugging_flags#target',
         'base_static',
+        'base_build_date#target',
         '../testing/gtest.gyp:gtest_prod',
         '../third_party/modp_b64/modp_b64.gyp:modp_b64',
         'third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
@@ -137,6 +138,14 @@
               },
             }],
           ],
+        }],
+        ['use_sysroot==0 and (OS == "android" or OS == "linux")', {
+          'link_settings': {
+            'libraries': [
+              # Needed for <atomic> when building with newer C++ library.
+              '-latomic',
+            ],
+          },
         }],
         ['OS == "win"', {
           # Specify delayload for base.dll.
@@ -992,6 +1001,35 @@
         ],
       },
     },
+    {
+      'type': 'none',
+      'target_name': 'base_build_date',
+      'hard_dependency': 1,
+      'actions': [{
+        'action_name': 'generate_build_date_headers',
+        'inputs': [
+          '<(DEPTH)/build/write_build_date_header.py',
+          '<(DEPTH)/build/util/LASTCHANGE'
+        ],
+        'outputs': [ '<(SHARED_INTERMEDIATE_DIR)/base/generated_build_date.h' ],
+        'action': [
+          'python', '<(DEPTH)/build/write_build_date_header.py',
+          '<(SHARED_INTERMEDIATE_DIR)/base/generated_build_date.h',
+          '<(build_type)'
+        ]
+      }],
+      'conditions': [
+        [ 'buildtype == "Official"', {
+          'variables': {
+            'build_type': 'official'
+          }
+        }, {
+          'variables': {
+            'build_type': 'default'
+          }
+        }],
+      ]
+    },
   ],
   'conditions': [
     ['OS=="ios" and "<(GENERATOR)"=="ninja"', {
@@ -1047,6 +1085,7 @@
             'base_target': 1,
           },
           'dependencies': [
+            'base_build_date',
             'base_debugging_flags#target',
             'base_static_win64',
             '../third_party/modp_b64/modp_b64.gyp:modp_b64_win64',
@@ -1376,14 +1415,14 @@
           'includes': [ '../build/android/java_cpp_template.gypi' ],
         },
         {
-          # GN: //base:base_multidex_gen
-          'target_name': 'base_multidex_gen',
+          # GN: //base:base_build_config_gen
+          'target_name': 'base_build_config_gen',
           'type': 'none',
           'sources': [
-            'android/java/templates/ChromiumMultiDex.template',
+            'android/java/templates/BuildConfig.template',
           ],
           'variables': {
-            'package_name': 'org/chromium/base/multidex',
+            'package_name': 'org/chromium/base',
             'template_deps': [],
           },
           'includes': ['../build/android/java_cpp_template.gypi'],
@@ -1404,7 +1443,7 @@
           'variables': {
             'java_in_dir': 'android/java',
             'jar_excluded_classes': [
-              '*/ChromiumMultiDex.class',
+              '*/BuildConfig.class',
               '*/NativeLibraries.class',
             ],
           },
@@ -1413,14 +1452,14 @@
             'base_java_library_load_from_apk_status_codes',
             'base_java_library_process_type',
             'base_java_memory_pressure_level',
-            'base_multidex_gen',
+            'base_build_config_gen',
             'base_native_libraries_gen',
             '../third_party/android_tools/android_tools.gyp:android_support_multidex_javalib',
             '../third_party/jsr-305/jsr-305.gyp:jsr_305_javalib',
           ],
           'all_dependent_settings': {
             'variables': {
-              'generate_multidex_config': 1,
+              'generate_build_config': 1,
             },
           },
           'includes': [ '../build/java.gypi' ],
@@ -1484,7 +1523,7 @@
           'target_name': 'base_junit_test_support',
           'type': 'none',
           'dependencies': [
-            'base_multidex_gen',
+            'base_build_config_gen',
             '../testing/android/junit/junit_test.gyp:junit_test_support',
             '../third_party/android_tools/android_tools.gyp:android_support_multidex_javalib',
           ],
@@ -1506,13 +1545,17 @@
             '../testing/android/junit/junit_test.gyp:junit_test_support',
           ],
           'variables': {
-             'main_class': 'org.chromium.testing.local.JunitTestMain',
-             'src_paths': [
-               '../base/android/junit/',
-               '../base/test/android/junit/src/org/chromium/base/test/util/DisableIfTest.java',
-             ],
-           },
-          'includes': [ '../build/host_jar.gypi' ],
+            'main_class': 'org.chromium.testing.local.JunitTestMain',
+            'src_paths': [
+              '../base/android/junit/',
+              '../base/test/android/junit/src/org/chromium/base/test/util/DisableIfTest.java',
+            ],
+            'test_type': 'junit',
+          },
+          'includes': [
+            '../build/android/test_runner.gypi',
+            '../build/host_jar.gypi',
+          ],
         },
         {
           # GN: //base:base_javatests

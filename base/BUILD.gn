@@ -20,9 +20,16 @@
 import("//build/buildflag_header.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/nacl/config.gni")
+import("//build/config/sysroot.gni")
 import("//build/config/ui.gni")
 import("//build/nocompile.gni")
 import("//testing/test.gni")
+
+declare_args() {
+  # Override this value to give a specific build date.
+  # See //base/build_time.cc for more details.
+  override_build_date = "N/A"
+}
 
 if (is_android) {
   import("//build/config/android/rules.gni")
@@ -970,8 +977,14 @@ component("base") {
   public_deps = [
     ":base_paths",
     ":base_static",
+    ":build_date",
     ":debugging_flags",
   ]
+
+  # Needed for <atomic> if using newer C++ library than sysroot
+  if (!use_sysroot && (is_android || is_linux)) {
+    libs = [ "atomic" ]
+  }
 
   # Allow more direct string conversions on platforms with native utf8
   # strings
@@ -1887,6 +1900,31 @@ test("base_unittests") {
   }
 }
 
+action("build_date") {
+  script = "//build/write_build_date_header.py"
+
+  # Force recalculation if there's been a change.
+  inputs = [
+    "//build/util/LASTCHANGE",
+  ]
+  outputs = [
+    "$target_gen_dir/generated_build_date.h",
+  ]
+
+  args =
+      [ rebase_path("$target_gen_dir/generated_build_date.h", root_build_dir) ]
+
+  if (is_official_build) {
+    args += [ "official" ]
+  } else {
+    args += [ "default" ]
+  }
+
+  if (override_build_date != "N/A") {
+    args += [ override_build_date ]
+  }
+}
+
 if (enable_nocompile_tests) {
   nocompile_test("base_nocompile_tests") {
     sources = [
@@ -1953,7 +1991,7 @@ if (is_android) {
   android_library("base_java") {
     srcjar_deps = [
       ":base_android_java_enums_srcjar",
-      ":base_multidex_gen",
+      ":base_build_config_gen",
       ":base_native_libraries_gen",
     ]
 
@@ -1964,10 +2002,10 @@ if (is_android) {
 
     DEPRECATED_java_in_dir = "android/java/src"
 
-    # New versions of ChromiumMultiDex.java and NativeLibraries.java
+    # New versions of BuildConfig.java and NativeLibraries.java
     # (with the actual correct values) will be created when creating an apk.
     jar_excluded_patterns = [
-      "*/ChromiumMultiDex.class",
+      "*/BuildConfig.class",
       "*/NativeLibraries.class",
       "*/NativeLibraries##*.class",
     ]
@@ -2002,7 +2040,7 @@ if (is_android) {
       "//third_party/robolectric:android-all-4.3_r2-robolectric-0",
       "//third_party/robolectric:robolectric_java",
     ]
-    srcjar_deps = [ ":base_multidex_gen" ]
+    srcjar_deps = [ ":base_build_config_gen" ]
   }
 
   # GYP: //base.gyp:base_junit_tests
@@ -2032,12 +2070,12 @@ if (is_android) {
     ]
   }
 
-  # GYP: //base/base.gyp:base_multidex_gen
-  java_cpp_template("base_multidex_gen") {
+  # GYP: //base/base.gyp:base_build_config_gen
+  java_cpp_template("base_build_config_gen") {
     sources = [
-      "android/java/templates/ChromiumMultiDex.template",
+      "android/java/templates/BuildConfig.template",
     ]
-    package_name = "org/chromium/base/multidex"
+    package_name = "org/chromium/base"
   }
 
   # GYP: //base/base.gyp:base_native_libraries_gen

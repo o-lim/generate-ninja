@@ -67,8 +67,8 @@ def SetEnvironmentAndGetRuntimeDllDirs():
     os.environ['WINDOWSSDKDIR'] = win_sdk
     os.environ['WDK_DIR'] = wdk
     # Include the VS runtime in the PATH in case it's not machine-installed.
-    runtime_path = ';'.join(vs_runtime_dll_dirs)
-    os.environ['PATH'] = runtime_path + ';' + os.environ['PATH']
+    runtime_path = os.path.pathsep.join(vs_runtime_dll_dirs)
+    os.environ['PATH'] = runtime_path + os.path.pathsep + os.environ['PATH']
   elif sys.platform == 'win32' and not depot_tools_win_toolchain:
     if not 'GYP_MSVS_OVERRIDE_PATH' in os.environ:
       os.environ['GYP_MSVS_OVERRIDE_PATH'] = DetectVisualStudioPath()
@@ -278,8 +278,8 @@ def _GetDesiredVsToolchainHashes():
   """Load a list of SHA1s corresponding to the toolchains that we want installed
   to build with."""
   if GetVisualStudioVersion() == '2015':
-    # Update 1 with Debuggers, UCRT installers and ucrtbased.dll
-    return ['523b6c2d3df300b2c8538cdc0beac404726af051']
+    # Update 1 with hot fixes.
+    return ['b349b3cc596d5f7e13d649532ddd7e8db39db0cb']
   else:
     # Default to VS2013.
     return ['4087e065abebdca6dbd0caca2910c6718d2ec67f']
@@ -350,7 +350,7 @@ runtime_dirs = "%s"
       os.environ['WINDOWSSDKDIR'],
       GetVisualStudioVersion(),
       os.environ.get('WDK_DIR', ''),
-      ';'.join(runtime_dll_dirs or ['None']))
+      os.path.pathsep.join(runtime_dll_dirs or ['None']))
 
 
 def main():

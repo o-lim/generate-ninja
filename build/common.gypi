@@ -179,6 +179,7 @@
         'branding_path_component%': '<(branding)',
         'host_arch%': '<(host_arch)',
         'target_arch%': '<(target_arch)',
+        'use_sysroot%': '<(use_sysroot)',
 
         # Set to true to instrument the code with function call logger.
         # See src/third_party/cygprofile/cyg-profile.cc for details.
@@ -375,14 +376,13 @@
       'branding_path_component%': '<(branding_path_component)',
       'arm_version%': '<(arm_version)',
       'sysroot%': '<(sysroot)',
+      'use_sysroot%': '<(use_sysroot)',
       'chroot_cmd%': '<(chroot_cmd)',
       'system_libdir%': '<(system_libdir)',
       'order_profiling%': '<(order_profiling)',
 
-      # Set to 1 to not store any build metadata, e.g. ifdef out all __DATE__
-      # and __TIME__. Set to 0 to reenable the use of these macros in the code
-      # base. See http://crbug.com/314403.
-      'dont_embed_build_metadata%': 1,
+      # TODO(zforman): Remove as soon as no bots depend on this.
+      'dont_embed_build_metadata%': 0,
 
       # Set to 1 to force Visual C++ to use legacy debug information format /Z7.
       # This is useful for parallel compilation tools which can't support /Zi.
@@ -490,12 +490,6 @@
       # Enable building with SyzyAsan.
       # See https://github.com/google/syzygy/wiki/SyzyASanHowTo
       'syzyasan%': 0,
-
-      # Enable crash reporting via Kasko.
-      'kasko%': 0,
-
-      # Enable hang reports in Kasko. Requires Kasko to be enabled.
-      'kasko_hang_reports%': 0,
 
       # Enable building with LSan (Clang's -fsanitize=leak option).
       # -fsanitize=leak only works with clang, but lsan=1 implies clang=1
@@ -775,7 +769,7 @@
         }],
 
         # Flags to use Wayland server support.
-        ['chromeos==1 and use_ozone==1', {
+        ['chromeos==1', {
           'enable_wayland_server%': 1,
         }, {
           'enable_wayland_server%': 0,
@@ -1060,7 +1054,17 @@
           # http://crbug.com/574476
           'fastbuild%': 2,
         }],
+
+        # Enable crash reporting via Kasko.
+        ['OS=="win" and target_arch=="ia32" and branding=="Chrome"', {
+          'kasko%': 1,
+        }, {
+          'kasko%': 0,
+        }]
       ],
+
+      # Enable hang reports in Kasko. Requires Kasko to be enabled.
+      'kasko_hang_reports%': 1,
 
       # Setting this to '0' will cause V8's startup snapshot to be
       # embedded in the binary instead of being a external files.
@@ -1174,7 +1178,6 @@
     'enable_wifi_display%': '<(enable_wifi_display)',
     'image_loader_extension%': '<(image_loader_extension)',
     'fastbuild%': '<(fastbuild)',
-    'dont_embed_build_metadata%': '<(dont_embed_build_metadata)',
     'win_z7%': '<(win_z7)',
     'dcheck_always_on%': '<(dcheck_always_on)',
     'tracing_like_official_build%': '<(tracing_like_official_build)',
@@ -1183,6 +1186,7 @@
     'arm_neon%': '<(arm_neon)',
     'arm_neon_optional%': '<(arm_neon_optional)',
     'sysroot%': '<(sysroot)',
+    'use_sysroot%': '<(use_sysroot)',
     'pkg-config%': '<(pkg-config)',
     'chroot_cmd%': '<(chroot_cmd)',
     'system_libdir%': '<(system_libdir)',
@@ -1591,14 +1595,6 @@
     'libjpeg_turbo_gyp_path': '<(DEPTH)/third_party/libjpeg_turbo/libjpeg.gyp',
 
     'conditions': [
-      ['buildtype=="Official"', {
-        # Continue to embed build meta data in Official builds, basically the
-        # time it was built.
-        # TODO(maruel): This decision should be revisited because having an
-        # official deterministic build has high value too but MSVC toolset can't
-        # generate anything deterministic with WPO enabled AFAIK.
-        'dont_embed_build_metadata%': 0,
-      }],
       # Enable the Syzygy optimization step for the official builds.
       ['OS=="win" and buildtype=="Official" and syzyasan!=1 and clang!=1', {
         'syzygy_optimize%': 1,
@@ -1694,7 +1690,7 @@
         # not using the "current" SDK.
         'ios_sdk%': '',
         'ios_sdk_path%': '',
-        'ios_deployment_target%': '7.0',
+        'ios_deployment_target%': '9.0',
 
         'conditions': [
           # ios_product_name is set to the name of the .app bundle as it should
@@ -2848,11 +2844,6 @@
           }],
         ],
       }],  # fastbuild!=0
-      ['dont_embed_build_metadata==1', {
-        'defines': [
-          'DONT_EMBED_BUILD_METADATA',
-        ],
-      }],  # dont_embed_build_metadata==1
       ['dcheck_always_on!=0', {
         'defines': ['DCHECK_ALWAYS_ON=1'],
       }],  # dcheck_always_on!=0
@@ -3953,6 +3944,13 @@
                       # silences those warnings, as they are not helpful and
                       # clutter legitimate warnings.
                       '-Wno-abi',
+                    ],
+                  }],
+                  ['clang==1', {
+                    'cflags': [
+                      # Disable an incorrect loop optimization.
+                      # See http://llvm.org/bugs/show_bug.cgi?id=26600.
+                      '-mllvm -enable-interleaved-mem-accesses=0',
                     ],
                   }],
                   ['clang==1 and arm_arch!="" and OS!="android"', {
@@ -5475,6 +5473,11 @@
                 # It's not possible to achieve nullability completeness before
                 # all builders are running Xcode 7. crbug.com/499809
                 '-Wno-nullability-completeness',
+              ],
+              'OTHER_CPLUSPLUSFLAGS': [
+                '$(inherited)',
+                # TODO(ios): Remove once Xcode's libc++ has LLVM r256325
+                '-isystem <!(cd <(DEPTH) && pwd -P)/third_party/llvm-build/Release+Asserts/include/c++/v1',
               ],
             }],
 
