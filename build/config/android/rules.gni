@@ -746,6 +746,27 @@ template("android_assets") {
   }
 }
 
+# Declare a group() that supports forwarding java dependency information.
+#
+# Example
+#  java_group("conditional_deps") {
+#    if (enable_foo) {
+#      deps = [":foo_java"]
+#    }
+#  }
+template("java_group") {
+  write_build_config("${target_name}__build_config") {
+    forward_variables_from(invoker, [ "deps" ])
+    type = "group"
+    build_config = "$target_gen_dir/${invoker.target_name}.build_config"
+  }
+  group(target_name) {
+    deps = []
+    forward_variables_from(invoker, "*")
+    deps += [ ":${target_name}__build_config" ]
+  }
+}
+
 # Declare a target that generates localized strings.xml from a .grd file.
 #
 # If this target is included in the deps of an android resources/library/apk,
@@ -932,17 +953,25 @@ template("java_binary") {
 #   }
 template("junit_binary") {
   set_sources_assignment_filter([])
+  testonly = true
 
-  java_binary(target_name) {
+  _java_binary_target_name = "${target_name}__java_binary"
+  _test_runner_target_name = "${target_name}__test_runner_script"
+
+  test_runner_script(_test_runner_target_name) {
+    test_name = invoker.target_name
+    test_suite = invoker.target_name
+    test_type = "junit"
+  }
+
+  java_binary(_java_binary_target_name) {
     deps = []
+    jar_name = invoker.target_name
     forward_variables_from(invoker, "*")
+    testonly = true
     bypass_platform_checks = true
     main_class = "org.chromium.testing.local.JunitTestMain"
-    wrapper_script_args = [
-      "-test-jars",
-      "$target_name.jar",
-    ]
-    testonly = true
+    wrapper_script_name = "$target_name"
 
     deps += [
       "//testing/android/junit:junit_test_support",
@@ -950,6 +979,12 @@ template("junit_binary") {
       "//third_party/mockito:mockito_java",
       "//third_party/robolectric:android-all-4.3_r2-robolectric-0",
       "//third_party/robolectric:robolectric_java",
+    ]
+  }
+  group(target_name) {
+    public_deps = [
+      ":$_java_binary_target_name",
+      ":$_test_runner_target_name",
     ]
   }
 }
@@ -1325,20 +1360,21 @@ template("android_apk") {
   }
 
   _use_chromium_linker =
-      defined(invoker.use_chromium_linker) && invoker.use_chromium_linker &&
-      chromium_linker_supported
-  _enable_relocation_packing =
-      defined(invoker.enable_relocation_packing) &&
-      invoker.enable_relocation_packing && _use_chromium_linker
+      defined(invoker.use_chromium_linker) && invoker.use_chromium_linker
+  _enable_relocation_packing = defined(invoker.enable_relocation_packing) &&
+                               invoker.enable_relocation_packing
   _load_library_from_apk =
       defined(invoker.load_library_from_apk) && invoker.load_library_from_apk
 
   assert(_use_chromium_linker || true)  # Mark as used.
-  assert(_enable_relocation_packing || true)  # Mark as used.
-
-  assert(
-      !_load_library_from_apk || _use_chromium_linker,
-      "Loading library from the apk requires use" + " of the Chromium linker.")
+  if (_enable_relocation_packing) {
+    assert(_use_chromium_linker,
+           "enable_relocation_packing requires use_chromium_linker")
+  }
+  if (_load_library_from_apk) {
+    assert(_use_chromium_linker,
+           "load_library_from_apk requires use_chromium_linker")
+  }
 
   # The dependency that makes the chromium linker, if any is needed.
   _native_libs_deps = []
@@ -1492,10 +1528,10 @@ template("android_apk") {
   }
 
   if (!defined(invoker.apk_under_test)) {
-    java_cpp_template("${_template_name}__multidex_config_java") {
-      package_name = "org/chromium/base/multidex"
+    java_cpp_template("${_template_name}__build_config_java") {
+      package_name = "org/chromium/base"
       sources = [
-        "//base/android/java/templates/ChromiumMultiDex.template",
+        "//base/android/java/templates/BuildConfig.template",
       ]
 
       defines = []
@@ -1503,7 +1539,7 @@ template("android_apk") {
         defines += [ "ENABLE_MULTIDEX" ]
       }
     }
-    _srcjar_deps += [ ":${_template_name}__multidex_config_java" ]
+    _srcjar_deps += [ ":${_template_name}__build_config_java" ]
   }
 
   java_target = "${_template_name}__java"
@@ -1593,12 +1629,23 @@ template("android_apk") {
                ] + _proguard_configs
 
       output_jar_path = _proguard_jar_path
-      rebased_proguard_configs = rebase_path(_proguard_configs, root_build_dir)
+      _rebased_proguard_configs = rebase_path(_proguard_configs, root_build_dir)
       args = [
-        "--proguard-configs=$rebased_proguard_configs",
-        "--tested-apk-info=@FileArg($_rebased_build_config:proguard:tested_apk_info)",
+        "--proguard-configs=$_rebased_proguard_configs",
         "--input-paths=@FileArg($_rebased_build_config:proguard:input_paths)",
       ]
+      if (defined(invoker.apk_under_test)) {
+        deps += [
+          "${invoker.apk_under_test}__build_config",
+          "${invoker.apk_under_test}__proguard",
+        ]
+        _apk_under_test_build_config =
+            get_label_info(invoker.apk_under_test, "target_gen_dir") + "/" +
+            get_label_info(invoker.apk_under_test, "name") + ".build_config"
+        _rebased_apk_under_test_build_config =
+            rebase_path(_apk_under_test_build_config, root_build_dir)
+        args += [ "--tested-apk-info=@FileArg($_rebased_apk_under_test_build_config:deps_info:proguard_info)" ]
+      }
     }
     _dex_sources = [ _proguard_jar_path ]
     _dex_deps = [ ":$_proguard_target" ]
@@ -1999,16 +2046,20 @@ template("instrumentation_test_apk") {
 
       # Required by test runner to enumerate test list.
       ":${_apk_target_name}_dist_ijar",
-      invoker.apk_under_test,
     ]
+    if (defined(invoker.apk_under_test)) {
+      public_deps += [ invoker.apk_under_test ]
+    }
   }
   group("${target_name}_incremental") {
     public_deps = [
       ":${_apk_target_name}_dist_ijar",
       ":${_apk_target_name}_incremental",
       ":${_test_runner_target_name}_incremental",
-      "${invoker.apk_under_test}_incremental",
     ]
+    if (defined(invoker.apk_under_test)) {
+      public_deps += [ "${invoker.apk_under_test}_incremental" ]
+    }
   }
 }
 
@@ -2320,10 +2371,52 @@ template("proto_java_library") {
   }
 
   android_library(target_name) {
+    chromium_code = false
     java_files = []
     srcjar_deps = [ ":${_template_name}__protoc_java" ]
     deps = [
       "//third_party/android_protobuf:protobuf_nano_javalib",
     ]
+  }
+}
+
+# Writes a script to root_out_dir/bin that passes --output-directory to the
+# wrapped script, in addition to forwarding arguments. Most / all of these
+# wrappers should be made deps of //tools/android:android_tools.
+#
+# Variables
+#   target: Script to wrap.
+#   flag_name: Default is "--output-directory"
+#
+# Example
+#   wrapper_script("foo_wrapper") {
+#     target = "//pkg/foo.py"
+#   }
+template("wrapper_script") {
+  action(target_name) {
+    _name = get_path_info(invoker.target, "name")
+    _output = "$root_out_dir/bin/$_name"
+
+    script = "//build/android/gyp/create_tool_wrapper.py"
+    outputs = [
+      _output,
+    ]
+
+    # The target isn't actually used by the script, but it's nice to have GN
+    # check that it exists.
+    inputs = [
+      invoker.target,
+    ]
+    args = [
+      "--output",
+      rebase_path(_output, root_build_dir),
+      "--target",
+      rebase_path(invoker.target, root_build_dir),
+      "--output-directory",
+      rebase_path(root_out_dir, root_build_dir),
+    ]
+    if (defined(invoker.flag_name)) {
+      args += [ "--flag-name=${invoker.flag_name}" ]
+    }
   }
 }

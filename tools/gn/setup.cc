@@ -522,10 +522,26 @@ bool Setup::FillSourceDir(const base::CommandLine& cmdline) {
 }
 
 bool Setup::FillBuildDir(const std::string& build_dir, bool require_exists) {
+#if defined(OS_POSIX)
+  char realpath_buf[PATH_MAX];
+  strncpy(realpath_buf, build_dir.c_str(), PATH_MAX);
+  if (build_dir.length() < 2 || build_dir[0] != '/' || build_dir[1] != '/') {
+    // Expand all ./, ../, and symbolic links in build_dir.
+    if (!realpath(build_dir.c_str(), realpath_buf)) {
+      Err(Location(), "Can't normalize the build directory path.",
+          strerror(errno)) .PrintToStdout();
+      return false;
+    }
+  }
+  const std::string build_dir_realpath = realpath_buf;
+#else
+  const std::string& build_dir_realpath = build_dir;
+#endif
+
   Err err;
   SourceDir resolved =
       SourceDirForCurrentDirectory(build_settings_.root_path()).
-    ResolveRelativeDir(Value(nullptr, build_dir), &err,
+    ResolveRelativeDir(Value(nullptr, build_dir_realpath), &err,
         build_settings_.root_path_utf8());
   if (err.has_error()) {
     err.PrintToStdout();

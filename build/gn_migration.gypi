@@ -210,6 +210,7 @@
             '../content/content_shell_and_tests.gyp:content_unittests_apk',
             '../content/content_shell_and_tests.gyp:video_decode_accelerator_unittest_apk',
             '../device/device_tests.gyp:device_unittests_apk',
+            '../gpu/gpu.gyp:command_buffer_gles2_tests_apk',
             '../gpu/gpu.gyp:gl_tests_apk',
             '../gpu/gpu.gyp:gpu_perftests_apk',
             '../gpu/gpu.gyp:gpu_unittests_apk',
@@ -554,12 +555,15 @@
             '../chrome/chrome.gyp:interactive_ui_tests_run',
             '../chrome/chrome.gyp:sync_integration_tests_run',
             '../chrome/chrome.gyp:unit_tests_run',
+            '../device/device_tests.gyp:device_unittests_run',
             '../components/components_tests.gyp:components_browsertests_run',
             '../components/components_tests.gyp:components_unittests_run',
             '../content/content_shell_and_tests.gyp:content_browsertests_run',
             '../content/content_shell_and_tests.gyp:content_unittests_run',
             '../courgette/courgette.gyp:courgette_unittests_run',
             '../crypto/crypto.gyp:crypto_unittests_run',
+            '../extensions/extensions_tests.gyp:extensions_browsertests_run',
+            '../extensions/extensions_tests.gyp:extensions_unittests_run',
             '../google_apis/gcm/gcm.gyp:gcm_unit_tests_run',
             '../google_apis/google_apis.gyp:google_apis_unittests_run',
             '../gpu/gpu.gyp:gpu_unittests_run',
@@ -572,6 +576,7 @@
             '../mojo/mojo_edk_tests.gyp:mojo_public_system_unittests_run',
             '../mojo/mojo_edk_tests.gyp:mojo_public_utility_unittests_run',
             '../net/net.gyp:net_unittests_run',
+            '../ppapi/ppapi_internal.gyp:ppapi_unittests_run',
             '../printing/printing.gyp:printing_unittests_run',
             '../remoting/remoting.gyp:remoting_unittests_run',
             '../skia/skia_tests.gyp:skia_unittests_run',
@@ -607,9 +612,10 @@
               'dependencies': [
                 '../chrome/chrome.gyp:installer_util_unittests_run',
                 '../chrome/chrome.gyp:setup_unittests_run',
-                '../sandbox/sandbox.gyp:sbox_integration_tests',
-                '../sandbox/sandbox.gyp:sbox_unittests',
-                '../sandbox/sandbox.gyp:sbox_validation_tests',
+                '../chrome_elf/chrome_elf.gyp:chrome_elf_unittests_run',
+                '../sandbox/sandbox.gyp:sbox_integration_tests_run',
+                '../sandbox/sandbox.gyp:sbox_unittests_run',
+                '../sandbox/sandbox.gyp:sbox_validation_tests_run',
               ],
             }],
             ['OS!="android"', {
@@ -640,6 +646,11 @@
               'dependencies': [
                 '../components/nacl.gyp:nacl_loader_unittests_run',
               ]
+            }],
+            ['toolkit_views==1', {
+              'dependencies': [
+                '../ui/views/views.gyp:views_unittests_run',
+              ],
             }],
           ],
         }],
