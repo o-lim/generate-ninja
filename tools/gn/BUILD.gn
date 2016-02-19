@@ -210,7 +210,6 @@ action("last_commit_position") {
 
   version = getenv("GN_VERSION")
   if (version == "") {
-
     head = exec_script("//build/util/githead.py",
                        [ rebase_path("//.git/HEAD") ],
                        "trim string",

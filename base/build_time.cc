@@ -4,6 +4,9 @@
 
 #include "base/build_time.h"
 
+// Imports the generated build date, i.e. BUILD_DATE.
+#include "base/generated_build_date.h"
+
 #include "base/logging.h"
 #include "base/time/time.h"
 
@@ -11,13 +14,9 @@ namespace base {
 
 Time GetBuildTime() {
   Time integral_build_time;
-  // The format of __DATE__ and __TIME__ is specified by the ANSI C Standard,
-  // section 6.8.8.
-  //
-  // __DATE__ is exactly "Mmm DD YYYY".
-  // __TIME__ is exactly "hh:mm:ss".
-  const char kDateTime[] = __DATE__ " " __TIME__ " PST";
-  bool result = Time::FromString(kDateTime, &integral_build_time);
+  // BUILD_DATE is exactly "Mmm DD YYYY".
+  const char kDateTime[] = BUILD_DATE " 05:00:00";
+  bool result = Time::FromUTCString(kDateTime, &integral_build_time);
   DCHECK(result);
   return integral_build_time;
 }

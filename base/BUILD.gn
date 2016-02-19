@@ -755,6 +755,8 @@ component("base") {
     "task_runner.cc",
     "task_runner.h",
     "task_runner_util.h",
+    "task_scheduler/task_traits.cc",
+    "task_scheduler/task_traits.h",
     "template_util.h",
     "third_party/dmg_fp/dmg_fp.h",
     "third_party/dmg_fp/dtoa_wrapper.cc",
@@ -977,6 +979,7 @@ component("base") {
   public_deps = [
     ":base_paths",
     ":base_static",
+    ":build_date",
     ":debugging_flags",
   ]
 
@@ -1639,6 +1642,7 @@ test("base_unittests") {
     "memory/scoped_vector_unittest.cc",
     "memory/shared_memory_mac_unittest.cc",
     "memory/shared_memory_unittest.cc",
+    "memory/shared_memory_win_unittest.cc",
     "memory/singleton_unittest.cc",
     "memory/weak_ptr_unittest.cc",
     "message_loop/message_loop_task_runner_unittest.cc",
@@ -1903,9 +1907,19 @@ action("build_date") {
   script = "//build/write_build_date_header.py"
 
   # Force recalculation if there's been a change.
-  inputs = [
-    "//build/util/LASTCHANGE",
-  ]
+  version = getenv("GN_VERSION")
+  if (version == "") {
+    head = exec_script("//build/util/githead.py",
+                       [ rebase_path("//.git/HEAD") ],
+                       "trim string",
+                       ["//.git/HEAD"])
+    inputs = [
+      "//.git/HEAD",
+    ]
+    if (head != "") {
+      inputs += [ "//.git/$head" ]
+    }
+  }
   outputs = [
     "$target_gen_dir/generated_build_date.h",
   ]

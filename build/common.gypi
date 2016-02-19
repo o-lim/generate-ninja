@@ -474,12 +474,8 @@
       'asan%': 0,
       'asan_blacklist%': '<(PRODUCT_DIR)/../../tools/memory/asan/blacklist.txt',
       # Enable coverage gathering instrumentation in sanitizer tools. This flag
-      # also controls coverage granularity (1 for function-level coverage, 2
-      # for block-level coverage).
-      'sanitizer_coverage%': 0,
-      # Deprecated, only works if |sanitizer_coverage| isn't set.
-      # TODO(glider): remove this flag.
-      'asan_coverage%': 0,
+      # also controls coverage granularity.
+      'sanitizer_coverage%': '',
       # Enable intra-object-overflow detection in ASan (experimental).
       'asan_field_padding%': 0,
 
@@ -490,12 +486,6 @@
       # Enable building with SyzyAsan.
       # See https://github.com/google/syzygy/wiki/SyzyASanHowTo
       'syzyasan%': 0,
-
-      # Enable crash reporting via Kasko.
-      'kasko%': 0,
-
-      # Enable hang reports in Kasko. Requires Kasko to be enabled.
-      'kasko_hang_reports%': 0,
 
       # Enable building with LSan (Clang's -fsanitize=leak option).
       # -fsanitize=leak only works with clang, but lsan=1 implies clang=1
@@ -1060,7 +1050,18 @@
           # http://crbug.com/574476
           'fastbuild%': 2,
         }],
+
+        # Enable crash reporting via Kasko.
+        # TODO(pmonette): Remove browser hang reports within a day (2/19/2016).
+        ['OS=="win" and target_arch=="ia32" and branding=="Chrome"', {
+          'kasko%': 1,
+        }, {
+          'kasko%': 0,
+        }],
       ],
+
+      # Enable hang reports in Kasko. Requires Kasko to be enabled.
+      'kasko_hang_reports%': 1,
 
       # Setting this to '0' will cause V8's startup snapshot to be
       # embedded in the binary instead of being a external files.
@@ -1205,7 +1206,6 @@
     'mac_want_real_dsym%': '<(mac_want_real_dsym)',
     'asan%': '<(asan)',
     'asan_blacklist%': '<(asan_blacklist)',
-    'asan_coverage%': '<(asan_coverage)',
     'sanitizer_coverage%': '<(sanitizer_coverage)',
     'asan_field_padding%': '<(asan_field_padding)',
     'use_sanitizer_options%': '<(use_sanitizer_options)',
@@ -2012,6 +2012,8 @@
           }],
           ['syzyasan==1', {
             'kasko%': 1,
+            # Disable hang reports for SyzyASAN builds.
+            'kasko_hang_reports': 0,
           }],
           ['component=="shared_library" and "<(GENERATOR)"=="ninja"', {
             # Only enabled by default for ninja because it's buggy in VS.
@@ -2280,10 +2282,6 @@
       # TODO(rnk): Kill off variables that no one else uses and just implement
       # them under a build_for_tool== condition.
       ['build_for_tool=="memcheck" or build_for_tool=="tsan"', {
-
-        # tcmalloc causes Valgrind failures. Discussion in crrev.com/1642383002.
-        'use_allocator%': 'none',
-
         # gcc flags
         'mac_debug_optimization': '1',
         'mac_release_optimization': '1',
@@ -2408,14 +2406,12 @@
               }],
             ],
           }, {  # chromecast!=1
+            # Build all platforms whose deps are in install-build-deps.sh.
+            # Only these platforms will be compile tested by buildbots.
+            'ozone_platform_egltest%': 1,
             'conditions': [
-              ['OS=="chromeos"', {
+              ['chromeos==1', {
                 'ozone_platform_gbm%': 1,
-                'ozone_platform_egltest%': 1,
-              }, {
-                # Build all platforms whose deps are in install-build-deps.sh.
-                # Only these platforms will be compile tested by buildbots.
-                'ozone_platform_egltest%': 1,
               }],
             ],
           }],
@@ -3284,6 +3280,10 @@
                 'AdditionalOptions': [
                   # Work around crbug.com/526851, bug in VS 2015 RTM compiler.
                   '/Zc:sizedDealloc-',
+                  # Disable thread-safe statics to avoid overhead and because
+                  # they are disabled on other platforms. See crbug.com/587210
+                  # and -fno-threadsafe-statics.
+                  '/Zc:threadSafeInit-',
                 ],
               },
             },
@@ -3691,6 +3691,8 @@
         'cflags_cc': [
           '-fno-exceptions',
           '-fno-rtti',
+          # If this is removed then remove the corresponding /Zc:threadSafeInit-
+          # for Windows.
           '-fno-threadsafe-statics',
           # Make inline functions have hidden visiblity by default.
           # Surprisingly, not covered by -fvisibility=hidden.
@@ -4470,19 +4472,7 @@
               }],
             ],
           }],
-          ['asan_coverage!=0 and sanitizer_coverage==0', {
-            'target_conditions': [
-              ['_toolset=="target"', {
-                'cflags': [
-                  '-fsanitize-coverage=<(asan_coverage)',
-                ],
-                'defines': [
-                  'SANITIZER_COVERAGE',
-                ],
-              }],
-            ],
-          }],
-          ['sanitizer_coverage!=0', {
+          ['sanitizer_coverage!=""', {
             'target_conditions': [
               ['_toolset=="target"', {
                 'cflags': [
@@ -4494,7 +4484,7 @@
               }],
             ],
           }],
-          ['(asan_coverage>1 or sanitizer_coverage>1) and target_arch=="arm"', {
+          ['sanitizer_coverage!="" and target_arch=="arm"', {
             'target_conditions': [
               ['_toolset=="target"', {
                 'cflags': [
@@ -5136,19 +5126,7 @@
               ],
             },
           }],
-          ['asan_coverage!=0 and sanitizer_coverage==0', {
-            'target_conditions': [
-              ['_toolset=="target"', {
-                'cflags': [
-                  '-fsanitize-coverage=<(asan_coverage)',
-                ],
-                'defines': [
-                  'SANITIZER_COVERAGE',
-                ],
-              }],
-            ],
-          }],
-          ['sanitizer_coverage!=0', {
+          ['sanitizer_coverage!=""', {
             'target_conditions': [
               ['_toolset=="target"', {
                 'cflags': [
@@ -5982,7 +5960,7 @@
                     }],
                   ],
                 }],
-                ['sanitizer_coverage!=0', {
+                ['sanitizer_coverage!=""', {
                   # TODO(asan/win): Move this down into the general
                   # win-target_defaults section once the 64-bit asan runtime
                   # exists.  See crbug.com/345874.
@@ -5995,7 +5973,7 @@
               ],
             },
             'conditions': [
-              ['sanitizer_coverage!=0', {
+              ['sanitizer_coverage!=""', {
                 # TODO(asan/win): Move this down into the general
                 # win-target_defaults section once the 64-bit asan runtime
                 # exists.  See crbug.com/345874.

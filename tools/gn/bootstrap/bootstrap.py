@@ -115,22 +115,39 @@ def main(argv):
 
 
 def build_gn_with_ninja_manually(tempdir, options):
-  write_ninja(os.path.join(tempdir, 'build.ninja'), options)
+  root_gen_dir = os.path.join(tempdir, 'gen')
+  mkdir_p(root_gen_dir)
+
+  if is_mac:
+    # //base/build_time.cc needs base/generated_build_date.h,
+    # and this file is only included for Mac builds.
+    mkdir_p(os.path.join(root_gen_dir, 'base'))
+    check_call([
+        os.path.join(SRC_ROOT, 'build', 'write_build_date_header.py'),
+        os.path.join(root_gen_dir, 'base', 'generated_build_date.h'),
+        'default'
+    ])
+
+  write_ninja(os.path.join(tempdir, 'build.ninja'), root_gen_dir, options)
   cmd = ['ninja', '-C', tempdir]
   if options.verbose:
     cmd.append('-v')
   cmd.append('gn')
   check_call(cmd)
 
-def write_ninja(path, options):
+def write_ninja(path, root_gen_dir, options):
   cc = os.environ.get('CC', '')
   cxx = os.environ.get('CXX', '')
   cflags = os.environ.get('CFLAGS', '').split()
   cflags_cc = os.environ.get('CXXFLAGS', '').split()
   ld = os.environ.get('LD', cxx)
   ldflags = os.environ.get('LDFLAGS', '').split()
-  include_dirs = [SRC_ROOT]
+  include_dirs = [root_gen_dir, SRC_ROOT]
   libs = []
+
+  # //base/allocator/allocator_extension.cc needs this macro defined,
+  # otherwise there would be link errors.
+  cflags.extend(['-DNO_TCMALLOC'])
 
   if is_posix:
     if options.debug:
@@ -138,7 +155,7 @@ def write_ninja(path, options):
     else:
       cflags.extend(['-O2', '-g0'])
 
-    cflags.extend(['-D_FILE_OFFSET_BITS=64', '-DNO_TCMALLOC', '-pthread', '-pipe'])
+    cflags.extend(['-D_FILE_OFFSET_BITS=64', '-pthread', '-pipe'])
     cflags_cc.extend(['-std=c++11', '-Wno-c++11-narrowing'])
 
   static_libraries = {
@@ -179,6 +196,7 @@ def write_ninja(path, options):
       'base/files/file_path_constants.cc',
       'base/files/file_tracing.cc',
       'base/files/file_util.cc',
+      'base/files/memory_mapped_file.cc',
       'base/files/scoped_file.cc',
       'base/hash.cc',
       'base/json/json_parser.cc',
@@ -193,7 +211,6 @@ def write_ninja(path, options):
       'base/memory/ref_counted.cc',
       'base/memory/ref_counted_memory.cc',
       'base/memory/singleton.cc',
-      'base/memory/shared_memory_posix.cc',
       'base/memory/weak_ptr.cc',
       'base/message_loop/incoming_task_queue.cc',
       'base/message_loop/message_loop.cc',
@@ -217,9 +234,9 @@ def write_ninja(path, options):
       'base/process/kill.cc',
       'base/process/process_iterator.cc',
       'base/process/process_metrics.cc',
-      'base/profiler/tracked_time.cc',
       'base/profiler/scoped_profile.cc',
       'base/profiler/scoped_tracker.cc',
+      'base/profiler/tracked_time.cc',
       'base/run_loop.cc',
       'base/sequence_checker_impl.cc',
       'base/sequenced_task_runner.cc',
@@ -293,7 +310,6 @@ def write_ninja(path, options):
         'base/files/file_enumerator_posix.cc',
         'base/files/file_posix.cc',
         'base/files/file_util_posix.cc',
-        'base/files/memory_mapped_file.cc',
         'base/files/memory_mapped_file_posix.cc',
         'base/message_loop/message_pump_libevent.cc',
         'base/posix/file_descriptor_shuffle.cc',
@@ -346,6 +362,7 @@ def write_ninja(path, options):
         'tool': 'cxx',
     }
     static_libraries['base']['sources'].extend([
+        'base/memory/shared_memory_posix.cc',
         'base/nix/xdg_util.cc',
         'base/process/internal_linux.cc',
         'base/process/process_handle_linux.cc',
@@ -368,6 +385,9 @@ def write_ninja(path, options):
   if is_mac:
     static_libraries['base']['sources'].extend([
         'base/base_paths_mac.mm',
+        'base/build_time.cc',
+        'base/rand_util.cc',
+        'base/rand_util_posix.cc',
         'base/files/file_util_mac.mm',
         'base/mac/bundle_locations.mm',
         'base/mac/call_with_eh_frame.cc',
@@ -375,8 +395,12 @@ def write_ninja(path, options):
         'base/mac/foundation_util.mm',
         'base/mac/mach_logging.cc',
         'base/mac/scoped_mach_port.cc',
+        'base/mac/scoped_mach_vm.cc',
         'base/mac/scoped_nsautorelease_pool.mm',
+        'base/memory/shared_memory_handle_mac.cc',
+        'base/memory/shared_memory_mac.cc',
         'base/message_loop/message_pump_mac.mm',
+        'base/metrics/field_trial.cc',
         'base/process/process_handle_mac.cc',
         'base/process/process_iterator_mac.cc',
         'base/process/process_metrics_mac.cc',
