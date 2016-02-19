@@ -6,6 +6,7 @@
 
 #include "base/sys_info.h"
 #include "build/build_config.h"
+#include "tools/gn/standard_out.h"
 #include "tools/gn/variables.h"
 
 const char kBuildArgs_Help[] =
@@ -264,6 +265,9 @@ void Args::SetSystemVarsLocked(Scope* dest) const {
   // override, and so that they will appear in the "gn args" output.
   Value empty_string(nullptr, std::string());
 
+  Value color_val(nullptr, IsColorConsole());
+  dest->SetValue(variables::kColorConsole, color_val, nullptr);
+
   Value os_val(nullptr, std::string(os));
   dest->SetValue(variables::kHostOs, os_val, nullptr);
   dest->SetValue(variables::kTargetOs, empty_string, nullptr);
@@ -276,6 +280,7 @@ void Args::SetSystemVarsLocked(Scope* dest) const {
 
   Scope::KeyValueMap& declared_arguments(
       DeclaredArgumentsForToolchainLocked(dest));
+  declared_arguments[variables::kColorConsole] = color_val;
   declared_arguments[variables::kHostOs] = os_val;
   declared_arguments[variables::kCurrentOs] = empty_string;
   declared_arguments[variables::kTargetOs] = empty_string;
@@ -285,6 +290,7 @@ void Args::SetSystemVarsLocked(Scope* dest) const {
 
   // Mark these variables used so the build config file can override them
   // without geting a warning about overwriting an unused variable.
+  dest->MarkUsed(variables::kColorConsole);
   dest->MarkUsed(variables::kHostCpu);
   dest->MarkUsed(variables::kCurrentCpu);
   dest->MarkUsed(variables::kTargetCpu);

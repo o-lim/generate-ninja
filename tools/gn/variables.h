@@ -13,6 +13,10 @@ namespace variables {
 
 // Builtin vars ----------------------------------------------------------------
 
+extern const char kColorConsole[];
+extern const char kColorConsole_HelpShort[];
+extern const char kColorConsole_Help[];
+
 extern const char kHostCpu[];
 extern const char kHostCpu_HelpShort[];
 extern const char kHostCpu_Help[];

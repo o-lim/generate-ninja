@@ -8,6 +8,22 @@ namespace variables {
 
 // Built-in variables ----------------------------------------------------------
 
+const char kColorConsole[] = "color_console";
+const char kColorConsole_HelpShort[] =
+    "color_console: [boolean] Whether or not colored output is on.";
+const char kColorConsole_Help[] =
+    "color_console: [boolean] Whether or not colored output is on.\n"
+    "\n"
+    "  When true (the default), GN is displaying colored output.\n"
+    "\n"
+    "  When false, GN is not displaying colored output.\n"
+    "\n"
+    "  This value can be used to control colored output in assert messages\n"
+    "  (e.g. enable or disable embedding ANSI escape codes in assert\n"
+    "  messages).\n"
+    "\n"
+    ;
+
 const char kHostCpu[] = "host_cpu";
 const char kHostCpu_HelpShort[] =
     "host_cpu: [string] The processor architecture that GN is running on.";
@@ -1512,6 +1528,7 @@ VariableInfo::VariableInfo(const char* in_help_short, const char* in_help)
 const VariableInfoMap& GetBuiltinVariables() {
   static VariableInfoMap info_map;
   if (info_map.empty()) {
+    INSERT_VARIABLE(ColorConsole)
     INSERT_VARIABLE(CurrentCpu)
     INSERT_VARIABLE(CurrentOs)
     INSERT_VARIABLE(CurrentToolchain)

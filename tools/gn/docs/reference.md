@@ -3096,6 +3096,20 @@
 
 
 ```
+## **color_console**: [boolean] Whether or not colored output is on.
+
+```
+  When true (the default), GN is displaying colored output.
+
+  When false, GN is not displaying colored output.
+
+  This value can be used to control colored output in assert messages
+  (e.g. enable or disable embedding ANSI escape codes in assert
+  messages).
+
+
+
+```
 ## **current_cpu**: The processor architecture of the current toolchain.
 
 ```

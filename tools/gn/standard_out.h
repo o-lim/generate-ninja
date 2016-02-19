@@ -16,6 +16,8 @@ enum TextDecoration {
   DECORATION_YELLOW
 };
 
+bool IsColorConsole();
+
 void OutputString(const std::string& output,
                   TextDecoration dec = DECORATION_NONE);
 
