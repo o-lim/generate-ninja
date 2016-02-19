@@ -555,8 +555,23 @@
   --ide=<ide_name>
     Also generate files for an IDE. Currently supported values:
       'vs' - Visual Studio project/solution files.
+      'eclipse' - Eclipse CDT settings file.
 
   See "gn help switches" for the common command-line switches.
+
+```
+
+### **Eclipse IDE Support**
+
+```
+  GN DOES NOT generate Eclipse CDT projects. Instead, it generates a
+  settings file which can be imported into an Eclipse CDT project. The
+  XML file contains a list of include paths and defines. Because GN does
+  not generate a full .cproject definition, it is not possible to
+  properly define includes/defines for each file individually.
+  Instead, one set of includes/defines is generated for the entire
+  project. This works fairly well but may still result in a few indexer
+  issues here and there.
 
 
 ```
