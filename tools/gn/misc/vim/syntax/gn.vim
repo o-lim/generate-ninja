@@ -43,7 +43,7 @@ hi def link     gnFunctions         Macro
 " Variables
 syn keyword     gnVariable all_dependent_configs allow_circular_includes_from
 syn keyword     gnVariable args asmflags asmppflags cflags cflags_c cflags_cc
-syn keyword     gnVariable cflags_objc cflags_objcc check_includes
+syn keyword     gnVariable cflags_objc cflags_objcc check_includes console
 syn keyword     gnVariable complete_static_lib cppflags cppflags_c cppflags_cc
 syn keyword     gnVariable cppflags_objc cppflags_objcc command configs
 syn keyword     gnVariable default_output_extension depend_output
