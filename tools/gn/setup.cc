@@ -555,6 +555,21 @@ bool Setup::FillBuildDir(const std::string& build_dir, bool require_exists) {
   }
 
   base::FilePath build_dir_path = build_settings_.GetFullPath(resolved);
+  if (require_exists) {
+    if (!base::PathExists(build_dir_path.Append(
+            FILE_PATH_LITERAL("build.ninja")))) {
+      Err(Location(), "Not a build directory.",
+          "This command requires an existing build directory. I interpreted "
+          "your input\n\"" + build_dir + "\" as:\n  " +
+          FilePathToUTF8(build_dir_path) +
+          "\nwhich doesn't seem to contain a previously-generated build.")
+          .PrintToStdout();
+      return false;
+    }
+  } else if (!base::PathExists(build_dir_path)) {
+    base::CreateDirectory(build_dir_path);
+  }
+
   base::FilePath build_dir_path_normalized;
   if (!NormalizePath(build_dir_path, &build_dir_path_normalized)) {
     Err(Location(), "Can't normalize the build directory path.",
@@ -567,19 +582,6 @@ bool Setup::FillBuildDir(const std::string& build_dir, bool require_exists) {
 
   if (scheduler_.verbose_logging())
     scheduler_.Log("Using build dir", resolved.value());
-
-  if (require_exists) {
-    if (!base::PathExists(build_dir_path.Append(
-            FILE_PATH_LITERAL("build.ninja")))) {
-      Err(Location(), "Not a build directory.",
-          "This command requires an existing build directory. I interpreted "
-          "your input\n\"" + build_dir + "\" as:\n  " +
-          FilePathToUTF8(build_dir_path) +
-          "\nwhich doesn't seem to contain a previously-generated build.")
-          .PrintToStdout();
-      return false;
-    }
-  }
 
   build_settings_.SetBuildDir(resolved);
   return true;
