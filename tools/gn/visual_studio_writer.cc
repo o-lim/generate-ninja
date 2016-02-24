@@ -64,10 +64,14 @@ struct SourceFileWriter {
   const SourceFile& source_file_;
 };
 
-const char kToolsetVersion[] = "v140";                     // Visual Studio 2015
-const char kVisualStudioVersion[] = "14.0";                // Visual Studio 2015
+const char kToolsetVersionVs2013[] = "v120";               // Visual Studio 2013
+const char kToolsetVersionVs2015[] = "v140";               // Visual Studio 2015
+const char kProjectVersionVs2013[] = "12.0";               // Visual Studio 2013
+const char kProjectVersionVs2015[] = "14.0";               // Visual Studio 2015
+const char kVersionStringVs2013[] = "Visual Studio 2013";  // Visual Studio 2013
+const char kVersionStringVs2015[] = "Visual Studio 2015";  // Visual Studio 2015
 const char kWindowsKitsVersion[] = "10";                   // Windows 10 SDK
-const char kWindowsKitsIncludeVersion[] = "10.0.10240.0";  // Windows 10 SDK
+const char kWindowsKitsIncludeVersion[] = "10.0.10586.0";  // Windows 10 SDK
 
 const char kGuidTypeProject[] = "{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}";
 const char kGuidTypeFolder[] = "{2150E333-8FDC-42A3-9474-1A3956D46DE8}";
@@ -173,14 +177,33 @@ VisualStudioWriter::SolutionProject::SolutionProject(
 
 VisualStudioWriter::SolutionProject::~SolutionProject() = default;
 
-VisualStudioWriter::VisualStudioWriter(const BuildSettings* build_settings)
-    : build_settings_(build_settings) {
+VisualStudioWriter::VisualStudioWriter(const BuildSettings* build_settings,
+                                       Version version)
+    : build_settings_(build_settings),
+      ninja_path_output_(build_settings->build_dir(),
+                         build_settings->root_path_utf8(),
+                         EscapingMode::ESCAPE_NINJA_COMMAND) {
   const Value* value = build_settings->build_args().GetArgOverride("is_debug");
   is_debug_config_ = value == nullptr || value->boolean_value();
   config_platform_ = "Win32";
   value = build_settings->build_args().GetArgOverride(variables::kTargetCpu);
   if (value != nullptr && value->string_value() == "x64")
     config_platform_ = "x64";
+
+  switch (version) {
+    case Version::Vs2013:
+      project_version_ = kProjectVersionVs2013;
+      toolset_version_ = kToolsetVersionVs2013;
+      version_string_ = kVersionStringVs2013;
+      break;
+    case Version::Vs2015:
+      project_version_ = kProjectVersionVs2015;
+      toolset_version_ = kToolsetVersionVs2015;
+      version_string_ = kVersionStringVs2015;
+      break;
+    default:
+      NOTREACHED() << "Not a valid Visual Studio Version: " << version;
+  }
 
   windows_kits_include_dirs_ = GetWindowsKitsIncludeDirs();
 }
@@ -193,10 +216,11 @@ VisualStudioWriter::~VisualStudioWriter() {
 // static
 bool VisualStudioWriter::RunAndWriteFiles(const BuildSettings* build_settings,
                                           Builder* builder,
+                                          Version version,
                                           Err* err) {
   std::vector<const Target*> targets = builder->GetAllResolvedTargets();
 
-  VisualStudioWriter writer(build_settings);
+  VisualStudioWriter writer(build_settings, version);
   writer.projects_.reserve(targets.size());
   writer.folders_.reserve(targets.size());
 
@@ -290,7 +314,7 @@ bool VisualStudioWriter::WriteProjectFileContents(
   XmlElementWriter project(
       out, "Project",
       XmlAttributes("DefaultTargets", "Build")
-          .add("ToolsVersion", kVisualStudioVersion)
+          .add("ToolsVersion", project_version_)
           .add("xmlns", "http://schemas.microsoft.com/developer/msbuild/2003"));
 
   {
@@ -333,7 +357,7 @@ bool VisualStudioWriter::WriteProjectFileContents(
   {
     scoped_ptr<XmlElementWriter> locals =
         project.SubElement("PropertyGroup", XmlAttributes("Label", "Locals"));
-    locals->SubElement("PlatformToolset")->Text(kToolsetVersion);
+    locals->SubElement("PlatformToolset")->Text(toolset_version_);
   }
 
   project.SubElement(
@@ -475,12 +499,14 @@ bool VisualStudioWriter::WriteProjectFileContents(
                     "$(VCTargetsPath)\\BuildCustomizations\\masm.targets"));
   project.SubElement("ImportGroup", XmlAttributes("Label", "ExtensionTargets"));
 
+  std::string ninja_target = GetNinjaTarget(target);
+
   {
     scoped_ptr<XmlElementWriter> build =
         project.SubElement("Target", XmlAttributes("Name", "Build"));
     build->SubElement(
-        "Exec",
-        XmlAttributes("Command", "call ninja.exe -C $(OutDir) $(ProjectName)"));
+        "Exec", XmlAttributes("Command",
+                              "call ninja.exe -C $(OutDir) " + ninja_target));
   }
 
   {
@@ -489,7 +515,7 @@ bool VisualStudioWriter::WriteProjectFileContents(
     clean->SubElement(
         "Exec",
         XmlAttributes("Command",
-                      "call ninja.exe -C $(OutDir) -tclean $(ProjectName)"));
+                      "call ninja.exe -C $(OutDir) -tclean " + ninja_target));
   }
 
   return true;
@@ -580,19 +606,19 @@ void VisualStudioWriter::WriteSolutionFileContents(
     const base::FilePath& solution_dir_path) {
   out << "Microsoft Visual Studio Solution File, Format Version 12.00"
       << std::endl;
-  out << "# Visual Studio 2015" << std::endl;
+  out << "# " << version_string_ << std::endl;
 
   SourceDir solution_dir(FilePathToUTF8(solution_dir_path));
   for (const SolutionEntry* folder : folders_) {
     out << "Project(\"" << kGuidTypeFolder << "\") = \"(" << folder->name
-        << ")\", \"" << RebasePath(folder->path, solution_dir, "/") << "\", \""
+        << ")\", \"" << RebasePath(folder->path, solution_dir) << "\", \""
         << folder->guid << "\"" << std::endl;
     out << "EndProject" << std::endl;
   }
 
   for (const SolutionEntry* project : projects_) {
     out << "Project(\"" << kGuidTypeProject << "\") = \"" << project->name
-        << "\", \"" << RebasePath(project->path, solution_dir, "/") << "\", \""
+        << "\", \"" << RebasePath(project->path, solution_dir) << "\", \""
         << project->guid << "\"" << std::endl;
     out << "EndProject" << std::endl;
   }
@@ -729,4 +755,12 @@ void VisualStudioWriter::ResolveSolutionFolders() {
     }
     parents.push_back(folder);
   }
+}
+
+std::string VisualStudioWriter::GetNinjaTarget(const Target* target) {
+  std::ostringstream ninja_target_out;
+  DCHECK(!target->dependency_output_file().value().empty());
+  ninja_path_output_.WriteFile(ninja_target_out,
+                               target->dependency_output_file());
+  return ninja_target_out.str();
 }

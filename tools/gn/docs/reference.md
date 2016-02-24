@@ -554,8 +554,11 @@
 
   --ide=<ide_name>
     Also generate files for an IDE. Currently supported values:
-      'vs' - Visual Studio project/solution files.
-      'eclipse' - Eclipse CDT settings file.
+      "eclipse" - Eclipse CDT settings file.
+      "vs" - Visual Studio project/solution files.
+             (default Visual Studio version: 2015)
+      "vs2013" - Visual Studio 2013 project/solution files.
+      "vs2015" - Visual Studio 2015 project/solution files.
 
   See "gn help switches" for the common command-line switches.
 

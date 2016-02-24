@@ -227,7 +227,7 @@ base::FilePath FindWindowsPython() {
 #endif
 
 // Expands all ./, ../, and symbolic links in the given path.
-bool NormalizePath(const base::FilePath& path, base::FilePath* out) {
+bool GetRealPath(const base::FilePath& path, base::FilePath* out) {
 #if defined(OS_POSIX)
   char buf[PATH_MAX];
   if (!realpath(path.value().c_str(), buf)) {
@@ -528,17 +528,26 @@ bool Setup::FillSourceDir(const base::CommandLine& cmdline) {
     root_path = dotfile_name_.DirName();
   }
 
-  base::FilePath root_path_normalized;
-  if (!NormalizePath(root_path, &root_path_normalized)) {
-    Err(Location(), "Can't normalize the root path.",
-        "I could not normalize the path \"" + FilePathToUTF8(root_path) + "\".")
-        .PrintToStdout();
+  base::FilePath dotfile_realpath;
+  if (!GetRealPath(dotfile_name_, &dotfile_realpath)) {
+    Err(Location(), "Can't get the real dotfile path.",
+        "I could not get the real path of \"" + FilePathToUTF8(dotfile_name_) +
+        "\".").PrintToStdout();
+    return false;
+  }
+  dotfile_name_ = dotfile_realpath;
+
+  base::FilePath root_realpath;
+  if (!GetRealPath(root_path, &root_realpath)) {
+    Err(Location(), "Can't get the real root path.",
+        "I could not get the real path of \"" + FilePathToUTF8(root_path) +
+        "\".").PrintToStdout();
     return false;
   }
   if (scheduler_.verbose_logging())
-    scheduler_.Log("Using source root", FilePathToUTF8(root_path_normalized));
+    scheduler_.Log("Using source root", FilePathToUTF8(root_realpath));
   build_settings_.SetDotFilePath(dotfile_name_);
-  build_settings_.SetRootPath(root_path_normalized);
+  build_settings_.SetRootPath(root_realpath);
 
   return true;
 }
@@ -567,18 +576,23 @@ bool Setup::FillBuildDir(const std::string& build_dir, bool require_exists) {
       return false;
     }
   } else if (!base::PathExists(build_dir_path)) {
-    base::CreateDirectory(build_dir_path);
+    if (!base::CreateDirectory(build_dir_path)) {
+      Err(Location(), "Can't create the build dir.",
+          "I could not create the build dir \"" + FilePathToUTF8(build_dir_path) +
+          "\".").PrintToStdout();
+      return false;
+    }
   }
 
-  base::FilePath build_dir_path_normalized;
-  if (!NormalizePath(build_dir_path, &build_dir_path_normalized)) {
-    Err(Location(), "Can't normalize the build directory path.",
-        "I could not normalize the path \"" + FilePathToUTF8(build_dir_path) +
+  base::FilePath build_dir_realpath;
+  if (!GetRealPath(build_dir_path, &build_dir_realpath)) {
+    Err(Location(), "Can't get the real build dir path.",
+        "I could not get the real path of \"" + FilePathToUTF8(build_dir_path) +
         "\".").PrintToStdout();
     return false;
   }
   resolved = SourceDirForPath(build_settings_.root_path(),
-                              build_dir_path_normalized);
+                              build_dir_realpath);
 
   if (scheduler_.verbose_logging())
     scheduler_.Log("Using build dir", resolved.value());

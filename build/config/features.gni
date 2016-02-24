@@ -41,7 +41,6 @@ declare_args() {
   debug_devtools = false
 
   # Enables WebRTC.
-  # TODO(GYP) make mac work.
   enable_webrtc = !is_ios
 
   # Enables the Media Router.
@@ -71,8 +70,6 @@ declare_args() {
   enable_supervised_users = !is_ios
 
   enable_autofill_dialog = !is_ios
-
-  enable_one_click_signin = is_win || is_mac || (is_linux && !is_chromeos)
 
   enable_remoting = !is_ios && !is_chromecast && !is_headless
 
