@@ -60,7 +60,9 @@ const char kClean[] = "clean";
 const char kClean_HelpShort[] =
     "clean: Cleans the output directory.";
 const char kClean_Help[] =
-    "gn clean <out_dir>\n"
+    "gn clean: Cleans the output directory.\n"
+    "\n"
+    "  gn clean <out_dir>\n"
     "\n"
     "  Deletes the contents of the output directory except for args.gn and\n"
     "  creates a Ninja build environment sufficient to regenerate the build.\n";

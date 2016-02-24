@@ -31,7 +31,9 @@ const char kFormat[] = "format";
 const char kFormat_HelpShort[] =
     "format: Format .gn file.";
 const char kFormat_Help[] =
-    "gn format [--dump-tree] [--in-place] [--stdin] BUILD.gn\n"
+    "gn format: Format .gn file.\n"
+    "\n"
+    "  gn format [--dump-tree] [--in-place] [--stdin] BUILD.gn\n"
     "\n"
     "  Formats .gn file to a standard format.\n"
     "\n"

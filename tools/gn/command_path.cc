@@ -185,7 +185,9 @@ const char kPath[] = "path";
 const char kPath_HelpShort[] =
     "path: Find paths between two targets.";
 const char kPath_Help[] =
-    "gn path <out_dir> <target_one> <target_two>\n"
+    "gn path: Find paths between two targets.\n"
+    "\n"
+    "  gn path <out_dir> <target_one> <target_two>\n"
     "\n"
     "  Finds paths of dependencies between two targets. Each unique path\n"
     "  will be printed in one group, and groups will be separate by newlines.\n"

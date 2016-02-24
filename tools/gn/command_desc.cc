@@ -477,7 +477,9 @@ const char kDesc[] = "desc";
 const char kDesc_HelpShort[] =
     "desc: Show lots of insightful information about a target.";
 const char kDesc_Help[] =
-    "gn desc <out_dir> <target label> [<what to show>] [--blame]\n"
+    "gn desc: Show lots of insightful information about a target.\n"
+    "\n"
+    "  gn desc <out_dir> <target label> [<what to show>] [--blame]\n"
     "\n"
     "  Displays information about a given labeled target for the given build.\n"
     "  The build parameters will be taken for the build in the given\n"

@@ -150,7 +150,10 @@ const char kHelp[] = "help";
 const char kHelp_HelpShort[] =
     "help: Does what you think.";
 const char kHelp_Help[] =
-    "gn help <anything>\n"
+    "gn help: Does what you think.\n"
+    "\n"
+    "  gn help <anything>\n"
+    "\n"
     "  Yo dawg, I heard you like help on your help so I put help on the help\n"
     "  in the help.\n";
 

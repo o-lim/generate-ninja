@@ -277,9 +277,11 @@ const char kRefs[] = "refs";
 const char kRefs_HelpShort[] =
     "refs: Find stuff referencing a target or file.";
 const char kRefs_Help[] =
-    "gn refs <out_dir> (<label_pattern>|<label>|<file>|@<response_file>)* "
-    "[--all]\n"
-    "        [--all-toolchains] [--as=...] [--testonly=...] [--type=...]\n"
+    "gn refs: Find stuff referencing a target or file.\n"
+    "\n"
+    "  gn refs <out_dir> (<label_pattern>|<label>|<file>|@<response_file>)*\n"
+    "          [--all] [--all-toolchains] [--as=...] [--testonly=...]\n"
+    "          [--type=...]\n"
     "\n"
     "  Finds reverse dependencies (which targets reference something). The\n"
     "  input is a list containing:\n"

@@ -213,9 +213,11 @@
 
 
 ```
-## **gn args <out_dir> [\--list] [\--short] [\--args]**
+## **gn args**: Display or configure arguments declared by the build.
 
 ```
+  gn args <out_dir> [--list] [--short] [--args]
+
   See also "gn help buildargs" for a more high-level overview of how
   build arguments work.
 
@@ -278,9 +280,11 @@
 
 
 ```
-## **gn check <out_dir> [<label_pattern>] [\--force]**
+## **gn check**: Check header dependencies.
 
 ```
+  gn check <out_dir> [<label_pattern>] [--force]
+
   "gn check" is the same thing as "gn gen" with the "--check" flag
   except that this command does not write out any build files. It's
   intended to be an easy way to manually trigger include file checking.
@@ -320,17 +324,21 @@
 
 
 ```
-## **gn clean <out_dir>**
+## **gn clean**: Cleans the output directory.
 
 ```
+  gn clean <out_dir>
+
   Deletes the contents of the output directory except for args.gn and
   creates a Ninja build environment sufficient to regenerate the build.
 
 
 ```
-## **gn desc <out_dir> <target label> [<what to show>] [\--blame]**
+## **gn desc**: Show lots of insightful information about a target.
 
 ```
+  gn desc <out_dir> <target label> [<what to show>] [--blame]
+
   Displays information about a given labeled target for the given build.
   The build parameters will be taken for the build in the given
   <out_dir>.
@@ -499,9 +507,11 @@
 
 
 ```
-## **gn format [\--dump-tree] [\--in-place] [\--stdin] BUILD.gn**
+## **gn format**: Format .gn file.
 
 ```
+  gn format [--dump-tree] [--in-place] [--stdin] BUILD.gn
+
   Formats .gn file to a standard format.
 
 ```
@@ -578,16 +588,21 @@
 
 
 ```
-## **gn help <anything>**
+## **gn help**: Does what you think.
+
 ```
+  gn help <anything>
+
   Yo dawg, I heard you like help on your help so I put help on the help
   in the help.
 
 
 ```
-## **gn ls <out_dir> [<label_pattern>] [\--all-toolchains] [\--as=...]**
+## **gn ls**: List matching targets.
+
 ```
-      [--type=...] [--testonly=...]
+  gn ls <out_dir> [<label_pattern>] [--all-toolchains] [--as=...]
+        [--type=...] [--testonly=...]
 
   Lists all targets matching the given pattern for the given build
   directory. By default, only targets in the default toolchain will
@@ -660,9 +675,11 @@
 
 
 ```
-## **gn path <out_dir> <target_one> <target_two>**
+## **gn path**: Find paths between two targets.
 
 ```
+  gn path <out_dir> <target_one> <target_two>
+
   Finds paths of dependencies between two targets. Each unique path
   will be printed in one group, and groups will be separate by newlines.
   The two targets can appear in either order: paths will be found going
@@ -701,9 +718,12 @@
 
 
 ```
-## **gn refs <out_dir> (<label_pattern>|<label>|<file>|@<response_file>)* [\--all]**
+## **gn refs**: Find stuff referencing a target or file.
+
 ```
-        [--all-toolchains] [--as=...] [--testonly=...] [--type=...]
+  gn refs <out_dir> (<label_pattern>|<label>|<file>|@<response_file>)*
+          [--all] [--all-toolchains] [--as=...] [--testonly=...]
+          [--type=...]
 
   Finds reverse dependencies (which targets reference something). The
   input is a list containing:

@@ -20,7 +20,9 @@ const char kCheck[] = "check";
 const char kCheck_HelpShort[] =
     "check: Check header dependencies.";
 const char kCheck_Help[] =
-    "gn check <out_dir> [<label_pattern>] [--force]\n"
+    "gn check: Check header dependencies.\n"
+    "\n"
+    "  gn check <out_dir> [<label_pattern>] [--force]\n"
     "\n"
     "  \"gn check\" is the same thing as \"gn gen\" with the \"--check\" flag\n"
     "  except that this command does not write out any build files. It's\n"

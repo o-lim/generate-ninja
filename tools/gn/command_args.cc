@@ -279,7 +279,9 @@ extern const char kArgs[] = "args";
 extern const char kArgs_HelpShort[] =
     "args: Display or configure arguments declared by the build.";
 extern const char kArgs_Help[] =
-    "gn args <out_dir> [--list] [--short] [--args]\n"
+    "gn args: Display or configure arguments declared by the build.\n"
+    "\n"
+    "  gn args <out_dir> [--list] [--short] [--args]\n"
     "\n"
     "  See also \"gn help buildargs\" for a more high-level overview of how\n"
     "  build arguments work.\n"
