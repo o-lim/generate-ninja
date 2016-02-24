@@ -1052,16 +1052,16 @@
         }],
 
         # Enable crash reporting via Kasko.
-        # TODO(pmonette): Remove browser hang reports within a day (2/19/2016).
         ['OS=="win" and target_arch=="ia32" and branding=="Chrome"', {
-          'kasko%': 1,
+          # This needs to be enabled with kasko_hang_reports.
+          'kasko%': 0,
         }, {
           'kasko%': 0,
         }],
       ],
 
       # Enable hang reports in Kasko. Requires Kasko to be enabled.
-      'kasko_hang_reports%': 1,
+      'kasko_hang_reports%': 0,
 
       # Setting this to '0' will cause V8's startup snapshot to be
       # embedded in the binary instead of being a external files.
@@ -2743,9 +2743,6 @@
       ['use_clipboard_aurax11==1', {
         'defines': ['USE_CLIPBOARD_AURAX11=1'],
       }],
-      ['enable_one_click_signin==1', {
-        'defines': ['ENABLE_ONE_CLICK_SIGNIN'],
-      }],
       ['image_loader_extension==1', {
         'defines': ['IMAGE_LOADER_EXTENSION=1'],
       }],
@@ -2772,9 +2769,6 @@
       }],
       ['notifications==1', {
         'defines': ['ENABLE_NOTIFICATIONS'],
-      }],
-      ['enable_hidpi==1', {
-        'defines': ['ENABLE_HIDPI=1'],
       }],
       ['enable_topchrome_md==1', {
         'defines': ['ENABLE_TOPCHROME_MD=1'],

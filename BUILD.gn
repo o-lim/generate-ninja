@@ -12,7 +12,6 @@ import("//build/config/features.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
 import("//build_overrides/v8.gni")
-import("//build_overrides/webrtc.gni")
 import("//media/media_options.gni")
 import("//third_party/openh264/openh264_args.gni")
 
@@ -199,22 +198,18 @@ group("both_gn_and_gyp") {
     ]
   } else {
     deps += [
+      #"//ios/chrome:ios_chrome_unittests", TODO(GYP)
+      #"//ios/chrome/app", TODO(GYP)
+      #"//ios/chrome/browser", TODO(GYP)
+      "//ios/chrome/common",
       "//ios/net:ios_net_unittests",
+      "//ios/public/provider/chrome/browser",
       "//ios/public/provider/web",
       "//ios/testing:ocmock_support_unittest",
+      "//ios/third_party/ochamcrest",
       "//ios/web:ios_web_unittests",
       "//ios/web/shell:ios_web_shell",
     ]
-
-    if (ios_use_webrtc) {
-      deps += [
-        "//ios/chrome:ios_chrome_unittests",
-        "//ios/chrome/app",
-        "//ios/chrome/browser",
-        "//ios/chrome/common",
-        "//ios/public/provider/chrome/browser",
-      ]
-    }
   }
 
   deps += root_extra_deps
@@ -481,7 +476,6 @@ group("both_gn_and_gyp") {
       "//breakpad:microdump_stackwalk($host_toolchain)",
       "//breakpad:minidump_dump($host_toolchain)",
       "//breakpad:minidump_stackwalk($host_toolchain)",
-      "//cloud_print:cloud_print_unittests",
       "//components/network_hints/browser",
       "//content/public/app:browser",
       "//content/public/app:child",
@@ -548,8 +542,6 @@ group("both_gn_and_gyp") {
       "//chrome/installer/setup:setup_unittests",
       "//chrome_elf:chrome_elf_unittests",
       "//chrome_elf:dll_hash_main",
-      "//cloud_print:cloud_print_unittests",
-      "//cloud_print/service/win:cloud_print_service",
       "//components/wifi:wifi_test",
       "//net:quic_client",
       "//net:quic_server",
@@ -606,10 +598,6 @@ group("mojo_apptests") {
       "//mojo/shell/tests:apptests",
       "//ui/views/mus:tests",
     ]
-  }
-
-  if (is_android) {
-    deps += [ "//mojo/shell/standalone:mojo_shell_standalone_apptests_apk" ]
   }
 }
 
