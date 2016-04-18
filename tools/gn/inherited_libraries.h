@@ -7,7 +7,7 @@
 
 #include <stddef.h>
 
-#include <map>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -21,6 +21,9 @@ class Target;
 // Maintaining the order is important so GN links all libraries in the same
 // order specified in the build files.
 //
+// Libraries must be added in postfix order so that inherited dependencies
+// are added before direct dependencies.
+//
 // Since this list is uniquified, appending to the list will not actually
 // append a new item if the target already exists. However, the existing one
 // may have its is_public flag updated. "Public" always wins, so is_public will
@@ -30,8 +33,9 @@ class InheritedLibraries {
   InheritedLibraries();
   ~InheritedLibraries();
 
-  // Returns the list of dependencies in order, optionally with the flag
-  // indicating whether the dependency is public.
+  // Returns the list of dependencies in the order that they should be inserted
+  // on the link line, optionally with a flag indicating whether the dependency
+  // is public.
   std::vector<const Target*> GetOrdered() const;
   std::vector<std::pair<const Target*, bool>> GetOrderedAndPublicFlag() const;
 
@@ -55,14 +59,14 @@ class InheritedLibraries {
 
  private:
   struct Node {
-    Node() : index(static_cast<size_t>(-1)), is_public(false) {}
-    Node(size_t i, bool p) : index(i), is_public(p) {}
+    Node() : rindex(static_cast<size_t>(-1)), is_public(false) {}
+    Node(size_t i, bool p) : rindex(i), is_public(p) {}
 
-    size_t index;
+    size_t rindex;
     bool is_public;
   };
 
-  typedef std::map<const Target*, Node> LibraryMap;
+  typedef std::unordered_map<const Target*, Node> LibraryMap;
   LibraryMap map_;
 
   DISALLOW_COPY_AND_ASSIGN(InheritedLibraries);

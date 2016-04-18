@@ -30,32 +30,32 @@ TEST(InheritedLibraries, Unique) {
   libs.Append(&b, false);
   auto result = libs.GetOrderedAndPublicFlag();
   ASSERT_EQ(2u, result.size());
-  EXPECT_EQ(Pair(&a, false), result[0]);
-  EXPECT_EQ(Pair(&b, false), result[1]);
+  EXPECT_EQ(Pair(&a, false), result[1]);
+  EXPECT_EQ(Pair(&b, false), result[0]);
 
   // Add again as private, this should be a NOP.
   libs.Append(&a, false);
   libs.Append(&b, false);
   result = libs.GetOrderedAndPublicFlag();
   ASSERT_EQ(2u, result.size());
-  EXPECT_EQ(Pair(&a, false), result[0]);
-  EXPECT_EQ(Pair(&b, false), result[1]);
+  EXPECT_EQ(Pair(&a, false), result[1]);
+  EXPECT_EQ(Pair(&b, false), result[0]);
 
   // Add as public, this should make both public.
   libs.Append(&a, true);
   libs.Append(&b, true);
   result = libs.GetOrderedAndPublicFlag();
   ASSERT_EQ(2u, result.size());
-  EXPECT_EQ(Pair(&a, true), result[0]);
-  EXPECT_EQ(Pair(&b, true), result[1]);
+  EXPECT_EQ(Pair(&a, true), result[1]);
+  EXPECT_EQ(Pair(&b, true), result[0]);
 
   // Add again private, they should stay public.
   libs.Append(&a, false);
   libs.Append(&b, false);
   result = libs.GetOrderedAndPublicFlag();
   ASSERT_EQ(2u, result.size());
-  EXPECT_EQ(Pair(&a, true), result[0]);
-  EXPECT_EQ(Pair(&b, true), result[1]);
+  EXPECT_EQ(Pair(&a, true), result[1]);
+  EXPECT_EQ(Pair(&b, true), result[0]);
 }
 
 TEST(InheritedLibraries, AppendInherited) {
@@ -83,10 +83,10 @@ TEST(InheritedLibraries, AppendInherited) {
 
   auto result = libs.GetOrderedAndPublicFlag();
   ASSERT_EQ(4u, result.size());
-  EXPECT_EQ(Pair(&a, false), result[0]);
-  EXPECT_EQ(Pair(&b, false), result[1]);
-  EXPECT_EQ(Pair(&w, false), result[2]);
-  EXPECT_EQ(Pair(&x, false), result[3]);
+  EXPECT_EQ(Pair(&a, false), result[3]);
+  EXPECT_EQ(Pair(&b, false), result[2]);
+  EXPECT_EQ(Pair(&w, false), result[1]);
+  EXPECT_EQ(Pair(&x, false), result[0]);
 
   // Appending these things with public inheritance should convert them.
   InheritedLibraries append_public;
@@ -98,12 +98,12 @@ TEST(InheritedLibraries, AppendInherited) {
 
   result = libs.GetOrderedAndPublicFlag();
   ASSERT_EQ(6u, result.size());
-  EXPECT_EQ(Pair(&a, true), result[0]);  // Converted to public.
-  EXPECT_EQ(Pair(&b, false), result[1]);
-  EXPECT_EQ(Pair(&w, false), result[2]);
-  EXPECT_EQ(Pair(&x, false), result[3]);
-  EXPECT_EQ(Pair(&y, true), result[4]);  // Appended as public.
-  EXPECT_EQ(Pair(&z, false), result[5]);
+  EXPECT_EQ(Pair(&a, true), result[5]);  // Converted to public.
+  EXPECT_EQ(Pair(&b, false), result[4]);
+  EXPECT_EQ(Pair(&w, false), result[3]);
+  EXPECT_EQ(Pair(&x, false), result[2]);
+  EXPECT_EQ(Pair(&y, true), result[1]);  // Appended as public.
+  EXPECT_EQ(Pair(&z, false), result[0]);
 }
 
 TEST(InheritedLibraries, AppendPublicSharedLibraries) {

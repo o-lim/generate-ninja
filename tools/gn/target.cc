@@ -423,11 +423,9 @@ void Target::PullDependentTargetConfigs() {
 }
 
 void Target::PullDependentTargetLibsFrom(const Target* dep, bool is_public) {
-  // Direct dependent libraries.
-  if (dep->output_type() == STATIC_LIBRARY ||
-      dep->output_type() == SHARED_LIBRARY ||
-      dep->output_type() == SOURCE_SET)
-    inherited_libraries_.Append(dep, is_public);
+  // Copy inherited libraries from dependency first, then direct dependency.
+  // This needs to be done so that the link line will start with the inner-most
+  // dependencies and end with the outer-most dependencies.
 
   if (dep->output_type() == SHARED_LIBRARY) {
     // Shared library dependendencies are inherited across public shared
@@ -460,6 +458,12 @@ void Target::PullDependentTargetLibsFrom(const Target* dep, bool is_public) {
     all_lib_dirs_.append(dep->all_lib_dirs());
     all_libs_.append(dep->all_libs());
   }
+
+  // Direct dependent libraries.
+  if (dep->output_type() == STATIC_LIBRARY ||
+      dep->output_type() == SHARED_LIBRARY ||
+      dep->output_type() == SOURCE_SET)
+    inherited_libraries_.Append(dep, is_public);
 }
 
 void Target::PullDependentTargetLibs() {

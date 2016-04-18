@@ -524,8 +524,8 @@ TEST(Target, SharedInheritance) {
   std::vector<const Target*> inter_inherited =
       inter.inherited_libraries().GetOrdered();
   ASSERT_EQ(2u, inter_inherited.size());
-  EXPECT_EQ(&pub, inter_inherited[0]);
-  EXPECT_EQ(&priv, inter_inherited[1]);
+  EXPECT_EQ(&priv, inter_inherited[0]);
+  EXPECT_EQ(&pub, inter_inherited[1]);
 
   // Make a toplevel executable target depending on the intermediate one.
   TestTarget exe(setup, "//foo:exe", Target::SHARED_LIBRARY);

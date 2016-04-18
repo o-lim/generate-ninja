@@ -10,6 +10,7 @@
 #include <cstring>
 #include <set>
 #include <sstream>
+#include <vector>
 
 #include "base/containers/hash_tables.h"
 #include "base/strings/string_util.h"
@@ -953,10 +954,14 @@ void NinjaBinaryTargetWriter::GetDeps(
     UniqueVector<OutputFile>* extra_object_files,
     UniqueVector<const Target*>* linkable_deps,
     UniqueVector<const Target*>* non_linkable_deps) const {
+  // Linkable direct public/private deps are automatically added to inherited
+  // libraries, so we can ignore these linkable direct deps.
+  UniqueVector<const Target*> linkable_direct_deps;
+
   // Normal public/private deps.
   for (const auto& pair : target_->GetDeps(Target::DEPS_LINKED)) {
     ClassifyDependency(pair.ptr, extra_object_files,
-                       linkable_deps, non_linkable_deps);
+                       &linkable_direct_deps, non_linkable_deps);
   }
 
   // Inherited libraries.

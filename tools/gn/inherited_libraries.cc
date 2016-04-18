@@ -4,6 +4,7 @@
 
 #include "tools/gn/inherited_libraries.h"
 
+#include "base/containers/adapters.h"
 #include "tools/gn/target.h"
 
 InheritedLibraries::InheritedLibraries() {
@@ -19,8 +20,9 @@ std::vector<const Target*> InheritedLibraries::GetOrdered() const {
   // The indices in the map should be from 0 to the number of items in the
   // map, so insert directly into the result (with some sanity checks).
   for (const auto& pair : map_) {
-    size_t index = pair.second.index;
-    DCHECK(index < result.size());
+    size_t rindex = pair.second.rindex;
+    size_t index = (result.size() - 1) - rindex;
+    DCHECK(rindex < result.size());
     DCHECK(!result[index]);
     result[index] = pair.first;
   }
@@ -34,8 +36,9 @@ InheritedLibraries::GetOrderedAndPublicFlag() const {
   result.resize(map_.size());
 
   for (const auto& pair : map_) {
-    size_t index = pair.second.index;
-    DCHECK(index < result.size());
+    size_t rindex = pair.second.rindex;
+    size_t index = (result.size() - 1) - rindex;
+    DCHECK(rindex < result.size());
     DCHECK(!result[index].first);
     result[index] = std::make_pair(pair.first, pair.second.is_public);
   }
@@ -62,14 +65,16 @@ void InheritedLibraries::AppendInherited(const InheritedLibraries& other,
                                          bool is_public) {
   // Append all items in order, mark them public only if the're already public
   // and we're adding them publically.
-  for (const auto& cur : other.GetOrderedAndPublicFlag())
+  auto v = other.GetOrderedAndPublicFlag();
+  for (const auto& cur : base::Reversed(v))
     Append(cur.first, is_public && cur.second);
 }
 
 void InheritedLibraries::AppendPublicSharedLibraries(
     const InheritedLibraries& other,
     bool is_public) {
-  for (const auto& cur : other.GetOrderedAndPublicFlag()) {
+  auto v = other.GetOrderedAndPublicFlag();
+  for (const auto& cur : base::Reversed(v)) {
     if (cur.first->output_type() == Target::SHARED_LIBRARY && cur.second)
       Append(cur.first, is_public);
   }

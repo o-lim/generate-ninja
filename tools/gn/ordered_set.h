@@ -44,7 +44,7 @@ class OrderedSet {
     std::pair<set_iterator, bool> result = set_.insert(t);
     if (result.second)
       ordering_.push_back(result.first);
-    return true;
+    return result.second;
   }
 
   // Appends a range of items, skipping ones that already exist.
