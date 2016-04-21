@@ -5654,9 +5654,16 @@
   {{source_name_part}}
       The filename part of the source file with no directory or
       extension. This will generally be used for specifying a
-      transformation from a soruce file to a destination file with the
+      transformation from a source file to a destination file with the
       same name but different extension.
         "//foo/bar/baz.txt" => "baz"
+
+  {{source_extension}}
+      The extension of the source file. It includes the leading dot.
+      This will generally be used for specifying a transformation from a
+      source file to a destination file with the same extension but
+      different name. Empty string means no extension.
+        "//foo/bar/baz.txt" => ".txt"
 
   {{source_dir}}
       The directory (*) containing the source file with no

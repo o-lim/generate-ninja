@@ -69,9 +69,16 @@ const char kSourceExpansion_Help[] =
     "  {{source_name_part}}\n"
     "      The filename part of the source file with no directory or\n"
     "      extension. This will generally be used for specifying a\n"
-    "      transformation from a soruce file to a destination file with the\n"
+    "      transformation from a source file to a destination file with the\n"
     "      same name but different extension.\n"
     "        \"//foo/bar/baz.txt\" => \"baz\"\n"
+    "\n"
+    "  {{source_extension}}\n"
+    "      The extension of the source file. It includes the leading dot.\n"
+    "      This will generally be used for specifying a transformation from a\n"
+    "      source file to a destination file with the same extension but\n"
+    "      different name. Empty string means no extension.\n"
+    "        \"//foo/bar/baz.txt\" => \".txt\"\n"
     "\n"
     "  {{source_dir}}\n"
     "      The directory (*) containing the source file with no\n"
@@ -333,6 +340,7 @@ std::string SubstitutionWriter::GetSourceSubstitution(
     OutputStyle output_style,
     const SourceDir& relative_to) {
   std::string to_rebase;
+  std::string extension;
   switch (type) {
     case SUBSTITUTION_SOURCE:
       if (source.is_system_absolute())
@@ -347,7 +355,12 @@ std::string SubstitutionWriter::GetSourceSubstitution(
       return source.GetName();
 
     case SUBSTITUTION_SOURCE_EXTENSION:
-      return FindExtension(&source.value()).as_string();
+      // Note that the found file extension does not include the dot
+      // but the substitution does.
+      extension = FindExtension(&source.value()).as_string();
+      if (extension.empty())
+        return extension;
+      return std::string(".") + extension;
 
     case SUBSTITUTION_SOURCE_DIR:
       if (source.is_system_absolute())
