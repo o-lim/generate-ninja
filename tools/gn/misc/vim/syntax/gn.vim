@@ -46,11 +46,12 @@ syn keyword     gnVariable args asmflags asmppflags cflags cflags_c cflags_cc
 syn keyword     gnVariable cflags_objc cflags_objcc check_includes console
 syn keyword     gnVariable complete_static_lib cppflags cppflags_c cppflags_cc
 syn keyword     gnVariable cppflags_objc cppflags_objcc command configs
-syn keyword     gnVariable default_output_extension depend_output
-syn keyword     gnVariable description data data_deps defines depfile deps
-syn keyword     gnVariable depsformat include_dirs inputs interpreter ldflags
-syn keyword     gnVariable lib_dirs libs output_extension output_name outputs
-syn keyword     gnVariable link_output output_prefix lib_switch lib_dir_switch
+syn keyword     gnVariable default_output_extension default_output_dir
+syn keyword     gnVariable depend_output description data data_deps defines
+syn keyword     gnVariable depfile deps depsformat include_dirs inputs
+syn keyword     gnVariable interpreter ldflags lib_dirs libs output_extension
+syn keyword     gnVariable output_dir output_name outputs link_output
+syn keyword     gnVariable output_prefix lib_switch lib_dir_switch
 syn keyword     gnVariable precompiled_header precompiled_header_type
 syn keyword     gnVariable precompiled_source restat runtime_link_output
 syn keyword     gnVariable public public_configs public_deps rspfile
@@ -58,7 +59,7 @@ syn keyword     gnVariable rspfile_content script sources testonly visibility
 hi def link     gnVariable          Keyword
 
 " Strings
-syn region	    gnString start=+L\="+ skip=+\\\\\|\\"+ end=+"+ contains=@Spell
+syn region      gnString start=+L\="+ skip=+\\\\\|\\"+ end=+"+ contains=@Spell
 hi def link     gnString            String
 
 " Comments
