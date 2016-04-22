@@ -71,7 +71,7 @@ Value RunMarkUsed(Scope* scope,
                   const FunctionCallNode* function,
                   const ListNode* args_list,
                   Err* err) {
-  const std::vector<const ParseNode*>& args_vector = args_list->contents();
+  const auto& args_vector = args_list->contents();
   if (args_vector.size() != 1) {
     *err = Err(function, "Wrong number of arguments.",
                "Expecting exactly one.");

@@ -10,6 +10,7 @@ with the following files/directories exported directly via git archive:
   LICENSE.chromium_os
   base
   build
+  build_overrides
   tools/gn
   testing/test.gni
   testing/perf

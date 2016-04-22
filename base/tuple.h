@@ -94,7 +94,7 @@ template <> struct MakeIndexSequenceImpl<13> {
   using Type = IndexSequence<0,1,2,3,4,5,6,7,8,9,10,11,12>;
 };
 
-#else  // defined(WIN) && defined(_PREFAST_)
+#else  // defined(OS_WIN) && defined(_PREFAST_)
 
 template <size_t... Ns>
 struct MakeIndexSequenceImpl<0, Ns...> {
@@ -105,32 +105,10 @@ template <size_t N, size_t... Ns>
 struct MakeIndexSequenceImpl<N, Ns...>
     : MakeIndexSequenceImpl<N - 1, N - 1, Ns...> {};
 
-#endif  // defined(WIN) && defined(_PREFAST_)
+#endif  // defined(OS_WIN) && defined(_PREFAST_)
 
 template <size_t N>
 using MakeIndexSequence = typename MakeIndexSequenceImpl<N>::Type;
-
-// Traits ----------------------------------------------------------------------
-//
-// A simple traits class for tuple arguments.
-//
-// ValueType: the bare, nonref version of a type (same as the type for nonrefs).
-// RefType: the ref version of a type (same as the type for refs).
-// ParamType: what type to pass to functions (refs should not be constified).
-
-template <class P>
-struct TupleTraits {
-  typedef P ValueType;
-  typedef P& RefType;
-  typedef const P& ParamType;
-};
-
-template <class P>
-struct TupleTraits<P&> {
-  typedef P ValueType;
-  typedef P& RefType;
-  typedef P& ParamType;
-};
 
 // Tuple -----------------------------------------------------------------------
 //
@@ -150,21 +128,6 @@ template <typename... Ts>
 using Tuple = std::tuple<Ts...>;
 
 using std::get;
-
-// Tuple types ----------------------------------------------------------------
-//
-// Allows for selection of ValueTuple/RefTuple/ParamTuple without needing the
-// definitions of class types the tuple takes as parameters.
-
-template <typename T>
-struct TupleTypes;
-
-template <typename... Ts>
-struct TupleTypes<Tuple<Ts...>> {
-  using ValueTuple = Tuple<typename TupleTraits<Ts>::ValueType...>;
-  using RefTuple = Tuple<typename TupleTraits<Ts>::RefType...>;
-  using ParamTuple = Tuple<typename TupleTraits<Ts>::ParamType...>;
-};
 
 // Tuple creators -------------------------------------------------------------
 //

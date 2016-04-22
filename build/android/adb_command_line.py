@@ -24,23 +24,20 @@ Empty string: Deletes command-line file.
 Otherwise: Writes command-line file.
 
 '''
-  parser.add_argument('-d', '--device', dest='device',
-                      help='Target device for apk to install on.')
+  parser.add_argument('-d', '--device', dest='devices', action='append',
+                      default=[], help='Target device serial (repeatable).')
   parser.add_argument('--device-path', required=True,
                       help='Remote path to flags file.')
+  parser.add_argument('-e', '--executable', dest='executable', default='chrome',
+                      help='Name of the executable.')
   args, remote_args = parser.parse_known_args()
 
   devil_chromium.Initialize()
 
   as_root = not args.device_path.startswith('/data/local/tmp/')
 
-  if args.device:
-    devices = [device_utils.DeviceUtils(args.device, default_retries=0)]
-  else:
-    devices = device_utils.DeviceUtils.HealthyDevices(default_retries=0)
-    if not devices:
-      raise device_errors.NoDevicesError()
-
+  devices = device_utils.DeviceUtils.HealthyDevices(device_arg=args.devices,
+                                                    default_retries=0)
   all_devices = device_utils.DeviceUtils.parallel(devices)
 
   def print_args():
@@ -71,7 +68,7 @@ Otherwise: Writes command-line file.
 
   # Set flags.
   quoted_args = ' '.join(cmd_helper.SingleQuote(x) for x in remote_args)
-  flags_str = 'chrome %s' % quoted_args
+  flags_str = ' '.join([args.executable, quoted_args])
 
   def write_flags(device):
     device.WriteFile(args.device_path, flags_str, as_root=as_root)

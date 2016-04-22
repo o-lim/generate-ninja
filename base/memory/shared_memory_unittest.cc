@@ -2,13 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/memory/shared_memory.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/atomicops.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
-#include "base/memory/shared_memory.h"
 #include "base/memory/shared_memory_handle.h"
 #include "base/process/kill.h"
 #include "base/rand_util.h"
@@ -246,8 +248,8 @@ TEST(SharedMemoryTest, MultipleThreads) {
   int threadcounts[] = { 1, kNumThreads };
   for (size_t i = 0; i < arraysize(threadcounts); i++) {
     int numthreads = threadcounts[i];
-    scoped_ptr<PlatformThreadHandle[]> thread_handles;
-    scoped_ptr<MultipleThreadMain*[]> thread_delegates;
+    std::unique_ptr<PlatformThreadHandle[]> thread_handles;
+    std::unique_ptr<MultipleThreadMain* []> thread_delegates;
 
     thread_handles.reset(new PlatformThreadHandle[numthreads]);
     thread_delegates.reset(new MultipleThreadMain*[numthreads]);
@@ -279,8 +281,8 @@ TEST(SharedMemoryTest, AnonymousPrivate) {
   bool rv;
   const uint32_t kDataSize = 8192;
 
-  scoped_ptr<SharedMemory[]> memories(new SharedMemory[count]);
-  scoped_ptr<int*[]> pointers(new int*[count]);
+  std::unique_ptr<SharedMemory[]> memories(new SharedMemory[count]);
+  std::unique_ptr<int* []> pointers(new int*[count]);
   ASSERT_TRUE(memories.get());
   ASSERT_TRUE(pointers.get());
 
@@ -314,6 +316,8 @@ TEST(SharedMemoryTest, AnonymousPrivate) {
   }
 }
 
+// The Mach functionality is tested in shared_memory_mac_unittest.cc.
+#if !(defined(OS_MACOSX) && !defined(OS_IOS))
 TEST(SharedMemoryTest, ShareReadOnly) {
   StringPiece contents = "Hello World";
 
@@ -321,10 +325,6 @@ TEST(SharedMemoryTest, ShareReadOnly) {
   SharedMemoryCreateOptions options;
   options.size = contents.size();
   options.share_read_only = true;
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-  // The Mach functionality is tested in shared_memory_mac_unittest.cc.
-  options.type = SharedMemoryHandle::POSIX;
-#endif
   ASSERT_TRUE(writable_shmem.Create(options));
   ASSERT_TRUE(writable_shmem.Map(options.size));
   memcpy(writable_shmem.memory(), contents.data(), contents.size());
@@ -400,6 +400,7 @@ TEST(SharedMemoryTest, ShareReadOnly) {
 #error Unexpected platform; write a test that tries to make 'handle' writable.
 #endif  // defined(OS_POSIX) || defined(OS_WIN)
 }
+#endif  // !(defined(OS_MACOSX) && !defined(OS_IOS))
 
 TEST(SharedMemoryTest, ShareToSelf) {
   StringPiece contents = "Hello World";
@@ -473,7 +474,7 @@ TEST(SharedMemoryTest, MapTwice) {
   EXPECT_EQ(old_address, memory.memory());
 }
 
-#if defined(OS_POSIX)
+#if defined(OS_POSIX) && !(defined(OS_MACOSX) && !defined(OS_IOS))
 // This test is not applicable for iOS (crbug.com/399384).
 #if !defined(OS_IOS)
 // Create a shared memory object, mmap it, and mprotect it to PROT_EXEC.
@@ -484,10 +485,6 @@ TEST(SharedMemoryTest, AnonymousExecutable) {
   SharedMemoryCreateOptions options;
   options.size = kTestSize;
   options.executable = true;
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-  // The Mach functionality is tested in shared_memory_mac_unittest.cc.
-  options.type = SharedMemoryHandle::POSIX;
-#endif
 
   EXPECT_TRUE(shared_memory.Create(options));
   EXPECT_TRUE(shared_memory.Map(shared_memory.requested_size()));
@@ -521,10 +518,6 @@ TEST(SharedMemoryTest, FilePermissionsAnonymous) {
   SharedMemory shared_memory;
   SharedMemoryCreateOptions options;
   options.size = kTestSize;
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-  // The Mach functionality is tested in shared_memory_mac_unittest.cc.
-  options.type = SharedMemoryHandle::POSIX;
-#endif
   // Set a file mode creation mask that gives all permissions.
   ScopedUmaskSetter permissive_mask(S_IWGRP | S_IWOTH);
 
@@ -547,10 +540,6 @@ TEST(SharedMemoryTest, FilePermissionsNamed) {
   SharedMemory shared_memory;
   SharedMemoryCreateOptions options;
   options.size = kTestSize;
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-  // The Mach functionality is tested in shared_memory_mac_unittest.cc.
-  options.type = SharedMemoryHandle::POSIX;
-#endif
 
   // Set a file mode creation mask that gives all permissions.
   ScopedUmaskSetter permissive_mask(S_IWGRP | S_IWOTH);
@@ -567,7 +556,7 @@ TEST(SharedMemoryTest, FilePermissionsNamed) {
 }
 #endif  // !defined(OS_ANDROID)
 
-#endif  // defined(OS_POSIX)
+#endif  // defined(OS_POSIX) && !(defined(OS_MACOSX) && !defined(OS_IOS))
 
 // Map() will return addresses which are aligned to the platform page size, this
 // varies from platform to platform though.  Since we'd like to advertise a
@@ -589,8 +578,8 @@ TEST(SharedMemoryTest, UnsafeImageSection) {
   EXPECT_GT(::GetModuleFileName(nullptr, path, arraysize(path)), 0U);
 
   // Map the current executable image to save us creating a new PE file on disk.
-  base::win::ScopedHandle file_handle(
-      ::CreateFile(path, GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr));
+  base::win::ScopedHandle file_handle(::CreateFile(
+      path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr));
   EXPECT_TRUE(file_handle.IsValid());
   base::win::ScopedHandle section_handle(
       ::CreateFileMappingA(file_handle.Get(), nullptr,

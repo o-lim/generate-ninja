@@ -2,7 +2,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-if (current_cpu == "arm") {
+# These are primarily relevant in current_cpu == "arm" contexts, where
+# ARM code is being compiled.  But they can also be relevant in the
+# host toolchain context when target_cpu == "arm", where a host-side
+# build tool being built will change its behavior depending on the
+# details of the target configuration.
+if (target_cpu == "arm" || current_cpu == "arm") {
   declare_args() {
     # Version of the ARM processor when compiling on ARM. Ignored on non-ARM
     # platforms.
@@ -23,11 +28,6 @@ if (current_cpu == "arm") {
 
     # Whether to enable optional NEON code paths.
     arm_optionally_use_neon = false
-
-    if (is_ios) {
-      arm_use_neon = false
-      arm_optionally_use_neon = false
-    }
   }
 
   assert(arm_float_abi == "" || arm_float_abi == "hard" ||

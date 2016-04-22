@@ -40,15 +40,19 @@ if (is_android) {
         "//third_party/android_tools:google_play_services_default_resources"
   }
 
+  webview_public_framework_jar =
+      "//third_party/android_platform/webview/frameworks_6.0.jar"
   if (!defined(webview_framework_jar)) {
-    webview_framework_jar =
-        "//third_party/android_platform/webview/frameworks_6.0.jar"
+    webview_framework_jar = webview_public_framework_jar
   }
 
   declare_args() {
     android_sdk_root = default_android_sdk_root
     android_sdk_version = default_android_sdk_version
     android_sdk_build_tools_version = default_android_sdk_build_tools_version
+
+    # Libc++ library directory. Override to use a custom libc++ binary.
+    android_libcpp_lib_dir = ""
 
     # Android versionCode for android_apk()s that don't expclitly set one.
     android_default_version_code = "1"
@@ -232,8 +236,11 @@ if (is_android) {
 
   # ABI ------------------------------------------------------------------------
 
+  # Intentionally do not define android_app_secondary_abi for 64-bit
+  # android_app_abi, since they are not used.
   if (current_cpu == "x86") {
     android_app_abi = "x86"
+    android_app_secondary_abi = "x86_64"
   } else if (current_cpu == "arm") {
     import("//build/config/arm.gni")
     if (arm_version < 7) {
@@ -241,8 +248,10 @@ if (is_android) {
     } else {
       android_app_abi = "armeabi-v7a"
     }
+    android_app_secondary_abi = "arm64-v8a"
   } else if (current_cpu == "mipsel") {
     android_app_abi = "mips"
+    android_app_secondary_abi = "mips64"
   } else if (current_cpu == "x64") {
     android_app_abi = "x86_64"
   } else if (current_cpu == "arm64") {
@@ -251,5 +260,9 @@ if (is_android) {
     android_app_abi = "mips64"
   } else {
     assert(false, "Unknown Android ABI: " + current_cpu)
+  }
+
+  if (android_libcpp_lib_dir == "") {
+    android_libcpp_lib_dir = "${android_libcpp_root}/libs/${android_app_abi}"
   }
 }

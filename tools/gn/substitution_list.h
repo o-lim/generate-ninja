@@ -14,6 +14,7 @@
 class SubstitutionList {
  public:
   SubstitutionList();
+  SubstitutionList(const SubstitutionList& other);
   ~SubstitutionList();
 
   bool Parse(const Value& value, Err* err);
@@ -29,7 +30,7 @@ class SubstitutionList {
 
   const std::vector<SubstitutionPattern>& list() const { return list_; }
 
-  // Returns a list of all substitution types used by the patterns in thist
+  // Returns a list of all substitution types used by the patterns in this
   // list, with the exception of LITERAL.
   const std::vector<SubstitutionType>& required_types() const {
     return required_types_;

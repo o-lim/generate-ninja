@@ -10,6 +10,11 @@ import("//build/toolchain/toolchain.gni")
 # Should only be running on Windows.
 assert(is_win)
 
+declare_args() {
+  # Set to true to use lld, the LLVM linker.
+  use_lld = false
+}
+
 # Setup the Visual Studio state.
 #
 # Its arguments are the VS path and the compiler wrapper tool. It will write
@@ -25,12 +30,7 @@ if (use_goma) {
 }
 
 # This value will be inherited in the toolchain below.
-if (is_cfi) {
-  concurrent_links =
-      exec_script("../get_concurrent_links.py", [ "--lto" ], "value")
-} else {
-  concurrent_links = exec_script("../get_concurrent_links.py", [], "value")
-}
+concurrent_links = exec_script("../get_concurrent_links.py", [], "value")
 
 # Copy the VS runtime DLL for the default toolchain to the root build directory
 # so things will run.
@@ -62,6 +62,24 @@ template("msvc_toolchain") {
 
   cl = invoker.cl
 
+  if (use_lld) {
+    if (host_os == "win") {
+      lld_link = "lld-link.exe"
+    } else {
+      lld_link = "lld-link"
+    }
+    prefix = rebase_path("//third_party/llvm-build/Release+Asserts/bin",
+                         root_build_dir)
+
+    # lld-link includes a replacement for lib.exe that can produce thin
+    # archives and understands bitcode (for lto builds).
+    lib = "$prefix/$lld_link /lib /llvmlibthin"
+    link = "$prefix/$lld_link"
+  } else {
+    lib = "lib.exe"
+    link = "link.exe"
+  }
+
   toolchain(target_name) {
     # Make these apply to all tools below.
     lib_switch = ""
@@ -74,7 +92,11 @@ template("msvc_toolchain") {
       rspfile = "{{output}}.rsp"
       precompiled_header_type = "msvc"
       pdbname = "{{target_out_dir}}/{{label_name}}_c.pdb"
-      command = "ninja -t msvc -e $env -- $cl /nologo /showIncludes /FC @$rspfile /c {{source}} /Fo{{output}} /Fd$pdbname"
+
+      # Label names may have spaces in them so the pdbname must be quoted. The
+      # source and output don't need to be quoted because GN knows they're a
+      # full file name and will quote automatically when necessary.
+      command = "ninja -t msvc -e $env -- $cl /nologo /showIncludes /FC @$rspfile /c {{source}} /Fo{{output}} /Fd\"$pdbname\""
       depsformat = "msvc"
       description = "CC {{output}}"
       outputs = [
@@ -89,7 +111,9 @@ template("msvc_toolchain") {
 
       # The PDB name needs to be different between C and C++ compiled files.
       pdbname = "{{target_out_dir}}/{{label_name}}_cc.pdb"
-      command = "ninja -t msvc -e $env -- $cl /nologo /showIncludes /FC @$rspfile /c {{source}} /Fo{{output}} /Fd$pdbname"
+
+      # See comment in CC tool about quoting.
+      command = "ninja -t msvc -e $env -- $cl /nologo /showIncludes /FC @$rspfile /c {{source}} /Fo{{output}} /Fd\"$pdbname\""
       depsformat = "msvc"
       description = "CXX {{output}}"
       outputs = [
@@ -121,14 +145,15 @@ template("msvc_toolchain") {
 
     tool("alink") {
       rspfile = "{{output}}.rsp"
-      command = "$python_path gyp-win-tool link-wrapper $env False lib.exe /nologo /ignore:4221 /OUT:{{output}} @$rspfile"
+      command = "$python_path gyp-win-tool link-wrapper $env False $lib /nologo /ignore:4221 /OUT:{{output}} @$rspfile"
       description = "LIB {{output}}"
       outputs = [
         # Ignore {{output_extension}} and always use .lib, there's no reason to
         # allow targets to override this extension on Windows.
-        "{{target_out_dir}}/{{target_output_name}}.lib",
+        "{{output_dir}}/{{target_output_name}}.lib",
       ]
       default_output_extension = ".lib"
+      default_output_dir = "{{target_out_dir}}"
 
       # The use of inputs_newline is to work around a fixed per-line buffer
       # size in the linker.
@@ -136,18 +161,14 @@ template("msvc_toolchain") {
     }
 
     tool("solink") {
-      dllname = "{{root_out_dir}}/{{target_output_name}}{{output_extension}}"  # e.g. foo.dll
+      dllname = "{{output_dir}}/{{target_output_name}}{{output_extension}}"  # e.g. foo.dll
       libname = "${dllname}.lib"  # e.g. foo.dll.lib
       rspfile = "${dllname}.rsp"
 
-      link_command = "$python_path gyp-win-tool link-wrapper $env False link.exe /nologo /IMPLIB:$libname /DLL /OUT:$dllname /PDB:${dllname}.pdb @$rspfile"
-
-      # TODO(brettw) support manifests
-      #manifest_command = "$python_path gyp-win-tool manifest-wrapper $env mt.exe -nologo -manifest $manifests -out:${dllname}.manifest"
-      #command = "cmd /c $link_command && $manifest_command"
-      command = link_command
+      command = "$python_path gyp-win-tool link-wrapper $env False $link /nologo /IMPLIB:$libname /DLL /OUT:$dllname /PDB:${dllname}.pdb @$rspfile"
 
       default_output_extension = ".dll"
+      default_output_dir = "{{root_out_dir}}"
       description = "LINK(DLL) {{output}}"
       outputs = [
         dllname,
@@ -168,14 +189,13 @@ template("msvc_toolchain") {
     }
 
     tool("solink_module") {
-      dllname = "{{root_out_dir}}/{{target_output_name}}{{output_extension}}"  # e.g. foo.dll
+      dllname = "{{output_dir}}/{{target_output_name}}{{output_extension}}"  # e.g. foo.dll
       rspfile = "${dllname}.rsp"
 
-      link_command = "$python_path gyp-win-tool link-wrapper $env False link.exe /nologo /DLL /OUT:$dllname /PDB:${dllname}.pdb @$rspfile"
-
-      command = link_command
+      command = "$python_path gyp-win-tool link-wrapper $env False $link /nologo /DLL /OUT:$dllname /PDB:${dllname}.pdb @$rspfile"
 
       default_output_extension = ".dll"
+      default_output_dir = "{{root_out_dir}}"
       description = "LINK_MODULE(DLL) {{output}}"
       outputs = [
         dllname,
@@ -189,17 +209,13 @@ template("msvc_toolchain") {
     tool("link") {
       rspfile = "{{output}}.rsp"
 
-      link_command = "$python_path gyp-win-tool link-wrapper $env False link.exe /nologo /OUT:{{output}} /PDB:{{output}}.pdb @$rspfile"
-
-      # TODO(brettw) support manifests
-      #manifest_command = "$python_path gyp-win-tool manifest-wrapper $env mt.exe -nologo -manifest $manifests -out:{{output}}.manifest"
-      #command = "cmd /c $link_command && $manifest_command"
-      command = link_command
+      command = "$python_path gyp-win-tool link-wrapper $env False $link /nologo /OUT:{{output}} /PDB:{{output}}.pdb @$rspfile"
 
       default_output_extension = ".exe"
+      default_output_dir = "{{root_out_dir}}"
       description = "LINK {{output}}"
       outputs = [
-        "{{root_out_dir}}/{{target_output_name}}{{output_extension}}",
+        "{{output_dir}}/{{target_output_name}}{{output_extension}}",
       ]
 
       # The use of inputs_newline is to work around a fixed per-line buffer

@@ -63,6 +63,7 @@ config("compiler") {
   }
 
   ldflags += [
+    "-Wl,--build-id=sha1",
     "-Wl,--no-undefined",
 
     # Don't allow visible symbols from libgcc or libc++ to be
@@ -103,14 +104,8 @@ config("compiler") {
     } else {
       assert(false, "Architecture not supported")
     }
-    cflags += [
-      "-target",
-      abi_target,
-    ]
-    ldflags += [
-      "-target",
-      abi_target,
-    ]
+    cflags += [ "--target=$abi_target" ]
+    ldflags += [ "--target=$abi_target" ]
   }
 
   # Assign any flags set for the C compiler to asmflags so that they are sent
@@ -142,7 +137,7 @@ config("runtime_library") {
 
   defines = [ "__GNU_SOURCE=1" ]  # Necessary for clone().
   ldflags = [ "-nostdlib" ]
-  lib_dirs = [ "$android_libcpp_root/libs/$android_app_abi" ]
+  lib_dirs = [ android_libcpp_lib_dir ]
 
   # The libc++ runtime library (must come first).
   # ASan needs to dynamically link to libc++ even in static builds so

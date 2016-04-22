@@ -22,6 +22,7 @@
       },
       'dependencies': [
         'allocator/allocator.gyp:allocator',
+        'allocator/allocator.gyp:allocator_features#target',
         'base_debugging_flags#target',
         'base_static',
         'base_build_date#target',
@@ -160,6 +161,8 @@
                 'cfgmgr32.lib',
                 'powrprof.lib',
                 'setupapi.lib',
+                'userenv.lib',
+                'winmm.lib',
               ],
             },
           },
@@ -176,18 +179,12 @@
                   'cfgmgr32.lib',
                   'powrprof.lib',
                   'setupapi.lib',
+                  'userenv.lib',
+                  'winmm.lib',
                 ],
               },
             },
           },
-          'copies': [
-            {
-              'destination': '<(PRODUCT_DIR)/',
-              'files': [
-                '../build/win/dbghelp_xp/dbghelp.dll',
-              ],
-            },
-          ],
           'dependencies': [
            'trace_event/etw_manifest/etw_manifest.gyp:etw_manifest',
           ],
@@ -202,6 +199,7 @@
               '$(SDKROOT)/System/Library/Frameworks/Foundation.framework',
               '$(SDKROOT)/System/Library/Frameworks/IOKit.framework',
               '$(SDKROOT)/System/Library/Frameworks/Security.framework',
+              '$(SDKROOT)/usr/lib/libbsm.dylib',
             ],
           },
         }],
@@ -233,6 +231,9 @@
             'sync_socket.h',
             'sync_socket_posix.cc',
           ]
+        }],
+        ['use_experimental_allocator_shim==1', {
+          'dependencies': [ 'allocator/allocator.gyp:unified_allocator_shim']
         }],
       ],
       'sources': [
@@ -449,6 +450,7 @@
         'mac/foundation_util_unittest.mm',
         'mac/libdispatch_task_runner_unittest.cc',
         'mac/mac_util_unittest.mm',
+        'mac/mach_port_broker_unittest.cc',
         'mac/objc_property_releaser_unittest.mm',
         'mac/scoped_nsobject_unittest.mm',
         'mac/scoped_objc_class_swizzler_unittest.mm',
@@ -464,8 +466,6 @@
         'memory/ptr_util_unittest.cc',
         'memory/ref_counted_memory_unittest.cc',
         'memory/ref_counted_unittest.cc',
-        'memory/scoped_ptr_unittest.cc',
-        'memory/scoped_ptr_unittest.nc',
         'memory/scoped_vector_unittest.cc',
         'memory/shared_memory_mac_unittest.cc',
         'memory/shared_memory_unittest.cc',
@@ -486,7 +486,9 @@
         'metrics/histogram_snapshot_manager_unittest.cc',
         'metrics/histogram_unittest.cc',
         'metrics/metrics_hashes_unittest.cc',
+        'metrics/persistent_histogram_allocator_unittest.cc',
         'metrics/persistent_memory_allocator_unittest.cc',
+        'metrics/persistent_sample_map_unittest.cc',
         'metrics/sample_map_unittest.cc',
         'metrics/sample_vector_unittest.cc',
         'metrics/sparse_histogram_unittest.cc',
@@ -494,6 +496,7 @@
         'native_library_unittest.cc',
         'numerics/safe_numerics_unittest.cc',
         'observer_list_unittest.cc',
+        'optional_unittest.cc',
         'os_compat_android_unittest.cc',
         'path_service_unittest.cc',
         'pickle_unittest.cc',
@@ -543,6 +546,16 @@
         'system_monitor/system_monitor_unittest.cc',
         'task/cancelable_task_tracker_unittest.cc',
         'task_runner_util_unittest.cc',
+        'task_scheduler/delayed_task_manager_unittest.cc',
+        'task_scheduler/priority_queue_unittest.cc',
+        'task_scheduler/scheduler_lock_unittest.cc',
+        'task_scheduler/scheduler_thread_pool_unittest.cc',
+        'task_scheduler/scheduler_worker_thread_unittest.cc',
+        'task_scheduler/sequence_sort_key_unittest.cc',
+        'task_scheduler/sequence_unittest.cc',
+        'task_scheduler/task_tracker_unittest.cc',
+        'task_scheduler/test_utils.h',
+        'task_scheduler/utils_unittest.cc',
         'template_util_unittest.cc',
         'test/histogram_tester_unittest.cc',
         'test/test_pending_task_unittest.cc',
@@ -593,7 +606,9 @@
         'win/scoped_variant_unittest.cc',
         'win/shortcut_unittest.cc',
         'win/startup_information_unittest.cc',
+        'win/wait_chain_unittest.cc',
         'win/win_util_unittest.cc',
+        'win/windows_version_unittest.cc',
         'win/wrapped_window_proc_unittest.cc',
         '<@(trace_event_test_sources)',
       ],
@@ -694,6 +709,9 @@
           ],
         }],
         ['OS == "win"', {
+          'dependencies': [
+            'scoped_handle_test_dll'
+          ],
           'sources!': [
             'file_descriptor_shuffle_unittest.cc',
             'files/dir_reader_posix_unittest.cc',
@@ -717,6 +735,9 @@
           'dependencies': [
             'third_party/libevent/libevent.gyp:libevent'
           ],
+        }],
+        ['use_experimental_allocator_shim==1', {
+          'sources': [ 'allocator/allocator_shim_unittest.cc']
         }],
       ],  # conditions
       'target_conditions': [
@@ -898,6 +919,8 @@
         'test/test_io_thread.h',
         'test/test_listener_ios.h',
         'test/test_listener_ios.mm',
+        'test/test_message_loop.cc',
+        'test/test_message_loop.h',
         'test/test_mock_time_task_runner.cc',
         'test/test_mock_time_task_runner.h',
         'test/test_pending_task.cc',
@@ -1128,6 +1151,8 @@
                 'cfgmgr32.lib',
                 'powrprof.lib',
                 'setupapi.lib',
+                'userenv.lib',
+                'winmm.lib',
               ],
             },
           },
@@ -1144,6 +1169,8 @@
                   'cfgmgr32.lib',
                   'powrprof.lib',
                   'setupapi.lib',
+                  'userenv.lib',
+                  'winmm.lib',
                 ],
               },
             },
@@ -1550,6 +1577,9 @@
             'src_paths': [
               '../base/android/junit/',
               '../base/test/android/junit/src/org/chromium/base/test/util/DisableIfTest.java',
+              '../base/test/android/junit/src/org/chromium/base/test/util/MinAndroidSdkLevelSkipCheckTest.java',
+              '../base/test/android/junit/src/org/chromium/base/test/util/RestrictionSkipCheckTest.java',
+              '../base/test/android/junit/src/org/chromium/base/test/util/SkipCheckTest.java',
             ],
             'test_type': 'junit',
             'wrapper_script_name': 'helper/<(_target_name)',
@@ -1668,6 +1698,16 @@
               ],
             },
           },
+        },
+        {
+          'target_name': 'scoped_handle_test_dll',
+          'type': 'loadable_module',
+          'dependencies': [
+            'base',
+          ],
+          'sources': [
+            'win/scoped_handle_test_dll.cc',
+          ],
         },
       ],
     }],

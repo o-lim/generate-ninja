@@ -30,6 +30,7 @@ class ConfigValues {
     const std::vector<SourceDir>& name() const { return name##_; } \
     std::vector<SourceDir>& name() { return name##_; }
 
+  STRING_VALUES_ACCESSOR(arflags)
   STRING_VALUES_ACCESSOR(asmflags)
   STRING_VALUES_ACCESSOR(asmppflags)
   STRING_VALUES_ACCESSOR(cflags)
@@ -71,6 +72,7 @@ class ConfigValues {
   }
 
  private:
+  std::vector<std::string> arflags_;
   std::vector<std::string> asmflags_;
   std::vector<std::string> asmppflags_;
   std::vector<std::string> cflags_;

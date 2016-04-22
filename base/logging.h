@@ -430,7 +430,7 @@ const LogSeverity LOG_0 = LOG_ERROR;
 // boolean.
 class CheckOpResult {
  public:
-  // |message| must be null if and only if the check failed.
+  // |message| must be non-null if and only if the check failed.
   CheckOpResult(std::string* message) : message_(message) {}
   // Returns true if the check succeeded.
   operator bool() const { return !message_; }
@@ -572,7 +572,7 @@ DEFINE_CHECK_OP_IMPL(GT, > )
 #define CHECK_GE(val1, val2) CHECK_OP(GE, >=, val1, val2)
 #define CHECK_GT(val1, val2) CHECK_OP(GT, > , val1, val2)
 
-#if defined(NDEBUG)
+#if defined(NDEBUG) && !defined(DCHECK_ALWAYS_ON)
 #define ENABLE_DLOG 0
 #else
 #define ENABLE_DLOG 1
