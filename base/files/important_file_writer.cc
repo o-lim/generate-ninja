@@ -49,15 +49,16 @@ enum TempFileFailure {
 };
 
 void LogFailure(const FilePath& path, TempFileFailure failure_code,
-                const std::string& message) {
+                StringPiece message) {
   UMA_HISTOGRAM_ENUMERATION("ImportantFile.TempFileFailures", failure_code,
                             TEMP_FILE_FAILURE_MAX);
   DPLOG(WARNING) << "temp file failure: " << path.value() << " : " << message;
 }
 
-// Helper function to call WriteFileAtomically() with a scoped_ptr<std::string>.
+// Helper function to call WriteFileAtomically() with a
+// std::unique_ptr<std::string>.
 bool WriteScopedStringToFileAtomically(const FilePath& path,
-                                       scoped_ptr<std::string> data) {
+                                       std::unique_ptr<std::string> data) {
   return ImportantFileWriter::WriteFileAtomically(path, *data);
 }
 
@@ -65,7 +66,7 @@ bool WriteScopedStringToFileAtomically(const FilePath& path,
 
 // static
 bool ImportantFileWriter::WriteFileAtomically(const FilePath& path,
-                                              const std::string& data) {
+                                              StringPiece data) {
 #if defined(OS_CHROMEOS)
   // On Chrome OS, chrome gets killed when it cannot finish shutdown quickly,
   // and this function seems to be one of the slowest shutdown steps.
@@ -126,19 +127,18 @@ bool ImportantFileWriter::WriteFileAtomically(const FilePath& path,
 
 ImportantFileWriter::ImportantFileWriter(
     const FilePath& path,
-    const scoped_refptr<SequencedTaskRunner>& task_runner)
+    scoped_refptr<SequencedTaskRunner> task_runner)
     : ImportantFileWriter(
-        path,
-        task_runner,
-        TimeDelta::FromMilliseconds(kDefaultCommitIntervalMs)) {
-}
+          path,
+          std::move(task_runner),
+          TimeDelta::FromMilliseconds(kDefaultCommitIntervalMs)) {}
 
 ImportantFileWriter::ImportantFileWriter(
     const FilePath& path,
-    const scoped_refptr<SequencedTaskRunner>& task_runner,
+    scoped_refptr<SequencedTaskRunner> task_runner,
     TimeDelta interval)
     : path_(path),
-      task_runner_(task_runner),
+      task_runner_(std::move(task_runner)),
       serializer_(nullptr),
       commit_interval_(interval),
       weak_factory_(this) {
@@ -158,7 +158,7 @@ bool ImportantFileWriter::HasPendingWrite() const {
   return timer_.IsRunning();
 }
 
-void ImportantFileWriter::WriteNow(scoped_ptr<std::string> data) {
+void ImportantFileWriter::WriteNow(std::unique_ptr<std::string> data) {
   DCHECK(CalledOnValidThread());
   if (!IsValueInRangeForNumericType<int32_t>(data->length())) {
     NOTREACHED();
@@ -193,7 +193,7 @@ void ImportantFileWriter::ScheduleWrite(DataSerializer* serializer) {
 
 void ImportantFileWriter::DoScheduledWrite() {
   DCHECK(serializer_);
-  scoped_ptr<std::string> data(new std::string);
+  std::unique_ptr<std::string> data(new std::string);
   if (serializer_->SerializeData(data.get())) {
     WriteNow(std::move(data));
   } else {

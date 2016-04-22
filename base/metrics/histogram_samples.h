@@ -8,9 +8,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/atomicops.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram_base.h"
 
 namespace base {
@@ -19,7 +20,10 @@ class Pickle;
 class PickleIterator;
 class SampleCountIterator;
 
-// HistogramSamples is a container storing all samples of a histogram.
+// HistogramSamples is a container storing all samples of a histogram. All
+// elements must be of a fixed width to ensure 32/64-bit interoperability.
+// If this structure changes, bump the version number for kTypeIdHistogram
+// in persistent_histogram_allocator.cc.
 class BASE_EXPORT HistogramSamples {
  public:
   struct Metadata {
@@ -34,8 +38,13 @@ class BASE_EXPORT HistogramSamples {
     // accuracy of this value; there may be races during histogram
     // accumulation and snapshotting that we choose to accept. It should
     // be treated as approximate.
-    // TODO(bcwhite): Change this to std::atomic<int64_t>.
+#ifdef ARCH_CPU_64_BITS
+    subtle::Atomic64 sum;
+#else
+    // 32-bit systems don't have atomic 64-bit operations. Use a basic type
+    // and don't worry about "shearing".
     int64_t sum;
+#endif
 
     // A "redundant" count helps identify memory corruption. It redundantly
     // stores the total number of samples accumulated in the histogram. We
@@ -65,12 +74,18 @@ class BASE_EXPORT HistogramSamples {
 
   virtual void Subtract(const HistogramSamples& other);
 
-  virtual scoped_ptr<SampleCountIterator> Iterator() const = 0;
+  virtual std::unique_ptr<SampleCountIterator> Iterator() const = 0;
   virtual bool Serialize(Pickle* pickle) const;
 
   // Accessor fuctions.
   uint64_t id() const { return meta_->id; }
-  int64_t sum() const { return meta_->sum; }
+  int64_t sum() const {
+#ifdef ARCH_CPU_64_BITS
+    return subtle::NoBarrier_Load(&meta_->sum);
+#else
+    return meta_->sum;
+#endif
+  }
   HistogramBase::Count redundant_count() const {
     return subtle::NoBarrier_Load(&meta_->redundant_count);
   }

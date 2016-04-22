@@ -4,8 +4,6 @@
 
 #include "tools/gn/import_manager.h"
 
-#include "base/memory/scoped_ptr.h"
-#include "base/stl_util.h"
 #include "tools/gn/parse_tree.h"
 #include "tools/gn/scheduler.h"
 #include "tools/gn/scope_per_file_provider.h"
@@ -13,16 +11,16 @@
 namespace {
 
 // Returns a newly-allocated scope on success, null on failure.
-Scope* UncachedImport(const Settings* settings,
-                      const SourceFile& file,
-                      const ParseNode* node_for_err,
-                      Err* err) {
+std::unique_ptr<Scope> UncachedImport(const Settings* settings,
+                                      const SourceFile& file,
+                                      const ParseNode* node_for_err,
+                                      Err* err) {
   const ParseNode* node = g_scheduler->input_file_manager()->SyncLoadFile(
       node_for_err->GetRange(), settings->build_settings(), file, err);
   if (!node)
     return nullptr;
 
-  scoped_ptr<Scope> scope(new Scope(settings->base_config()));
+  std::unique_ptr<Scope> scope(new Scope(settings->base_config()));
   scope->set_source_dir(file.GetDir());
 
   // Don't allow ScopePerFileProvider to provide target-related variables.
@@ -32,11 +30,15 @@ Scope* UncachedImport(const Settings* settings,
 
   scope->SetProcessingImport();
   node->Execute(scope.get(), err);
-  if (err->has_error())
+  if (err->has_error()) {
+    // If there was an error, append the caller location so the error message
+    // displays a why the file was imported (esp. useful for failed asserts).
+    err->AppendSubErr(Err(node_for_err, "whence it was imported."));
     return nullptr;
+  }
   scope->ClearProcessingImport();
 
-  return scope.release();
+  return scope;
 }
 
 }  // namesapce
@@ -45,7 +47,6 @@ ImportManager::ImportManager() {
 }
 
 ImportManager::~ImportManager() {
-  STLDeleteContainerPairSecondPointers(imports_.begin(), imports_.end());
 }
 
 bool ImportManager::DoImport(const SourceFile& file,
@@ -59,14 +60,14 @@ bool ImportManager::DoImport(const SourceFile& file,
     base::AutoLock lock(lock_);
     ImportMap::const_iterator found = imports_.find(file);
     if (found != imports_.end())
-      imported_scope = found->second;
+      imported_scope = found->second.get();
   }
 
   if (!imported_scope) {
     // Do a new import of the file.
-    imported_scope = UncachedImport(scope->settings(), file,
-                                    node_for_err, err);
-    if (!imported_scope)
+    std::unique_ptr<Scope> new_imported_scope =
+        UncachedImport(scope->settings(), file, node_for_err, err);
+    if (!new_imported_scope)
       return false;
 
     // We loaded the file outside the lock. This means that there could be a
@@ -76,10 +77,10 @@ bool ImportManager::DoImport(const SourceFile& file,
       base::AutoLock lock(lock_);
       ImportMap::const_iterator found = imports_.find(file);
       if (found != imports_.end()) {
-        delete imported_scope;
-        imported_scope = found->second;
+        imported_scope = found->second.get();
       } else {
-        imports_[file] = imported_scope;
+        imported_scope = new_imported_scope.get();
+        imports_[file] = std::move(new_imported_scope);
       }
     }
   }

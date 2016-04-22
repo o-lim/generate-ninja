@@ -16,7 +16,7 @@
 
 namespace {
 
-// The caller takes ownership of the returned const char*.
+// We are leaking these strings.
 const char* StrDupJString(const base::android::JavaRef<jstring>& java_string) {
   std::string str = ConvertJavaStringToUTF8(java_string);
   return strdup(str.c_str());

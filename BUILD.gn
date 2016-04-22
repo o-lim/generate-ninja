@@ -78,6 +78,16 @@ group("All") {
   ]
 }
 
+# TODO(GYP): This target exists for compatibility with GYP for the builders.
+# For now, this builds everything. We should decide if we want to build less.
+group("chromium_builder_tests") {
+  testonly = true
+
+  deps = [
+    ":All",
+  ]
+}
+
 # The "both_gn_and_gyp" target should reflect every target that is built
 # in both the GN and GYP builds, and ideally it should match the
 # "both_gn_and_gyp" target in build/gn_migration.gypi line-for-line.
@@ -98,6 +108,13 @@ group("both_gn_and_gyp") {
     "//url:url_unittests",
   ]
 
+  if (!is_android && !is_chromecast) {
+    deps += [
+      "//crypto:crypto_unittests",
+      "//google_apis/gcm:gcm_unit_tests",
+    ]
+  }
+
   if (!is_ios && !is_android && !is_chromecast) {
     deps += [
       "//chrome",
@@ -105,10 +122,8 @@ group("both_gn_and_gyp") {
       "//chrome/test:interactive_ui_tests",
       "//chrome/test:sync_integration_tests",
       "//chrome/test/chromedriver:chromedriver_unittests",
-      "//crypto:crypto_unittests",
       "//extensions:extensions_browsertests",
       "//extensions:extensions_unittests",
-      "//google_apis/gcm:gcm_unit_tests",
       "//gpu/gles2_conform_support:gles2_conform_test",
       "//jingle:jingle_unittests",
       "//net:hpack_example_generator",
@@ -170,6 +185,7 @@ group("both_gn_and_gyp") {
       "//content/test:content_unittests",
       "//device:device_unittests",
       "//gpu:gpu_unittests",
+      "//gpu/ipc/service:gpu_ipc_service_unittests",
       "//ipc:ipc_tests",
       "//ipc/mojo:ipc_mojo_unittests",
       "//media:media_unittests",
@@ -179,11 +195,9 @@ group("both_gn_and_gyp") {
       "//mojo/common:mojo_common_unittests",
       "//mojo/edk/system:mojo_system_unittests",
       "//mojo/edk/test:mojo_public_bindings_unittests",
-      "//mojo/edk/test:mojo_public_environment_unittests",
       "//mojo/edk/test:mojo_public_system_unittests",
-      "//mojo/edk/test:mojo_public_utility_unittests",
-      "//mojo/shell/public/cpp",
       "//net:net_perftests",
+      "//services/shell/public/cpp",
       "//third_party/WebKit/Source/platform:blink_heap_unittests",
       "//third_party/WebKit/Source/platform:blink_platform_unittests",
       "//third_party/WebKit/Source/web:webkit_unit_tests",
@@ -195,18 +209,20 @@ group("both_gn_and_gyp") {
       "//ui/events:events_unittests",
       "//ui/gl:gl_unittests",
       "//ui/touch_selection:ui_touch_selection_unittests",
+      "//url/ipc:url_ipc_unittests",
     ]
   } else {
     deps += [
-      #"//ios/chrome:ios_chrome_unittests", TODO(GYP)
-      #"//ios/chrome/app", TODO(GYP)
-      #"//ios/chrome/browser", TODO(GYP)
+      "//ios/chrome:ios_chrome_unittests",
+      "//ios/chrome/app",
+      "//ios/chrome/browser",
       "//ios/chrome/common",
       "//ios/net:ios_net_unittests",
       "//ios/public/provider/chrome/browser",
       "//ios/public/provider/web",
       "//ios/testing:ocmock_support_unittest",
-      "//ios/third_party/ochamcrest",
+      "//ios/third_party/earl_grey",
+      "//ios/web:ios_web_inttests",
       "//ios/web:ios_web_unittests",
       "//ios/web/shell:ios_web_shell",
     ]
@@ -234,8 +250,8 @@ group("both_gn_and_gyp") {
     deps += [
       "//ash:ash_shell_with_content",
       "//ash:ash_unittests",
+      "//ui/app_list/presenter:app_list_presenter_unittests",
       "//ui/aura:aura_unittests",
-      "//ui/aura:bench",
       "//ui/aura:demo",
       "//ui/wm:wm_unittests",
     ]
@@ -276,16 +292,16 @@ group("both_gn_and_gyp") {
       "//content/shell/android:content_shell_apk",
       "//content/test:video_decode_accelerator_unittest",
       "//net/android:net_junit_tests",
-      "//testing/android/junit:junit_unittests",
+      "//testing/android/junit:junit_unit_tests",
       "//third_party/android_tools:uiautomator_java",
       "//third_party/errorprone:chromium_errorprone",
       "//third_party/smhasher:murmurhash3",
       "//tools/android:android_tools",
       "//tools/android:memconsumer",
+      "//tools/android:push_apps_to_background",
       "//tools/android/heap_profiler:heap_profiler_unittests",
       "//tools/android/kerberos/SpnegoAuthenticator:spnego_authenticator_apk",
       "//tools/cygprofile:cygprofile_unittests",
-      "//tools/imagediff($host_toolchain)",
       "//ui/android:ui_junit_tests",
     ]
     deps -= [
@@ -308,7 +324,7 @@ group("both_gn_and_gyp") {
       deps += [
         "//android_webview",
         "//android_webview/test",
-        "//android_webview/tools",
+        "//android_webview/tools/system_webview_shell",
         "//chrome/android:chrome_junit_tests",
         "//chrome/android:chrome_public_apk",
         "//chrome/android:chrome_public_test_apk",
@@ -339,6 +355,7 @@ group("both_gn_and_gyp") {
   if (is_chromeos) {
     deps += [
       "//chromeos:chromeos_unittests",
+      "//ui/arc:ui_arc_unittests",
       "//ui/chromeos:ui_chromeos_unittests",
     ]
   }
@@ -392,7 +409,7 @@ group("both_gn_and_gyp") {
       "//cc:cc_perftests",
       "//cc/blink:cc_blink_unittests",
       "//components:components_perftests",
-      "//content/test:content_gl_benchmark",
+      "//components/display_compositor:display_compositor_unittests",
       "//content/test:content_gl_tests",
       "//device:device_unittests",
       "//gin:gin_shell",
@@ -482,9 +499,8 @@ group("both_gn_and_gyp") {
 
       # TODO(GYP): Remove this when the gles2 tests work
       "//gpu/command_buffer/client:gles2_implementation_no_check",
-      "//gpu/khronos_glcts_support:khronos_glcts_test",  # TODO(GYP) crbug.com/471903 to make this complete.
       "//mojo/edk/test:mojo_public_system_perftests",
-      "//mojo/shell/public/cpp",
+      "//services/shell/public/cpp",
       "//testing/gmock:gmock_main",
       "//third_party/codesighs:nm2tsv",
     ]
@@ -493,6 +509,7 @@ group("both_gn_and_gyp") {
       deps += [
         "//build/sanitizers:copy_llvm_symbolizer",
         "//chrome/test:chrome_app_unittests",
+        "//gpu/khronos_glcts_support:khronos_glcts_test",  # TODO(GYP) crbug.com/471903 to make this complete.
         "//media/cast:cast_benchmarks",
         "//media/cast:tap_proxy",
         "//skia:filter_fuzz_stub",
@@ -553,7 +570,6 @@ group("both_gn_and_gyp") {
       "//testing/gtest:gtest_main",
       "//third_party/codesighs:msmap2tsv",
       "//third_party/pdfium/samples:pdfium_diff",
-      "//ui/metro_viewer",
     ]
     deps -= [
       "//crypto:crypto_unittests",  # TODO(GYP)
@@ -587,15 +603,9 @@ group("mojo_apptests") {
 
   if (is_win || is_linux) {
     deps += [
-      "//components/filesystem:apptests",
-      "//components/leveldb:apptests",
-      "//components/mus/ws:tests",
-      "//components/resource_provider:apptests",
       "//components/resource_provider:resource_provider_unittests",
-      "//mash/wm:tests",
+      "//mash:mash_unittests",
       "//media/mojo/services:tests",
-      "//mojo/services/network:apptests",
-      "//mojo/shell/tests:apptests",
       "//ui/views/mus:tests",
     ]
   }
@@ -617,16 +627,10 @@ group("gn_only") {
   if (is_win || is_linux) {
     deps += [
       ":mojo_apptests",
+      "//components/mus/demo",
+      "//components/mus/ws:tests",
       "//mash:all",
       "//mojo",
-    ]
-  }
-
-  if (is_win && use_drfuzz) {
-    # build libfuzzer fuzzers on Windows to run with Dr. Fuzz
-    deps += [
-      "//testing/libfuzzer/fuzzers",
-      "//testing/libfuzzer/tests:libfuzzer_tests",
     ]
   }
 
@@ -639,6 +643,8 @@ group("gn_only") {
       "//chrome/installer/util:strings",
       "//chrome/tools/convert_dict",
       "//components/constrained_window:unit_tests",
+      "//components/filesystem:unittests",
+      "//components/leveldb:leveldb_service_unittests",
       "//components/metrics:serialization",
       "//components/password_manager/content/renderer:browser_tests",
       "//components/rappor:unit_tests",
@@ -647,8 +653,6 @@ group("gn_only") {
       "//media/cast:udp_proxy",
       "//native_client/src/trusted/debug_stub:gdb_rsp_unittest",
       "//storage/browser:dump_file_system",
-      "//testing/libfuzzer/fuzzers",
-      "//testing/libfuzzer/tests:libfuzzer_tests",
       "//third_party/angle:libANGLE",
       "//third_party/angle:libEGL",
       "//third_party/angle:libGLESv2",
@@ -707,13 +711,21 @@ group("gn_only") {
         "//third_party/libjpeg_turbo:simd_asm",
       ]
     }
-    if (use_ozone) {
-      deps += [ "//ui/ozone/demo" ]
-    }
-
     if (is_linux && current_toolchain == host_toolchain) {
       deps += [ "//v8:d8" ]
     }
+  }
+
+  if (use_ozone) {
+    deps += [ "//ui/ozone/demo" ]
+  }
+
+  if ((is_linux && !is_chromeos && !is_chromecast) || (is_win && use_drfuzz) ||
+      (use_libfuzzer && is_mac)) {
+    deps += [
+      "//testing/libfuzzer/fuzzers",
+      "//testing/libfuzzer/tests:libfuzzer_tests",
+    ]
   }
 
   if (enable_nacl) {
@@ -724,6 +736,13 @@ group("gn_only") {
     deps += [
       "//build/android/gyp/test:hello_world",
       "//build/android/incremental_install:bootstrap_java",
+    ]
+  }
+
+  if (is_linux && use_ozone) {
+    deps += [
+      "//headless",
+      "//headless:headless_tests",
     ]
   }
 
@@ -774,7 +793,9 @@ if (!is_ios) {
     testonly = true
 
     deps = [
+      "//content/shell:content_shell",
       "//third_party/WebKit/public:all_blink",
+      "//tools/imagediff",
     ]
 
     # NOTE: The following deps are needed to run the layout tests
@@ -782,19 +803,13 @@ if (!is_ios) {
     # so we need to specify the dependencies here instead.
     if (is_android) {
       deps += [
-        "//breakpad:breakpad_unittests_deps",
-        "//breakpad:dump_syms($host_toolchain)",
-        "//breakpad:microdump_stackwalk($host_toolchain)",
-        "//breakpad:minidump_dump($host_toolchain)",
-        "//breakpad:minidump_stackwalk($host_toolchain)",
-        "//breakpad:symupload($host_toolchain)",
-        "//content/shell/android:content_shell_apk",
-        "//tools/imagediff($host_toolchain)",
-      ]
-    } else {
-      deps += [
-        "//content/shell:content_shell",
-        "//tools/imagediff",
+        "//breakpad:breakpad_unittests",
+        "//breakpad:dump_syms",
+        "//breakpad:microdump_stackwalk",
+        "//breakpad:minidump_dump",
+        "//breakpad:minidump_stackwalk",
+        "//breakpad:symupload",
+        "//tools/android/forwarder",
       ]
     }
 
@@ -860,15 +875,45 @@ group("chromium_builder_perf") {
 
     if (is_win) {
       deps += [
-        "//chrome/tools/crash_service",
         # "//gpu:angle_perftests", TODO(GYP): crbug.com/537008
       ]
-
-      if (target_cpu == "x86") {
-        deps += [ "//chrome/tools/crash_service:crash_service_win64" ]
-      }
     } else {
       deps += [ "//breakpad:minidump_stackwalk($host_toolchain)" ]
     }
   }
+}
+
+# For compatibility with GYP. The linux_chromium_chromeos_rel_ng and
+# linux_chromium_chromeos_compile_rel_ng bots reference this target as
+# something to build, but all targets for those bots to compile are set
+# up differently.
+# TODO bug 601920: Remove reference to aura_builder on bot config and delete
+# this group.
+group("aura_builder") {
+}
+
+# Because of the source assignment filter, many targets end up over-filtering
+# their sources if the output directory contains a platform name. Assert that
+# this doesn't happen. http://crbug.com/548283
+template("assert_valid_out_dir") {
+  # List copied from //build/config/BUILDCONFIG.gn.
+  set_sources_assignment_filter([
+                                  "*\bandroid/*",
+                                  "*\bchromeos/*",
+                                  "*\bcocoa/*",
+                                  "*\bios/*",
+                                  "*\blinux/*",
+                                  "*\bmac/*",
+                                  "*\bposix/*",
+                                  "*\bwin/*",
+                                ])
+  assert(target_name != "")  # Mark as used.
+  sources = invoker.actual_sources
+  assert(
+      sources == invoker.actual_sources,
+      "Do not use a platform name in your output directory (found \"$root_build_dir\"). http://crbug.com/548283")
+}
+
+assert_valid_out_dir("_unused") {
+  actual_sources = [ "$root_build_dir/foo" ]
 }

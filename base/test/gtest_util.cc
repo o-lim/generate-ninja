@@ -16,6 +16,8 @@ namespace base {
 TestIdentifier::TestIdentifier() {
 }
 
+TestIdentifier::TestIdentifier(const TestIdentifier& other) = default;
+
 std::string FormatFullTestName(const std::string& test_case_name,
                                const std::string& test_name) {
   return test_case_name + "." + test_name;
@@ -62,7 +64,7 @@ bool ReadTestNamesFromFile(const FilePath& path,
   JSONFileValueDeserializer deserializer(path);
   int error_code = 0;
   std::string error_message;
-  scoped_ptr<base::Value> value =
+  std::unique_ptr<base::Value> value =
       deserializer.Deserialize(&error_code, &error_message);
   if (!value.get())
     return false;

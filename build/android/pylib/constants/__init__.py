@@ -9,6 +9,7 @@
 # pylint: disable=W0212
 
 import collections
+import glob
 import logging
 import os
 import subprocess
@@ -26,105 +27,88 @@ DIR_SOURCE_ROOT = os.environ.get('CHECKOUT_SOURCE_ROOT',
                                  os.pardir, os.pardir, os.pardir, os.pardir)))
 
 PackageInfo = collections.namedtuple('PackageInfo',
-    ['package', 'activity', 'cmdline_file', 'devtools_socket',
-     'test_package'])
+    ['package', 'activity', 'cmdline_file', 'devtools_socket'])
 
 PACKAGE_INFO = {
     'chrome_document': PackageInfo(
         'com.google.android.apps.chrome.document',
         'com.google.android.apps.chrome.document.ChromeLauncherActivity',
         '/data/local/chrome-command-line',
-        'chrome_devtools_remote',
-        None),
+        'chrome_devtools_remote'),
     'chrome': PackageInfo(
         'com.google.android.apps.chrome',
         'com.google.android.apps.chrome.Main',
         '/data/local/chrome-command-line',
-        'chrome_devtools_remote',
-        'com.google.android.apps.chrome.tests'),
+        'chrome_devtools_remote'),
     'chrome_beta': PackageInfo(
         'com.chrome.beta',
         'com.google.android.apps.chrome.Main',
         '/data/local/chrome-command-line',
-        'chrome_devtools_remote',
-        None),
+        'chrome_devtools_remote'),
     'chrome_stable': PackageInfo(
         'com.android.chrome',
         'com.google.android.apps.chrome.Main',
         '/data/local/chrome-command-line',
-        'chrome_devtools_remote',
-        None),
+        'chrome_devtools_remote'),
     'chrome_dev': PackageInfo(
         'com.chrome.dev',
         'com.google.android.apps.chrome.Main',
         '/data/local/chrome-command-line',
-        'chrome_devtools_remote',
-        None),
+        'chrome_devtools_remote'),
     'chrome_canary': PackageInfo(
         'com.chrome.canary',
         'com.google.android.apps.chrome.Main',
         '/data/local/chrome-command-line',
-        'chrome_devtools_remote',
-        None),
+        'chrome_devtools_remote'),
     'chrome_work': PackageInfo(
         'com.chrome.work',
         'com.google.android.apps.chrome.Main',
         '/data/local/chrome-command-line',
-        'chrome_devtools_remote',
-        None),
+        'chrome_devtools_remote'),
     'chromium': PackageInfo(
         'org.chromium.chrome',
         'com.google.android.apps.chrome.Main',
         '/data/local/chrome-command-line',
-        'chrome_devtools_remote',
-        'org.chromium.chrome.tests'),
+        'chrome_devtools_remote'),
     'legacy_browser': PackageInfo(
         'com.google.android.browser',
         'com.android.browser.BrowserActivity',
-        None,
         None,
         None),
     'chromecast_shell': PackageInfo(
         'com.google.android.apps.mediashell',
         'com.google.android.apps.mediashell.MediaShellActivity',
         '/data/local/tmp/castshell-command-line',
-        None,
         None),
     'content_shell': PackageInfo(
         'org.chromium.content_shell_apk',
         'org.chromium.content_shell_apk.ContentShellActivity',
         '/data/local/tmp/content-shell-command-line',
-        None,
-        'org.chromium.content_shell_apk.tests'),
+        None),
     'android_webview_shell': PackageInfo(
         'org.chromium.android_webview.shell',
         'org.chromium.android_webview.shell.AwShellActivity',
         '/data/local/tmp/android-webview-command-line',
-        None,
-        'org.chromium.android_webview.test'),
+        None),
     'gtest': PackageInfo(
         'org.chromium.native_test',
         'org.chromium.native_test.NativeUnitTestActivity',
         '/data/local/tmp/chrome-native-tests-command-line',
-        None,
         None),
     'components_browsertests': PackageInfo(
         'org.chromium.components_browsertests_apk',
         ('org.chromium.components_browsertests_apk' +
          '.ComponentsBrowserTestsActivity'),
         '/data/local/tmp/chrome-native-tests-command-line',
-        None,
         None),
     'content_browsertests': PackageInfo(
         'org.chromium.content_browsertests_apk',
         'org.chromium.content_browsertests_apk.ContentBrowserTestsActivity',
         '/data/local/tmp/chrome-native-tests-command-line',
-        None,
         None),
     'chromedriver_webview_shell': PackageInfo(
         'org.chromium.chromedriver_webview_shell',
         'org.chromium.chromedriver_webview_shell.Main',
-        None,
         None,
         None),
 }
@@ -260,6 +244,15 @@ def CheckOutputDirectory():
     if os.path.exists('build.ninja'):
       output_dir = os.getcwd()
       SetOutputDirectory(output_dir)
+    elif os.environ.get('CHROME_HEADLESS'):
+      # When running on bots, see if the output directory is obvious.
+      dirs = glob.glob(os.path.join(DIR_SOURCE_ROOT, 'out', '*', 'build.ninja'))
+      if len(dirs) == 1:
+        SetOutputDirectory(dirs[0])
+      else:
+        raise Exception('Neither CHROMIUM_OUTPUT_DIR nor CHROMIUM_OUT_DIR '
+                        'has been set. CHROME_HEADLESS detected, but multiple '
+                        'out dirs exist: %r' % dirs)
     else:
       raise Exception('Neither CHROMIUM_OUTPUT_DIR nor CHROMIUM_OUT_DIR '
                       'has been set')

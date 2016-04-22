@@ -6,6 +6,7 @@
 #define TOOLS_GN_VISUAL_STUDIO_WRITER_H_
 
 #include <iosfwd>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -29,10 +30,16 @@ class VisualStudioWriter {
     Vs2015       // Visual Studio 2015
   };
 
-  // On failure will populate |err| and will return false.
+  // Writes Visual Studio project and solution files. |sln_name| is the optional
+  // solution file name ("all" is used if not specified). |dir_filters| is
+  // optional semicolon-separated list of label patterns used to limit the set
+  // of generated projects. Only matching targets will be included to the
+  // solution. On failure will populate |err| and will return false.
   static bool RunAndWriteFiles(const BuildSettings* build_settings,
                                Builder* builder,
                                Version version,
+                               const std::string& sln_name,
+                               const std::string& dir_filters,
                                Err* err);
 
  private:
@@ -71,11 +78,12 @@ class VisualStudioWriter {
     std::string config_platform;
   };
 
-  using SolutionProjects = std::vector<SolutionProject*>;
-  using SolutionFolders = std::vector<SolutionEntry*>;
+  using SolutionProjects = std::vector<std::unique_ptr<SolutionProject>>;
+  using SolutionFolders = std::vector<std::unique_ptr<SolutionEntry>>;
 
-  explicit VisualStudioWriter(const BuildSettings* build_settings,
-                              Version version);
+  VisualStudioWriter(const BuildSettings* build_settings,
+                     const char* config_platform,
+                     Version version);
   ~VisualStudioWriter();
 
   bool WriteProjectFiles(const Target* target, Err* err);
@@ -84,7 +92,7 @@ class VisualStudioWriter {
                                 const Target* target,
                                 Err* err);
   void WriteFiltersFileContents(std::ostream& out, const Target* target);
-  bool WriteSolutionFile(Err* err);
+  bool WriteSolutionFile(const std::string& sln_name, Err* err);
   void WriteSolutionFileContents(std::ostream& out,
                                  const base::FilePath& solution_dir_path);
 
@@ -105,12 +113,9 @@ class VisualStudioWriter {
   // Visual Studio version string.
   const char* version_string_;
 
-  // Indicates if project files are generated for Debug mode configuration.
-  bool is_debug_config_;
-
   // Platform for solution configuration (Win32, x64). Some projects may be
   // configured for different platform.
-  std::string config_platform_;
+  const char* config_platform_;
 
   // All projects contained by solution.
   SolutionProjects projects_;

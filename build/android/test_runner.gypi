@@ -43,6 +43,8 @@
     'variables': {
       'additional_apks%': [],
       'isolate_file%': '',
+      'shard_timeout%': '',
+      'test_runner_path%': '',
     },
     'test_runner_args': ['--output-directory', '<(PRODUCT_DIR)'],
     'conditions': [
@@ -73,6 +75,12 @@
       }],
       ['isolate_file != ""', {
         'test_runner_args': ['--isolate-file-path', '<(isolate_file)']
+      }],
+      ['shard_timeout != ""', {
+        'test_runner_args': ['--shard-timeout', '<(shard_timeout)']
+      }],
+      ['test_runner_path != ""', {
+        'test_runner_args': ['--test-runner-path', '<(test_runner_path)']
       }],
     ],
   },

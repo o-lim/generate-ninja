@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include "base/build_time.h"
+#include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/rand_util.h"
 #include "base/strings/string_util.h"
@@ -114,6 +115,17 @@ void CheckTrialGroup(const std::string& trial_name,
     (*seen_states)[trial_name] = trial_group;
   }
 }
+
+// A second copy of FieldTrialList::seen_states_ that is meant to outlive the
+// FieldTrialList object to determine if the inconsistency happens because there
+// might be multiple FieldTrialList objects.
+// TODO(asvitkine): Remove when crbug.com/359406 is resolved.
+base::LazyInstance<std::map<std::string, std::string>>::Leaky g_seen_states =
+    LAZY_INSTANCE_INITIALIZER;
+
+// Tracks whether |g_seen_states| is used. Defaults to false, because unit tests
+// will create multiple FieldTrialList instances.
+bool g_use_global_check_states = false;
 
 }  // namespace
 
@@ -315,7 +327,8 @@ FieldTrialList::FieldTrialList(
     : entropy_provider_(entropy_provider),
       observer_list_(new ObserverListThreadSafe<FieldTrialList::Observer>(
           ObserverListBase<FieldTrialList::Observer>::NOTIFY_EXISTING_ONLY)) {
-  DCHECK(!global_);
+  // TODO(asvitkine): Turn into a DCHECK after http://crbug.com/359406 is fixed.
+  CHECK(!global_);
   DCHECK(!used_without_global_);
   global_ = this;
 
@@ -334,6 +347,12 @@ FieldTrialList::~FieldTrialList() {
   }
   DCHECK_EQ(this, global_);
   global_ = NULL;
+}
+
+// static
+void FieldTrialList::EnableGlobalStateChecks() {
+  CHECK(!g_use_global_check_states);
+  g_use_global_check_states = true;
 }
 
 // static
@@ -488,8 +507,13 @@ void FieldTrialList::AllStatesToString(std::string* output) {
     trial.group_name.AppendToString(output);
     output->append(1, kPersistentStringSeparator);
 
+    // TODO(asvitkine): Remove these when http://crbug.com/359406 is fixed.
     CheckTrialGroup(trial.trial_name.as_string(), trial.group_name.as_string(),
                     &global_->seen_states_);
+    if (g_use_global_check_states) {
+      CheckTrialGroup(trial.trial_name.as_string(),
+                      trial.group_name.as_string(), &g_seen_states.Get());
+    }
   }
 }
 
@@ -614,8 +638,16 @@ void FieldTrialList::NotifyFieldTrialGroupSelection(FieldTrial* field_trial) {
   if (!field_trial->enable_field_trial_)
     return;
 
-  CheckTrialGroup(field_trial->trial_name(), field_trial->group_name_internal(),
-                  &global_->seen_states_);
+  // TODO(asvitkine): Remove this block when http://crbug.com/359406 is fixed.
+  {
+    AutoLock auto_lock(global_->lock_);
+    CheckTrialGroup(field_trial->trial_name(),
+                    field_trial->group_name_internal(), &global_->seen_states_);
+    if (g_use_global_check_states) {
+      CheckTrialGroup(field_trial->trial_name(),
+                      field_trial->group_name_internal(), &g_seen_states.Get());
+    }
+  }
   global_->observer_list_->Notify(
       FROM_HERE, &FieldTrialList::Observer::OnFieldTrialGroupFinalized,
       field_trial->trial_name(), field_trial->group_name_internal());

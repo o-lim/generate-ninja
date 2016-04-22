@@ -20,7 +20,8 @@ const char kForEach_Help[] =
     "  }\n"
     "\n"
     "  Executes the loop contents block over each item in the list,\n"
-    "  assigning the loop_var to each item in sequence.\n"
+    "  assigning the loop_var to each item in sequence. The loop_var will be\n"
+    "  a copy so assigning to it will not mutate the list.\n"
     "\n"
     "  The block does not introduce a new scope, so that variable assignments\n"
     "  inside the loop will be visible once the loop terminates.\n"
@@ -46,7 +47,7 @@ Value RunForEach(Scope* scope,
                  const FunctionCallNode* function,
                  const ListNode* args_list,
                  Err* err) {
-  const std::vector<const ParseNode*>& args_vector = args_list->contents();
+  const auto& args_vector = args_list->contents();
   if (args_vector.size() != 2) {
     *err = Err(function, "Wrong number of arguments to foreach().",
                "Expecting exactly two.");
@@ -56,7 +57,8 @@ Value RunForEach(Scope* scope,
   // Extract the loop variable.
   const IdentifierNode* identifier = args_vector[0]->AsIdentifier();
   if (!identifier) {
-    *err = Err(args_vector[0], "Expected an identifier for the loop var.");
+    *err =
+        Err(args_vector[0].get(), "Expected an identifier for the loop var.");
     return Value();
   }
   base::StringPiece loop_var(identifier->value().value());
@@ -68,7 +70,7 @@ Value RunForEach(Scope* scope,
   if (list_identifier) {
     list_value = scope->GetValue(list_identifier->value().value(), true);
     if (!list_value) {
-      *err = Err(args_vector[1], "Undefined identifier.");
+      *err = Err(args_vector[1].get(), "Undefined identifier.");
       return Value();
     }
   } else {

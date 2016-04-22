@@ -8,7 +8,6 @@
 
 #include "base/location.h"
 #include "base/message_loop/message_loop.h"
-#include "base/metrics/histogram.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -18,7 +17,7 @@ namespace internal {
 
 namespace {
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)
 // Delays larger than this are often bogus, and a warning should be emitted in
 // debug builds to warn developers.  http://crbug.com/450045
 const int kTaskDelayWarningThresholdInSeconds =

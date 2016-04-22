@@ -10,8 +10,7 @@ if (is_android) {
 }
 
 source_set("test_config") {
-  # TODO http://crbug.com/412064 enable this flag all the time.
-  testonly = !is_component_build
+  testonly = true
   sources = [
     "test_switches.cc",
     "test_switches.h",
@@ -25,8 +24,7 @@ source_set("test_config") {
 
 # GYP: //base/base.gyp:test_support_base
 source_set("test_support") {
-  # TODO http://crbug.com/412064 enable this flag all the time.
-  testonly = !is_component_build
+  testonly = true
   sources = [
     "gtest_util.cc",
     "gtest_util.h",
@@ -90,6 +88,8 @@ source_set("test_support") {
     "test_io_thread.h",
     "test_listener_ios.h",
     "test_listener_ios.mm",
+    "test_message_loop.cc",
+    "test_message_loop.h",
     "test_mock_time_task_runner.cc",
     "test_mock_time_task_runner.h",
     "test_pending_task.cc",
