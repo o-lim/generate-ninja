@@ -208,7 +208,8 @@ void NinjaBuildWriter::WriteNinjaRules() {
   // This rule will regenerate the ninja files when any input file has changed.
   out_ << "build build.ninja: gn\n"
        << "  generator = 1\n"
-       << "  depfile = build.ninja.d\n";
+       << "  depfile = build.ninja.d\n"
+       << "  pool = console\n";
 
   // Input build files. These go in the ".d" file. If we write them as
   // dependencies in the .ninja file itself, ninja will expect the files to
