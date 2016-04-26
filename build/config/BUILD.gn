@@ -51,7 +51,6 @@ config("feature_flags") {
   # TODO(brettw) this probably needs to be parameterized.
   defines = [
     "V8_DEPRECATION_WARNINGS",  # Don't use deprecated V8 APIs anywhere.
-    "CLD_VERSION=$cld_version",
   ]
   if (enable_mdns) {
     defines += [ "ENABLE_MDNS=1" ]
@@ -355,16 +354,9 @@ config("default_libs") {
       "m",
     ]
   } else if (is_mac) {
-    libs = [
-      "AppKit.framework",
-      "ApplicationServices.framework",
-      "Carbon.framework",
-      "CoreFoundation.framework",
-      "Foundation.framework",
-      "IOKit.framework",
-      "OpenGL.framework",
-      "Security.framework",
-    ]
+    # Targets should choose to explicitly link frameworks they require. Since
+    # linking can have run-time side effects, nothing should be listed here.
+    libs = []
   } else if (is_ios) {
     # The libraries listed here will be specified for both the target and the
     # host. Only the common ones should be listed here.
@@ -438,8 +430,7 @@ config("shared_library_config") {
 # Recommend precompiled headers for targets with more than 50 .cc files.
 config("precompiled_headers") {
   if (!is_official_build && !use_goma && !disable_precompiled_headers) {
-    # TODO(thakis): Reenable on clang after https://crbug.com/605570 is fixed.
-    if (is_win && !is_clang) {
+    if (is_win) {
       # This is a string rather than a file GN knows about. It has to match
       # exactly what's in the /FI flag below, and what might appear in the
       # source code in quotes for an #include directive.
