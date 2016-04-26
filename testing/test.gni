@@ -94,7 +94,11 @@ template("test") {
     if (_generate_device_isolate) {
       _allow_odd_runtime_deps = defined(invoker.allow_odd_runtime_deps) &&
                                 invoker.allow_odd_runtime_deps
-      _device_isolate_path = "$target_gen_dir/$target_name.device.isolate"
+
+      # The device isolate is needed at runtime, so it cannot go in
+      # target_gen_dir, as builder/tester configurations do not include it.
+      _target_dir_name = get_label_info(":$target_name", "dir")
+      _device_isolate_path = "$root_out_dir/gen.runtime/$_target_dir_name/$target_name.device.isolate"
       _gen_isolate_target_name = "${target_name}__isolate"
       _gen_isolate(_gen_isolate_target_name) {
         data_deps = []

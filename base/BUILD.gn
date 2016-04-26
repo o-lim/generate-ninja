@@ -773,6 +773,8 @@ component("base") {
     "task_scheduler/scheduler_thread_pool.h",
     "task_scheduler/scheduler_worker_thread.cc",
     "task_scheduler/scheduler_worker_thread.h",
+    "task_scheduler/scheduler_worker_thread_stack.cc",
+    "task_scheduler/scheduler_worker_thread_stack.h",
     "task_scheduler/sequence.cc",
     "task_scheduler/sequence.h",
     "task_scheduler/sequence_sort_key.cc",
@@ -866,6 +868,7 @@ component("base") {
     "trace_event/blame_context.cc",
     "trace_event/blame_context.h",
     "trace_event/common/trace_event_common.h",
+    "trace_event/heap_profiler.h",
     "trace_event/heap_profiler_allocation_context.cc",
     "trace_event/heap_profiler_allocation_context.h",
     "trace_event/heap_profiler_allocation_context_tracker.cc",
@@ -1268,7 +1271,14 @@ component("base") {
       "trace_event/malloc_dump_provider.cc",
       "trace_event/malloc_dump_provider.h",
     ]
-    libs = [ "bsm" ]
+    libs = [
+      "ApplicationServices.framework",
+      "AppKit.framework",
+      "bsm",
+      "CoreFoundation.framework",
+      "IOKit.framework",
+      "Security.framework",
+    ]
   }
 
   # Mac or iOS.
@@ -1849,10 +1859,13 @@ test("base_unittests") {
     "task_scheduler/priority_queue_unittest.cc",
     "task_scheduler/scheduler_lock_unittest.cc",
     "task_scheduler/scheduler_thread_pool_unittest.cc",
+    "task_scheduler/scheduler_worker_thread_stack_unittest.cc",
     "task_scheduler/scheduler_worker_thread_unittest.cc",
     "task_scheduler/sequence_sort_key_unittest.cc",
     "task_scheduler/sequence_unittest.cc",
     "task_scheduler/task_tracker_unittest.cc",
+    "task_scheduler/test_task_factory.cc",
+    "task_scheduler/test_task_factory.h",
     "task_scheduler/test_utils.h",
     "task_scheduler/utils_unittest.cc",
     "template_util_unittest.cc",

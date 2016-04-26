@@ -539,6 +539,7 @@ const char kDesc_Help[] =
     "  outputs\n"
     "      Outputs for script and copy target types.\n"
     "\n"
+    "  arflags         [--blame]\n"
     "  asmflags        [--blame]\n"
     "  asmppflags      [--blame]\n"
     "  defines         [--blame]\n"
@@ -690,9 +691,11 @@ int RunDesc(const std::vector<std::string>& args) {
       PrintLibs(target, false);
     } else if (what == "runtime_deps") {
       PrintRuntimeDeps(target);
+//  }  Hidden closing brace in macro below.
 
     CONFIG_VALUE_HANDLER(defines, std::string)
     CONFIG_VALUE_HANDLER(include_dirs, SourceDir)
+    CONFIG_VALUE_HANDLER(arflags, std::string)
     CONFIG_VALUE_HANDLER(asmflags, std::string)
     CONFIG_VALUE_HANDLER(asmppflags, std::string)
     CONFIG_VALUE_HANDLER(cflags, std::string)
@@ -773,7 +776,11 @@ int RunDesc(const std::vector<std::string>& args) {
     OUTPUT_CONFIG_VALUE(cppflags_cc, std::string)
     OUTPUT_CONFIG_VALUE(cppflags_objc, std::string)
     OUTPUT_CONFIG_VALUE(cppflags_objcc, std::string)
-    OUTPUT_CONFIG_VALUE(ldflags, std::string)
+
+    if (target->output_type() == Target::STATIC_LIBRARY)
+      OUTPUT_CONFIG_VALUE(arflags, std::string)
+    else if (target->output_type() != Target::SOURCE_SET)
+      OUTPUT_CONFIG_VALUE(ldflags, std::string)
   }
 
   if (target->output_type() == Target::ACTION ||

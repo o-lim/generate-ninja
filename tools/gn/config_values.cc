@@ -23,6 +23,7 @@ ConfigValues::~ConfigValues() {
 }
 
 void ConfigValues::AppendValues(const ConfigValues& append) {
+  VectorAppend(&arflags_,        append.arflags_);
   VectorAppend(&asmflags_,       append.asmflags_);
   VectorAppend(&asmppflags_,     append.asmppflags_);
   VectorAppend(&cflags_,         append.cflags_);
