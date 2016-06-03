@@ -43,11 +43,11 @@ TEST(Scope, NonRecursiveMergeTo) {
 
   // Add some templates to the scope.
   FunctionCallNode templ_definition;
-  scoped_refptr<Template> templ(new Template(setup.scope(), &templ_definition));
-  setup.scope()->AddTemplate("templ", templ.get());
+  scoped_refptr<Template> templ(new Template("templ", setup.scope(), &templ_definition));
+  setup.scope()->AddTemplate(templ.get());
   scoped_refptr<Template> private_templ(
-      new Template(setup.scope(), &templ_definition));
-  setup.scope()->AddTemplate("_templ", private_templ.get());
+      new Template("_templ", setup.scope(), &templ_definition));
+  setup.scope()->AddTemplate(private_templ.get());
 
   // Detect collisions of values' values.
   {
@@ -67,8 +67,8 @@ TEST(Scope, NonRecursiveMergeTo) {
     Scope new_scope(setup.settings());
 
     scoped_refptr<Template> new_templ(
-        new Template(&new_scope, &templ_definition));
-    new_scope.AddTemplate("templ", new_templ.get());
+        new Template("templ", &new_scope, &templ_definition));
+    new_scope.AddTemplate(new_templ.get());
 
     Err err;
     EXPECT_FALSE(setup.scope()->NonRecursiveMergeTo(
@@ -99,8 +99,8 @@ TEST(Scope, NonRecursiveMergeTo) {
     Scope new_scope(setup.settings());
 
     scoped_refptr<Template> new_templ(
-        new Template(&new_scope, &templ_definition));
-    new_scope.AddTemplate("templ", new_templ.get());
+        new Template("templ", &new_scope, &templ_definition));
+    new_scope.AddTemplate(new_templ.get());
     Scope::MergeOptions options;
     options.clobber_existing = true;
 
@@ -131,8 +131,8 @@ TEST(Scope, NonRecursiveMergeTo) {
     Scope new_scope(setup.settings());
 
     scoped_refptr<Template> new_templ(
-        new Template(&new_scope, &templ_definition));
-    new_scope.AddTemplate("templ", templ.get());
+        new Template("templ", &new_scope, &templ_definition));
+    new_scope.AddTemplate(templ.get());
 
     Err err;
     EXPECT_TRUE(setup.scope()->NonRecursiveMergeTo(

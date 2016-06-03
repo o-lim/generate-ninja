@@ -191,7 +191,7 @@ Value RunTemplate(Scope* scope,
     return Value();
   }
 
-  scope->AddTemplate(template_name, new Template(scope, function));
+  scope->AddTemplate(new Template(template_name, scope, function));
   return Value();
 }
 

@@ -6,6 +6,7 @@
 #define TOOLS_GN_TEMPLATE_H_
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "base/memory/ref_counted.h"
@@ -27,10 +28,17 @@ class Value;
 class Template : public base::RefCountedThreadSafe<Template> {
  public:
   // Makes a new closure based on the given scope.
-  Template(const Scope* scope, const FunctionCallNode* def);
+  Template(const std::string& name,
+           const Scope* scope,
+           const FunctionCallNode* def);
 
   // Takes ownership of a previously-constructed closure.
-  Template(std::unique_ptr<Scope> closure, const FunctionCallNode* def);
+  Template(const std::string& name,
+           std::unique_ptr<Scope> closure,
+           const FunctionCallNode* def);
+
+  // Returns the name of the template
+  std::string GetName() const { return name_; }
 
   // Invoke the template. The values correspond to the state of the code
   // invoking the template.
@@ -49,6 +57,7 @@ class Template : public base::RefCountedThreadSafe<Template> {
   Template();
   ~Template();
 
+  std::string name_;
   std::unique_ptr<Scope> closure_;
   const FunctionCallNode* definition_;
 };

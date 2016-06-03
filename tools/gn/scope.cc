@@ -173,7 +173,8 @@ void Scope::RemovePrivateIdentifiers() {
     values_.erase(cur);
 }
 
-bool Scope::AddTemplate(const std::string& name, const Template* templ) {
+bool Scope::AddTemplate(const Template* templ) {
+  const std::string& name = templ->GetName();
   if (GetTemplate(name))
     return false;
   templates_[name] = templ;

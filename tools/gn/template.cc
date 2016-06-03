@@ -13,13 +13,18 @@
 #include "tools/gn/scope_per_file_provider.h"
 #include "tools/gn/value.h"
 
-Template::Template(const Scope* scope, const FunctionCallNode* def)
-    : closure_(scope->MakeClosure()),
+Template::Template(const std::string& name,
+                   const Scope* scope,
+                   const FunctionCallNode* def)
+    : name_(name),
+      closure_(scope->MakeClosure()),
       definition_(def) {
 }
 
-Template::Template(std::unique_ptr<Scope> scope, const FunctionCallNode* def)
-    : closure_(std::move(scope)), definition_(def) {}
+Template::Template(const std::string& name,
+                   std::unique_ptr<Scope> scope,
+                   const FunctionCallNode* def)
+    : name_(name), closure_(std::move(scope)), definition_(def) {}
 
 Template::~Template() {
 }
@@ -37,8 +42,7 @@ Value Template::Invoke(Scope* scope,
   // First run the invocation's block. Need to allocate the scope on the heap
   // so we can pass ownership to the template.
   std::unique_ptr<Scope> invocation_scope(new Scope(scope));
-  if (!FillTargetBlockScope(scope, invocation,
-                            invocation->function().value().as_string(),
+  if (!FillTargetBlockScope(scope, invocation, name_,
                             block, args, invocation_scope.get(), err))
     return Value();
 

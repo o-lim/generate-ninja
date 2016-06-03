@@ -183,7 +183,7 @@ class Scope {
   // AddTemplate will fail and return false if a rule with that name already
   // exists. GetTemplate returns NULL if the rule doesn't exist, and it will
   // check all containing scoped rescursively.
-  bool AddTemplate(const std::string& name, const Template* templ);
+  bool AddTemplate(const Template* templ);
   const Template* GetTemplate(const std::string& name) const;
 
   // Marks the given identifier as (un)used in the current scope.
