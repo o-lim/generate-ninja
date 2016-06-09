@@ -322,7 +322,7 @@ const char kTargetOutDir_Help[] =
 
 #define COMMON_ORDERING_HELP \
     "\n" \
-    "Ordering of flags and values\n" \
+    "Ordering of libs and dirs\n" \
     "\n" \
     "  1. Those set on the current target (not in a config).\n" \
     "  2. Those set on the \"configs\" on the target in order that the\n" \
@@ -336,7 +336,23 @@ const char kTargetOutDir_Help[] =
     "     more than once, only the first occurance will be used.\n" \
     "  6. public_configs pulled from dependencies, in the order of the\n" \
     "     \"deps\" list. If a dependency is public, they will be applied\n" \
-    "     recursively.\n"
+    "     recursively.\n" \
+    "\n" \
+    "Ordering of flags and defines\n" \
+    "\n" \
+    "  1. public_configs pulled from dependencies, in the order of the\n" \
+    "     \"deps\" list. If a dependency is public, they will be applied\n" \
+    "     recursively.\n" \
+    "  2. all_dependent_configs pulled from dependencies, in the order of\n" \
+    "     the \"deps\" list. This is done recursively. If a config appears\n" \
+    "     more than once, only the first occurance will be used.\n" \
+    "  3. Those set on the \"public_configs\" on the target in order that\n" \
+    "     those configs appear in the list.\n" \
+    "  4. Those set on the \"all_dependent_configs\" on the target in order\n" \
+    "     that the configs appear in the list.\n" \
+    "  5. Those set on the \"configs\" on the target in order that the\n" \
+    "     configs appear in the list.\n" \
+    "  6. Those set on the current target (not in a config).\n"
 
 const char kAllDependentConfigs[] = "all_dependent_configs";
 const char kAllDependentConfigs_HelpShort[] =

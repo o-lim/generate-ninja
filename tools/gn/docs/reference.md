@@ -1386,7 +1386,10 @@
 
   The values in a config are additive only. If you want to remove a flag
   you need to remove the corresponding config that sets it. The final
-  set of flags, defines, etc. for a target is generated in this order:
+  order of flags, defines, etc. for a target is generated based on
+  the config value in question.
+
+  The ordering of libs and dirs are as follows:
 
    1. The values specified directly on the target (rather than using a
       config.
@@ -1395,6 +1398,25 @@
       tree in the order that the targets appear in "deps".
    4. All dependent configs from a breadth-first traversal of the
       dependency tree in the order that the targets appear in "deps".
+
+  The ordering of flags and defines are as follows:
+
+   1. All dependent configs from a breadth-first traversal of the
+      dependency tree in the order that the targets appear in "deps".
+   2. Public_configs from a breadth-first traversal of the dependency
+      tree in the order that the targets appear in "deps".
+   3. The configs specified in the target's "configs" list, in order.
+   4. The values specified directly on the target (rather than using a
+      config.
+
+  On the command-line, the precedence of include dirs and lib dirs is
+  the same as the order specified on the command-line. However, for
+  compile flags, the last flag on the command-line takes precedence
+  over all preceding flags. Hence, the need for two separate orderings,
+  one for dirs and one for flags and defines, so that values specified
+  directly on the target take precedence over those specified in the
+  target's "configs" list, which take precedence over public configs
+  and all dependent configs.
 
 ```
 
@@ -4035,7 +4057,7 @@
 
 ```
 
-### **Ordering of flags and values**
+### **Ordering of libs and dirs**
 
 ```
   1. Those set on the current target (not in a config).
@@ -4051,6 +4073,25 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
+
+```
+
+### **Ordering of flags and defines**
+
+```
+  1. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+  2. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  3. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  4. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  5. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  6. Those set on the current target (not in a config).
 
 
 ```
@@ -4153,7 +4194,7 @@
 
 ```
 
-### **Ordering of flags and values**
+### **Ordering of libs and dirs**
 
 ```
   1. Those set on the current target (not in a config).
@@ -4169,6 +4210,25 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
+
+```
+
+### **Ordering of flags and defines**
+
+```
+  1. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+  2. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  3. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  4. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  5. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  6. Those set on the current target (not in a config).
 
 
 ```
@@ -4193,7 +4253,7 @@
 
 ```
 
-### **Ordering of flags and values**
+### **Ordering of libs and dirs**
 
 ```
   1. Those set on the current target (not in a config).
@@ -4209,6 +4269,25 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
+
+```
+
+### **Ordering of flags and defines**
+
+```
+  1. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+  2. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  3. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  4. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  5. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  6. Those set on the current target (not in a config).
 
 
 ```
@@ -4222,7 +4301,7 @@
 
 ```
 
-### **Ordering of flags and values**
+### **Ordering of libs and dirs**
 
 ```
   1. Those set on the current target (not in a config).
@@ -4238,6 +4317,25 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
+
+```
+
+### **Ordering of flags and defines**
+
+```
+  1. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+  2. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  3. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  4. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  5. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  6. Those set on the current target (not in a config).
 
 
 ```
@@ -4371,7 +4469,7 @@
 
 ```
 
-### **Ordering of flags and values**
+### **Ordering of libs and dirs**
 
 ```
   1. Those set on the current target (not in a config).
@@ -4387,6 +4485,25 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
+
+```
+
+### **Ordering of flags and defines**
+
+```
+  1. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+  2. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  3. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  4. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  5. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  6. Those set on the current target (not in a config).
 
 
 ```
@@ -4407,7 +4524,7 @@
 
 ```
 
-### **Ordering of flags and values**
+### **Ordering of libs and dirs**
 
 ```
   1. Those set on the current target (not in a config).
@@ -4423,6 +4540,25 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
+
+```
+
+### **Ordering of flags and defines**
+
+```
+  1. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+  2. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  3. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  4. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  5. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  6. Those set on the current target (not in a config).
 
 
 ```
@@ -4443,7 +4579,7 @@
 
 ```
 
-### **Ordering of flags and values**
+### **Ordering of libs and dirs**
 
 ```
   1. Those set on the current target (not in a config).
@@ -4459,6 +4595,25 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
+
+```
+
+### **Ordering of flags and defines**
+
+```
+  1. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+  2. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  3. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  4. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  5. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  6. Those set on the current target (not in a config).
 
 
 ```
@@ -4479,7 +4634,7 @@
 
 ```
 
-### **Ordering of flags and values**
+### **Ordering of libs and dirs**
 
 ```
   1. Those set on the current target (not in a config).
@@ -4495,6 +4650,25 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
+
+```
+
+### **Ordering of flags and defines**
+
+```
+  1. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+  2. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  3. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  4. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  5. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  6. Those set on the current target (not in a config).
 
 
 ```
@@ -4515,7 +4689,7 @@
 
 ```
 
-### **Ordering of flags and values**
+### **Ordering of libs and dirs**
 
 ```
   1. Those set on the current target (not in a config).
@@ -4531,6 +4705,25 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
+
+```
+
+### **Ordering of flags and defines**
+
+```
+  1. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+  2. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  3. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  4. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  5. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  6. Those set on the current target (not in a config).
 
 
 ```
@@ -4707,7 +4900,7 @@
 
 ```
 
-### **Ordering of flags and values**
+### **Ordering of libs and dirs**
 
 ```
   1. Those set on the current target (not in a config).
@@ -4723,6 +4916,25 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
+
+```
+
+### **Ordering of flags and defines**
+
+```
+  1. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+  2. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  3. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  4. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  5. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  6. Those set on the current target (not in a config).
 
 ```
 
@@ -4798,7 +5010,7 @@
 
 ```
 
-### **Ordering of flags and values**
+### **Ordering of libs and dirs**
 
 ```
   1. Those set on the current target (not in a config).
@@ -4814,6 +5026,25 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
+
+```
+
+### **Ordering of flags and defines**
+
+```
+  1. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+  2. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  3. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  4. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  5. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  6. Those set on the current target (not in a config).
 
 
 ```
@@ -4834,7 +5065,7 @@
 
 ```
 
-### **Ordering of flags and values**
+### **Ordering of libs and dirs**
 
 ```
   1. Those set on the current target (not in a config).
@@ -4850,6 +5081,25 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
+
+```
+
+### **Ordering of flags and defines**
+
+```
+  1. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+  2. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  3. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  4. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  5. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  6. Those set on the current target (not in a config).
 
 
 ```
@@ -4870,7 +5120,7 @@
 
 ```
 
-### **Ordering of flags and values**
+### **Ordering of libs and dirs**
 
 ```
   1. Those set on the current target (not in a config).
@@ -4886,6 +5136,25 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
+
+```
+
+### **Ordering of flags and defines**
+
+```
+  1. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+  2. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  3. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  4. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  5. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  6. Those set on the current target (not in a config).
 
 
 ```
@@ -4906,7 +5175,7 @@
 
 ```
 
-### **Ordering of flags and values**
+### **Ordering of libs and dirs**
 
 ```
   1. Those set on the current target (not in a config).
@@ -4922,6 +5191,25 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
+
+```
+
+### **Ordering of flags and defines**
+
+```
+  1. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+  2. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  3. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  4. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  5. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  6. Those set on the current target (not in a config).
 
 
 ```
@@ -4942,7 +5230,7 @@
 
 ```
 
-### **Ordering of flags and values**
+### **Ordering of libs and dirs**
 
 ```
   1. Those set on the current target (not in a config).
@@ -4958,6 +5246,25 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
+
+```
+
+### **Ordering of flags and defines**
+
+```
+  1. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+  2. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  3. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  4. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  5. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  6. Those set on the current target (not in a config).
 
 
 ```
@@ -5033,7 +5340,7 @@
 
 ```
 
-### **Ordering of flags and values**
+### **Ordering of libs and dirs**
 
 ```
   1. Those set on the current target (not in a config).
@@ -5049,6 +5356,25 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
+
+```
+
+### **Ordering of flags and defines**
+
+```
+  1. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+  2. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  3. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  4. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  5. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  6. Those set on the current target (not in a config).
 
 ```
 
@@ -5147,7 +5473,7 @@
 
 ```
 
-### **Ordering of flags and values**
+### **Ordering of libs and dirs**
 
 ```
   1. Those set on the current target (not in a config).
@@ -5163,6 +5489,25 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
+
+```
+
+### **Ordering of flags and defines**
+
+```
+  1. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+  2. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  3. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  4. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  5. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  6. Those set on the current target (not in a config).
 
 ```
 
@@ -5279,7 +5624,7 @@
 
 ```
 
-### **Ordering of flags and values**
+### **Ordering of libs and dirs**
 
 ```
   1. Those set on the current target (not in a config).
@@ -5295,6 +5640,25 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
+
+```
+
+### **Ordering of flags and defines**
+
+```
+  1. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+  2. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  3. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  4. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  5. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  6. Those set on the current target (not in a config).
 
 
 ```
@@ -5315,7 +5679,7 @@
 
 ```
 
-### **Ordering of flags and values**
+### **Ordering of libs and dirs**
 
 ```
   1. Those set on the current target (not in a config).
@@ -5331,6 +5695,25 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
+
+```
+
+### **Ordering of flags and defines**
+
+```
+  1. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+  2. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  3. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  4. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  5. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  6. Those set on the current target (not in a config).
 
   For "libs" and "lib_dirs" only, the values propagated from
   dependencies (as described above) are applied last assuming they
@@ -5390,7 +5773,7 @@
 
 ```
 
-### **Ordering of flags and values**
+### **Ordering of libs and dirs**
 
 ```
   1. Those set on the current target (not in a config).
@@ -5406,6 +5789,25 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
+
+```
+
+### **Ordering of flags and defines**
+
+```
+  1. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+  2. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  3. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  4. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  5. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  6. Those set on the current target (not in a config).
 
   For "libs" and "lib_dirs" only, the values propagated from
   dependencies (as described above) are applied last assuming they
@@ -5721,7 +6123,7 @@
 
 ```
 
-### **Ordering of flags and values**
+### **Ordering of libs and dirs**
 
 ```
   1. Those set on the current target (not in a config).
@@ -5737,6 +6139,25 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
+
+```
+
+### **Ordering of flags and defines**
+
+```
+  1. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+  2. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurance will be used.
+  3. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  4. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  5. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  6. Those set on the current target (not in a config).
 
 
 ```

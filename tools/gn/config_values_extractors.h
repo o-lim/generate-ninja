@@ -73,6 +73,51 @@ class ConfigValuesIterator {
   int cur_index_;
 };
 
+class ConfigValuesReverseIterator {
+ public:
+  explicit ConfigValuesReverseIterator(const Target* target)
+      : target_(target),
+        cur_index_(static_cast<int>(target_->configs().size()) - 1) {
+  }
+
+  bool done() const {
+    return cur_index_ < -1;
+  }
+
+  const ConfigValues& cur() const {
+    if (cur_index_ == -1)
+      return target_->config_values();
+    return target_->configs()[cur_index_].ptr->resolved_values();
+  }
+
+  // Returns the origin of who added this config, if any. This will always be
+  // null for the config values of a target itself.
+  const ParseNode* origin() const {
+    if (cur_index_ == -1)
+      return nullptr;
+    return target_->configs()[cur_index_].origin;
+  }
+
+  void Next() {
+    cur_index_--;
+  }
+
+  // Returns the config holding the current config values, or NULL for those
+  // config values associated with the target itself.
+  const Config* GetCurrentConfig() const {
+    if (cur_index_ == -1)
+      return nullptr;
+    return target_->configs()[cur_index_].ptr;
+  }
+
+ private:
+  const Target* target_;
+
+  // Represents an index into the target_'s configs() or, when -1, the config
+  // values on the target itself.
+  int cur_index_;
+};
+
 template<typename T, class Writer>
 inline void ConfigValuesToStream(
     const ConfigValues& values,
@@ -97,8 +142,24 @@ inline void RecursiveTargetConfigToStream(
     ConfigValuesToStream(iter.cur(), getter, writer, out);
 }
 
+template<typename T, class Writer>
+inline void ReverseRecursiveTargetConfigToStream(
+    const Target* target,
+    const std::vector<T>& (ConfigValues::* getter)() const,
+    const Writer& writer,
+    std::ostream& out) {
+  for (ConfigValuesReverseIterator iter(target); !iter.done(); iter.Next())
+    ConfigValuesToStream(iter.cur(), getter, writer, out);
+}
+
 // Writes the values out as strings with no transformation.
 void RecursiveTargetConfigStringsToStream(
+    const Target* target,
+    const std::vector<std::string>& (ConfigValues::* getter)() const,
+    const EscapeOptions& escape_options,
+    std::ostream& out);
+
+void ReverseRecursiveTargetConfigStringsToStream(
     const Target* target,
     const std::vector<std::string>& (ConfigValues::* getter)() const,
     const EscapeOptions& escape_options,
