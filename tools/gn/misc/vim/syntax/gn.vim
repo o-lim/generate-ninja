@@ -32,11 +32,13 @@ hi def link     gnTarget            Type
 
 " Buildfile functions
 syn keyword     gnFunctions assert config declare_args defined exec_script
-syn keyword     gnFunctions foreach get_label_info get_path_info
+syn keyword     gnFunctions foreach forward_variables_from
+syn keyword     gnFunctions get_label_info get_path_info
 syn keyword     gnFunctions get_target_outputs getenv import print
+syn keyword     gnFunctions mark_used mark_used_from
 syn keyword     gnFunctions process_file_template read_file rebase_path
 syn keyword     gnFunctions set_default_toolchain set_defaults
-syn keyword     gnFunctions set_sources_assignment_filter template tool
+syn keyword     gnFunctions set_sources_assignment_filter target template tool
 syn keyword     gnFunctions toolchain toolchain_args write_file
 hi def link     gnFunctions         Macro
 
