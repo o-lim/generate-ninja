@@ -48,9 +48,10 @@ syn keyword     gnVariable args asmflags asmppflags cflags cflags_c cflags_cc
 syn keyword     gnVariable cflags_objc cflags_objcc check_includes console
 syn keyword     gnVariable complete_static_lib cppflags cppflags_c cppflags_cc
 syn keyword     gnVariable cppflags_objc cppflags_objcc command configs
+syn keyword     gnVariable data data_deps defines define_switch
 syn keyword     gnVariable default_output_extension default_output_dir
-syn keyword     gnVariable depend_output description data data_deps defines
-syn keyword     gnVariable depfile deps depsformat include_dirs inputs
+syn keyword     gnVariable depend_output depfile deps depsformat
+syn keyword     gnVariable description include_dirs inputs include_switch
 syn keyword     gnVariable interpreter ldflags lib_dirs libs output_extension
 syn keyword     gnVariable output_dir output_name outputs link_output
 syn keyword     gnVariable output_prefix lib_switch lib_dir_switch

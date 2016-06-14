@@ -126,8 +126,19 @@ class Toolchain : public Item {
   void set_concurrent_links(int cl) { concurrent_links_ = cl; }
   int concurrent_links() const { return concurrent_links_; }
 
-  const std::vector<std::string> & object_extensions() const { return object_extensions_; }
+  void set_object_extensions(const std::vector<std::string> & exts) {
+    object_extensions_ = exts;
+  }
+  const std::vector<std::string> & object_extensions() const {
+    return object_extensions_;
+  }
   std::vector<std::string> & object_extensions() { return object_extensions_; }
+
+  void set_define_switch(const std::string& s) { define_switch_ = s; }
+  const std::string& define_switch() const { return define_switch_; }
+
+  void set_include_switch(const std::string& s) { include_switch_ = s; }
+  const std::string& include_switch() const { return include_switch_; }
 
  private:
   std::unique_ptr<Tool> tools_[TYPE_NUMTYPES];
@@ -145,6 +156,9 @@ class Toolchain : public Item {
   Scope::KeyValueMap args_;
 
   std::vector<std::string> object_extensions_;
+
+  std::string define_switch_;
+  std::string include_switch_;
 };
 
 #endif  // TOOLS_GN_TOOLCHAIN_H_

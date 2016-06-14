@@ -56,20 +56,23 @@ EscapeOptions GetFlagOptions() {
 }
 
 struct DefineWriter {
-  DefineWriter() {
+  explicit DefineWriter(const std::string& prefix): prefix_(prefix) {
     options.mode = ESCAPE_NINJA_COMMAND;
   }
 
   void operator()(const std::string& s, std::ostream& out) const {
-    out << " -D";
+    out << " " << prefix_;
     EscapeStringToStream(out, s, options);
   }
 
+  std::string prefix_;
   EscapeOptions options;
 };
 
 struct IncludeWriter {
-  explicit IncludeWriter(PathOutput& path_output) : path_output_(path_output) {
+  IncludeWriter(const std::string& prefix, PathOutput& path_output)
+    : prefix_(prefix),
+      path_output_(path_output) {
   }
   ~IncludeWriter() {
   }
@@ -79,11 +82,12 @@ struct IncludeWriter {
     path_output_.WriteDir(path_out, d, PathOutput::DIR_NO_LAST_SLASH);
     const std::string& path = path_out.str();
     if (path[0] == '"')
-      out << " \"-I" << path.substr(1);
+      out << " \"" << prefix_ << path.substr(1);
     else
-      out << " -I" << path;
+      out << " " << prefix_ << path;
   }
 
+  std::string prefix_;
   PathOutput& path_output_;
 };
 
@@ -355,7 +359,8 @@ void NinjaBinaryTargetWriter::WriteCompilerVars(
   if (subst.used[SUBSTITUTION_DEFINES]) {
     out_ << kSubstitutionNinjaNames[SUBSTITUTION_DEFINES] << " =";
     RecursiveTargetConfigToStream<std::string>(
-        target_, &ConfigValues::defines, DefineWriter(), out_);
+        target_, &ConfigValues::defines,
+        DefineWriter(target_->toolchain()->define_switch()), out_);
     out_ << std::endl;
   }
 
@@ -368,7 +373,8 @@ void NinjaBinaryTargetWriter::WriteCompilerVars(
         ESCAPE_NINJA_COMMAND);
     RecursiveTargetConfigToStream<SourceDir>(
         target_, &ConfigValues::include_dirs,
-        IncludeWriter(include_path_output), out_);
+        IncludeWriter(target_->toolchain()->include_switch(),
+                      include_path_output), out_);
     out_ << std::endl;
   }
 

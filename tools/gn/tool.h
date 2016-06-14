@@ -175,10 +175,10 @@ class Tool {
     rspfile_content_ = content;
   }
 
-  const std::vector<Value> & source_extensions() const {
+  const std::vector<std::string> & source_extensions() const {
     return source_extensions_;
   }
-  void set_source_extensions(const std::vector<Value> & exts) {
+  void set_source_extensions(const std::vector<std::string> & exts) {
     source_extensions_ = exts;
   }
 
@@ -218,7 +218,7 @@ class Tool {
   bool restat_;
   SubstitutionPattern rspfile_;
   SubstitutionPattern rspfile_content_;
-  std::vector<Value> source_extensions_;
+  std::vector<std::string> source_extensions_;
 
   bool complete_;
 

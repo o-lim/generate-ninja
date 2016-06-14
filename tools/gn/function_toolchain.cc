@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <algorithm>
+#include <functional>
 #include <limits>
 #include <utility>
 
@@ -18,6 +19,8 @@
 #include "tools/gn/variables.h"
 
 namespace functions {
+
+using namespace std::placeholders;
 
 namespace {
 
@@ -44,8 +47,7 @@ bool ReadBool(Scope* scope,
 // dest. If the value is not a string, sets the error and returns false.
 bool ReadString(Scope* scope,
                 const char* var,
-                Tool* tool,
-                void (Tool::*set)(const std::string&),
+                const std::function<void (const std::string&)> & set,
                 Err* err) {
   const Value* v = scope->GetValue(var, true);
   if (!v)
@@ -53,18 +55,18 @@ bool ReadString(Scope* scope,
   if (!v->VerifyTypeIs(Value::STRING, err))
     return false;
 
-  (tool->*set)(v->string_value());
+  set(v->string_value());
   return true;
 }
+
 
 // Reads the given string list from the scope (if present) and puts the result
 // into dest. If the value is not a string list, sets the error and returns
 // false.
 bool ReadStringList(Scope* scope,
-                const char* var,
-                Tool* tool,
-                void (Tool::*set)(const std::vector<Value>&),
-                Err* err) {
+                    const char* var,
+                    const std::function<void(const std::vector<std::string>&)> & set,
+                    Err* err) {
   const Value* v = scope->GetValue(var, true);
   if (!v)
     return true;  // Not present is fine.
@@ -75,7 +77,9 @@ bool ReadStringList(Scope* scope,
       return false;
   }
 
-  (tool->*set)(v->list_value());
+  std::vector<std::string> sv;
+  ExtractListOfStringValues(*v, &sv, err);
+  set(sv);
   return true;
 }
 
@@ -285,6 +289,14 @@ const char kToolchain_Help[] =
     "    The value used will be the one from the default toolchain of the\n"
     "    current build.\n"
     "\n"
+    "  define_switch\n"
+    "    This string will be prepended to the preprocessor macro definitions.\n"
+    "    Defaults to \"-D\".\n"
+    "\n"
+    "  include_switch\n"
+    "    This string will be prepended to the include search directories.\n"
+    "    Defaults to \"-I\".\n"
+    "\n"
     "  object_extensions\n"
     "    List of object extensions for this toolchain. Object files are passed\n"
     "    directly to the output list and not compiled.\n"
@@ -386,14 +398,18 @@ Value RunToolchain(Scope* scope,
         static_cast<int>(concurrent_links_value->int_value()));
   }
 
-  // Read object_extensions (if any).
-  const Value* object_extensions_value =
-      block_scope.GetValue("object_extensions", true);
-  if (object_extensions_value) {
-    ExtractListOfStringValues(
-        *object_extensions_value, &toolchain->object_extensions(), err);
-    if (err->has_error())
-      return Value();
+  // Read switch and extensions variables (if any).
+  if(!ReadString(&block_scope, "define_switch",
+                 std::bind(&Toolchain::set_define_switch, toolchain.get(), _1),
+                 err) ||
+     !ReadString(&block_scope, "include_switch",
+                 std::bind(&Toolchain::set_include_switch, toolchain.get(), _1),
+                 err) ||
+     !ReadStringList(&block_scope, "object_extensions",
+                     std::bind(&Toolchain::set_object_extensions,
+                               toolchain.get(), _1),
+                     err)) {
+    return Value();
   }
 
   if (!block_scope.CheckForUnusedVars(err))
@@ -516,7 +532,7 @@ const char kTool_Help[] =
     "\n"
     "        These strings will be prepended to the libraries and library\n"
     "        search directories, respectively, because linkers differ on how\n"
-    "        specify them. If you specified:\n"
+    "        you specify them. If you specified:\n"
     "          lib_switch = \"-l\"\n"
     "          lib_dir_switch = \"-L\"\n"
     "        then the \"{{libs}}\" expansion for [ \"freetype\", \"expat\"]\n"
@@ -710,13 +726,16 @@ const char kTool_Help[] =
     "    {{cflags_objcc}}\n"
     "    {{defines}}\n"
     "    {{include_dirs}}\n"
-    "        Strings correspond that to the processed flags/defines/include\n"
+    "    {{sys_include_dirs}}\n"
+    "        Strings that correspond to the processed flags/defines/include\n"
     "        directories specified for the target.\n"
     "        Example: \"--enable-foo --enable-bar\"\n"
     "\n"
     "        Defines will be prefixed by \"-D\" and include directories will\n"
     "        be prefixed by \"-I\" (these work with Posix tools as well as\n"
-    "        Microsoft ones).\n"
+    "        Microsoft ones), unless these prefixes are overridden using the\n"
+    "        \"define_switch\" and \"include_switch\" toolchain variables,\n"
+    "        respectively.\n"
     "\n"
     "    {{source}}\n"
     "        The relative path and name of the current input file.\n"
@@ -940,18 +959,18 @@ Value RunTool(Scope* scope,
       !ReadDepsFormat(&block_scope, tool.get(), err) ||
       !ReadPattern(&block_scope, "description", subst_validator, tool.get(),
                    &Tool::set_description, err) ||
-      !ReadString(&block_scope, "lib_switch", tool.get(), &Tool::set_lib_switch,
-                  err) ||
-      !ReadString(&block_scope, "lib_dir_switch", tool.get(),
-                  &Tool::set_lib_dir_switch, err) ||
+      !ReadString(&block_scope, "lib_switch",
+                  std::bind(&Tool::set_lib_switch, tool.get(), _1), err) ||
+      !ReadString(&block_scope, "lib_dir_switch",
+                  std::bind(&Tool::set_lib_dir_switch, tool.get(), _1), err) ||
       !ReadPattern(&block_scope, "link_output", subst_validator, tool.get(),
                    &Tool::set_link_output, err) ||
       !ReadPattern(&block_scope, "depend_output", subst_validator, tool.get(),
                    &Tool::set_depend_output, err) ||
       !ReadPattern(&block_scope, "runtime_link_output", subst_validator,
                    tool.get(), &Tool::set_runtime_link_output, err) ||
-      !ReadString(&block_scope, "output_prefix", tool.get(),
-                  &Tool::set_output_prefix, err) ||
+      !ReadString(&block_scope, "output_prefix",
+                  std::bind(&Tool::set_output_prefix, tool.get(), _1), err) ||
       !ReadPattern(&block_scope, "default_output_dir", subst_validator,
                    tool.get(), &Tool::set_default_output_dir, err) ||
       !ReadPrecompiledHeaderType(&block_scope, tool.get(), err) ||
@@ -960,8 +979,9 @@ Value RunTool(Scope* scope,
                    &Tool::set_rspfile, err) ||
       !ReadPattern(&block_scope, "rspfile_content", subst_validator, tool.get(),
                    &Tool::set_rspfile_content, err) ||
-      !ReadStringList(&block_scope, "source_extensions", tool.get(),
-                   &Tool::set_source_extensions, err)) {
+      !ReadStringList(&block_scope, "source_extensions",
+                      std::bind(&Tool::set_source_extensions, tool.get(), _1),
+                      err)) {
     return Value();
   }
 
