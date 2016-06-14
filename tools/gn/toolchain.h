@@ -140,6 +140,9 @@ class Toolchain : public Item {
   void set_include_switch(const std::string& s) { include_switch_ = s; }
   const std::string& include_switch() const { return include_switch_; }
 
+  void set_sys_include_switch(const std::string& s) { sys_include_switch_ = s; }
+  const std::string& sys_include_switch() const { return sys_include_switch_; }
+
  private:
   std::unique_ptr<Tool> tools_[TYPE_NUMTYPES];
 
@@ -159,6 +162,7 @@ class Toolchain : public Item {
 
   std::string define_switch_;
   std::string include_switch_;
+  std::string sys_include_switch_;
 };
 
 #endif  // TOOLS_GN_TOOLCHAIN_H_

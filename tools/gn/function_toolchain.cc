@@ -297,6 +297,11 @@ const char kToolchain_Help[] =
     "    This string will be prepended to the include search directories.\n"
     "    Defaults to \"-I\".\n"
     "\n"
+    "  sys_include_switch\n"
+    "    This string will be prepended to system include search directories.\n"
+    "    System include directories are searched after the standard include\n"
+    "    directories. Defaults to \"-isystem\".\n"
+    "\n"
     "  object_extensions\n"
     "    List of object extensions for this toolchain. Object files are passed\n"
     "    directly to the output list and not compiled.\n"
@@ -404,6 +409,9 @@ Value RunToolchain(Scope* scope,
                  err) ||
      !ReadString(&block_scope, "include_switch",
                  std::bind(&Toolchain::set_include_switch, toolchain.get(), _1),
+                 err) ||
+     !ReadString(&block_scope, "sys_include_switch",
+                 std::bind(&Toolchain::set_sys_include_switch, toolchain.get(), _1),
                  err) ||
      !ReadStringList(&block_scope, "object_extensions",
                      std::bind(&Toolchain::set_object_extensions,
@@ -731,11 +739,12 @@ const char kTool_Help[] =
     "        directories specified for the target.\n"
     "        Example: \"--enable-foo --enable-bar\"\n"
     "\n"
-    "        Defines will be prefixed by \"-D\" and include directories will\n"
-    "        be prefixed by \"-I\" (these work with Posix tools as well as\n"
-    "        Microsoft ones), unless these prefixes are overridden using the\n"
-    "        \"define_switch\" and \"include_switch\" toolchain variables,\n"
-    "        respectively.\n"
+    "        Defines will be prefixed by \"-D\", include directories will be\n"
+    "        prefixed by \"-I\" (these work with Posix tools as well as\n"
+    "        Microsoft ones), and system include directories will be prefixed\n"
+    "        by \"-isystem\", unless these prefixes are overridden using the\n"
+    "        \"define_switch\", \"include_switch\", and \"sys_include_switch\"\n"
+    "        toolchain variables, respectively.\n"
     "\n"
     "    {{source}}\n"
     "        The relative path and name of the current input file.\n"

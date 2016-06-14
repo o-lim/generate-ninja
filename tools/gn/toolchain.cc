@@ -33,7 +33,8 @@ Toolchain::Toolchain(const Settings* settings, const Label& label)
       concurrent_links_(0),
       setup_complete_(false),
       define_switch_("-D"),
-      include_switch_("-I") {
+      include_switch_("-I"),
+      sys_include_switch_("-isystem ") {
 }
 
 Toolchain::~Toolchain() {

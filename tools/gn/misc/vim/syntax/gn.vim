@@ -58,7 +58,8 @@ syn keyword     gnVariable output_prefix lib_switch lib_dir_switch
 syn keyword     gnVariable precompiled_header precompiled_header_type
 syn keyword     gnVariable precompiled_source restat runtime_link_output
 syn keyword     gnVariable public public_configs public_deps rspfile
-syn keyword     gnVariable rspfile_content script sources testonly visibility
+syn keyword     gnVariable rspfile_content script sources sys_include_dirs
+syn keyword     gnVariable sys_include_switch testonly visibility
 hi def link     gnVariable          Keyword
 
 " Strings

@@ -48,6 +48,7 @@ class ConfigValues {
   STRING_VALUES_ACCESSOR(cppflags_objcc)
   STRING_VALUES_ACCESSOR(defines)
   DIR_VALUES_ACCESSOR   (include_dirs)
+  DIR_VALUES_ACCESSOR   (sys_include_dirs)
   STRING_VALUES_ACCESSOR(ldflags)
   DIR_VALUES_ACCESSOR   (lib_dirs)
   // ==================================================================
@@ -92,6 +93,7 @@ class ConfigValues {
   std::vector<std::string> cppflags_objcc_;
   std::vector<std::string> defines_;
   std::vector<SourceDir>   include_dirs_;
+  std::vector<SourceDir>   sys_include_dirs_;
   std::vector<std::string> ldflags_;
   std::vector<SourceDir>   lib_dirs_;
   std::vector<LibFile>     libs_;

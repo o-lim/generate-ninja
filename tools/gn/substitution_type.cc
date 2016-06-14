@@ -45,6 +45,7 @@ const char* kSubstitutionNames[SUBSTITUTION_NUM_TYPES] = {
   "{{cppflags_objcc}}",  // SUBSTITUTION_CPPFLAGS_OBJCC
   "{{defines}}",  // SUBSTITUTION_DEFINES
   "{{include_dirs}}",  // SUBSTITUTION_INCLUDE_DIRS
+  "{{sys_include_dirs}}",  // SUBSTITUTION_SYS_INCLUDE_DIRS
 
   "{{inputs}}",  // SUBSTITUTION_LINKER_INPUTS
   "{{inputs_newline}}",  // SUBSTITUTION_LINKER_INPUTS_NEWLINE
@@ -98,8 +99,9 @@ const char* kSubstitutionNinjaNames[SUBSTITUTION_NUM_TYPES] = {
     "cppflags_cc",     // SUBSTITUTION_CPPFLAGS_CC
     "cppflags_objc",   // SUBSTITUTION_CPPFLAGS_OBJC
     "cppflags_objcc",  // SUBSTITUTION_CPPFLAGS_OBJCC
-    "defines",       // SUBSTITUTION_DEFINES
-    "include_dirs",  // SUBSTITUTION_INCLUDE_DIRS
+    "defines",           // SUBSTITUTION_DEFINES
+    "include_dirs",      // SUBSTITUTION_INCLUDE_DIRS
+    "sys_include_dirs",  // SUBSTITUTION_SYS_INCLUDE_DIRS
 
     // LINKER_INPUTS expands to the same Ninja var as SUBSTITUTION_SOURCE. These
     // are used in different contexts and are named differently to keep things
@@ -205,7 +207,8 @@ bool IsValidCompilerSubstitution(SubstitutionType type) {
          type == SUBSTITUTION_CPPFLAGS_OBJC ||
          type == SUBSTITUTION_CPPFLAGS_OBJCC ||
          type == SUBSTITUTION_DEFINES ||
-         type == SUBSTITUTION_INCLUDE_DIRS;
+         type == SUBSTITUTION_INCLUDE_DIRS ||
+         type == SUBSTITUTION_SYS_INCLUDE_DIRS;
 }
 
 bool IsValidCompilerOutputsSubstitution(SubstitutionType type) {

@@ -81,10 +81,7 @@ struct IncludeWriter {
     std::ostringstream path_out;
     path_output_.WriteDir(path_out, d, PathOutput::DIR_NO_LAST_SLASH);
     const std::string& path = path_out.str();
-    if (path[0] == '"')
-      out << " \"" << prefix_ << path.substr(1);
-    else
-      out << " " << prefix_ << path;
+    out << " " << prefix_ << path;
   }
 
   std::string prefix_;
@@ -374,6 +371,20 @@ void NinjaBinaryTargetWriter::WriteCompilerVars(
     RecursiveTargetConfigToStream<SourceDir>(
         target_, &ConfigValues::include_dirs,
         IncludeWriter(target_->toolchain()->include_switch(),
+                      include_path_output), out_);
+    out_ << std::endl;
+  }
+
+  // System include directories.
+  if (subst.used[SUBSTITUTION_SYS_INCLUDE_DIRS]) {
+    out_ << kSubstitutionNinjaNames[SUBSTITUTION_SYS_INCLUDE_DIRS] << " =";
+    PathOutput include_path_output(
+        path_output_.current_dir(),
+        settings_->build_settings()->root_path_utf8(),
+        ESCAPE_NINJA_COMMAND);
+    RecursiveTargetConfigToStream<SourceDir>(
+        target_, &ConfigValues::sys_include_dirs,
+        IncludeWriter(target_->toolchain()->sys_include_switch(),
                       include_path_output), out_);
     out_ << std::endl;
   }

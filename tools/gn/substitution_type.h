@@ -57,6 +57,7 @@ enum SubstitutionType {
   SUBSTITUTION_CPPFLAGS_OBJCC,  // {{cppflags_objcc}}
   SUBSTITUTION_DEFINES,  // {{defines}}
   SUBSTITUTION_INCLUDE_DIRS,  // {{include_dirs}}
+  SUBSTITUTION_SYS_INCLUDE_DIRS,  // {{sys_include_dirs}}
 
   // Valid for linker tools.
   SUBSTITUTION_LINKER_INPUTS,  // {{inputs}}
