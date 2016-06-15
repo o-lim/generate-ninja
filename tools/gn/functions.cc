@@ -537,6 +537,9 @@ Value RunGetEnv(Scope* scope,
 
   std::unique_ptr<base::Environment> env(base::Environment::Create());
 
+  if (g_scheduler->verbose_logging())
+    g_scheduler->Log("Reading env", args[0].string_value().c_str());
+
   std::string result;
   if (!env->GetVar(args[0].string_value().c_str(), &result))
     return Value(function, "");  // Not found, return empty string.
