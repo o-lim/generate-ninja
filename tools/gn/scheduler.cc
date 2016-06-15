@@ -10,6 +10,7 @@
 #include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
+#include "tools/gn/filesystem_utils.h"
 #include "tools/gn/standard_out.h"
 #include "tools/gn/switches.h"
 #include "tools/gn/target.h"
@@ -66,6 +67,7 @@ Scheduler::Scheduler()
     : pool_(new base::SequencedWorkerPool(GetThreadCount(), "worker_")),
       input_file_manager_(new InputFileManager),
       verbose_logging_(false),
+      verbose_log_file_(),
       work_count_(0),
       is_failed_(false),
       has_been_shutdown_(false) {
@@ -76,6 +78,12 @@ Scheduler::~Scheduler() {
   if (!has_been_shutdown_)
     pool_->Shutdown();
   g_scheduler = nullptr;
+}
+
+void Scheduler::set_verbose_log(const base::FilePath& file_name) {
+  if (!file_name.empty())
+    verbose_log_file_.open(FilePathToUTF8(file_name).c_str(),
+                           std::ios_base::out);
 }
 
 bool Scheduler::Run() {
@@ -216,8 +224,13 @@ void Scheduler::DecrementWorkCount() {
 
 void Scheduler::LogOnMainThread(const std::string& verb,
                                 const std::string& msg) {
-  OutputString(verb, DECORATION_YELLOW);
-  OutputString(" " + msg + "\n");
+  if (verbose_log_file_.is_open()) {
+    verbose_log_file_ << verb;
+    verbose_log_file_ << " " + msg + "\n";
+  } else {
+    OutputString(verb, DECORATION_YELLOW);
+    OutputString(" " + msg + "\n");
+  }
 }
 
 void Scheduler::FailWithErrorOnMainThread(const Err& err) {

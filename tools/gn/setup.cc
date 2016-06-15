@@ -271,6 +271,7 @@ bool Setup::DoSetup(const std::string& build_dir, bool force_create) {
   base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
 
   scheduler_.set_verbose_logging(cmdline->HasSwitch(switches::kVerbose));
+  scheduler_.set_verbose_log(cmdline->GetSwitchValuePath(switches::kVerbose));
   if (cmdline->HasSwitch(switches::kTime) ||
       cmdline->HasSwitch(switches::kTracelog))
     EnableTracing();

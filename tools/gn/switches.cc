@@ -216,7 +216,13 @@ const char kVerbose_Help[] =
     "-v: Verbose logging.\n"
     "\n"
     "  This will spew logging events to the console for debugging issues.\n"
-    "  Good luck!\n";
+    "  Good luck!\n"
+    "\n"
+    "  If a file is specified, the log is written to the given file.\n"
+    "\n"
+    "Examples\n"
+    "\n"
+    "  gn gen out/Default -v=mylog.log\n";
 
 const char kVersion[] = "version";
 const char kVersion_HelpShort[] =

@@ -5,6 +5,7 @@
 #ifndef TOOLS_GN_SCHEDULER_H_
 #define TOOLS_GN_SCHEDULER_H_
 
+#include <fstream>
 #include <map>
 
 #include "base/atomic_ref_count.h"
@@ -36,6 +37,8 @@ class Scheduler {
 
   bool verbose_logging() const { return verbose_logging_; }
   void set_verbose_logging(bool v) { verbose_logging_ = v; }
+
+  void set_verbose_log(const base::FilePath& file_name);
 
   // TODO(brettw) data race on this access (benign?).
   bool is_failed() const { return is_failed_; }
@@ -107,6 +110,7 @@ class Scheduler {
   base::RunLoop runner_;
 
   bool verbose_logging_;
+  std::ofstream verbose_log_file_;
 
   base::AtomicRefCount work_count_;
 
