@@ -8,6 +8,9 @@ if (is_android) {
   assert(rebase_path("//", root_build_dir) == "../../",
          "Android output directory must be nested 2 levels within src/ (" +
              "e.g.: out-gn/Debug). http://crbug.com/412935")
+
+  import("//build_overrides/build.gni")
+
   has_chrome_android_internal =
       exec_script("//build/dir_exists.py",
                   [ rebase_path("//clank", root_build_dir) ],
@@ -15,6 +18,17 @@ if (is_android) {
 
   if (has_chrome_android_internal) {
     import("//clank/config.gni")
+  }
+
+  if (!defined(extra_chrome_shared_library_configs)) {
+    extra_chrome_shared_library_configs = []
+  }
+
+  if (!defined(default_android_ndk_root)) {
+    default_android_ndk_root = "//third_party/android_tools/ndk"
+    default_android_ndk_version = "r10e"
+  } else {
+    assert(defined(default_android_ndk_version))
   }
 
   if (!defined(default_android_sdk_root)) {
@@ -47,6 +61,9 @@ if (is_android) {
   }
 
   declare_args() {
+    android_ndk_root = default_android_ndk_root
+    android_ndk_version = default_android_ndk_version
+
     android_sdk_root = default_android_sdk_root
     android_sdk_version = default_android_sdk_version
     android_sdk_build_tools_version = default_android_sdk_build_tools_version
@@ -69,11 +86,6 @@ if (is_android) {
     # The password for the keystore to use for signing builds.
     android_keystore_password = default_android_keystore_password
 
-    # This is a unique identifier for a given build. It's used for
-    # identifying various build artifacts corresponding to a particular build of
-    # chrome (e.g. where to find archived symbols).
-    android_chrome_build_id = "\"\""
-
     # Set to true to run findbugs on JAR targets.
     run_findbugs = false
 
@@ -83,6 +95,11 @@ if (is_android) {
 
     # Enables verbose proguard output (summaries and unfiltered output).
     proguard_verbose = false
+
+    # Java debug on Android. Having this on enables multidexing, and turning it
+    # off will enable proguard. To access this flag from within Java code, look
+    # at BuildConfig.IS_DEBUG, which is wired to this arg.
+    is_java_debug = is_debug
 
     # Set to true to enable the Errorprone compiler
     use_errorprone_java_compiler = false
@@ -104,7 +121,7 @@ if (is_android) {
     enable_incremental_javac = false
 
     # Speed up dexing using dx --incremental.
-    enable_incremental_dx = is_debug
+    enable_incremental_dx = is_java_debug
 
     # Neither of these should ever be used for release builds since they are
     # somewhat experimental and dx --incremental is known to not produce
@@ -148,7 +165,6 @@ if (is_android) {
   android_sdk = "${android_sdk_root}/platforms/android-${android_sdk_version}"
 
   # Path to the Android NDK and SDK.
-  android_ndk_root = "//third_party/android_tools/ndk"
   android_ndk_include_dir = "$android_ndk_root/usr/include"
 
   android_sdk_tools = "${android_sdk_root}/tools"

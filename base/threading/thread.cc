@@ -66,11 +66,13 @@ Thread::Thread(const std::string& name)
       running_(false),
       thread_(0),
       id_(kInvalidThreadId),
-      id_event_(true, false),
+      id_event_(WaitableEvent::ResetPolicy::MANUAL,
+                WaitableEvent::InitialState::NOT_SIGNALED),
       message_loop_(nullptr),
       message_loop_timer_slack_(TIMER_SLACK_NONE),
       name_(name),
-      start_event_(true, false) {
+      start_event_(WaitableEvent::ResetPolicy::MANUAL,
+                   WaitableEvent::InitialState::NOT_SIGNALED) {
 }
 
 Thread::~Thread() {
@@ -229,7 +231,6 @@ void Thread::ThreadMain() {
   DCHECK(message_loop_);
   std::unique_ptr<MessageLoop> message_loop(message_loop_);
   message_loop_->BindToCurrentThread();
-  message_loop_->set_thread_name(name_);
   message_loop_->SetTimerSlack(message_loop_timer_slack_);
 
 #if defined(OS_WIN)

@@ -9,7 +9,7 @@ import("//build/config/nacl/config.gni")
 import("//build/toolchain/cc_wrapper.gni")
 import("//build/toolchain/toolchain.gni")
 
-if (current_cpu == "arm") {
+if (current_cpu == "arm" || current_cpu == "arm64") {
   import("//build/config/arm.gni")
 }
 if (current_cpu == "mipsel" || current_cpu == "mips64el") {
@@ -34,7 +34,8 @@ declare_args() {
   # These are not multi-arch so cannot be used except on x86 and x86-64 (the
   # only two architectures that are currently checked in). Turn this off when
   # you are using a custom toolchain and need to control -B in cflags.
-  linux_use_bundled_binutils = is_linux && current_cpu == "x64"
+  linux_use_bundled_binutils =
+      is_linux && (current_cpu == "x64" || current_cpu == "x86")
   binutils_path = rebase_path("//third_party/binutils/Linux_x64/Release/bin",
                               root_build_dir)
 
@@ -44,11 +45,6 @@ declare_args() {
   # information to analyze.
   # Requires profiling to be set to true.
   enable_full_stack_frames_for_profiling = false
-
-  # TODO(GYP): We should be using 64-bit gold for linking on both 64-bit Linux
-  # and 32-bit linux; 32-bit Gold runs out of address-space on 32-bit builds.
-  # However, something isn't quite working right on the 32-bit builds.
-  use_gold = is_linux && (current_cpu == "x64" || current_cpu == "arm")
 
   # When we are going to use gold we need to find it.
   # This is initialized below, after use_gold might have been overridden.
@@ -87,10 +83,6 @@ declare_args() {
   # explore favoring size over speed in this case as well.
   optimize_for_size = is_android || is_ios
 
-  # Gold icf level, values are "none", "safe", "all". If value isn't overridden,
-  # default initialization is below.
-  gold_icf_level = ""
-
   # If this is set to true, or if LLVM_FORCE_HEAD_REVISION is set to 1
   # in the environment, we use the revision in the llvm repo to determine
   # the CLANG_REVISION to use, instead of the version hard-coded into
@@ -122,16 +114,6 @@ if (gold_path == false) {
 if (use_debug_fission == "default") {
   use_debug_fission = is_debug && !is_win && use_gold &&
                       linux_use_bundled_binutils && cc_wrapper == ""
-}
-
-if (gold_icf_level == "") {
-  if (use_gold && !is_clang) {
-    # Gold doesn't respect section alignment and breaks gcc builds with icf
-    # https://bugs.chromium.org/p/chromium/issues/detail?id=576197
-    gold_icf_level = "none"
-  } else {
-    gold_icf_level = "all"
-  }
 }
 
 # default_include_dirs ---------------------------------------------------------
@@ -179,6 +161,11 @@ config("compiler") {
     configs += [ "//build/config/mac:compiler" ]
   }
 
+  # Applies to all Posix systems.
+  if (is_posix) {
+    configs += [ "//build/config/posix:compiler" ]
+  }
+
   # See the definitions below.
   configs += [
     ":compiler_cpu_abi",
@@ -204,9 +191,16 @@ config("compiler") {
 
     # Stack protection.
     if (is_mac) {
-      cflags += [ "-fstack-protector-all" ]
+      # The strong variant of the stack protector significantly increases
+      # binary size, so only enable it in debug mode.
+      if (is_debug) {
+        cflags += [ "-fstack-protector-strong" ]
+      } else {
+        cflags += [ "-fstack-protector" ]
+      }
     } else if (is_posix && !is_chromeos && !is_nacl) {
       # TODO(phajdan.jr): Use -fstack-protector-strong when our gcc supports it.
+      # See also https://crbug.com/533294
       cflags += [ "--param=ssp-buffer-size=4" ]
 
       # The x86 toolchain currently has problems with stack-protector.
@@ -249,17 +243,19 @@ config("compiler") {
   # Non-Mac Posix compiler flags setup.
   # -----------------------------------
   if (is_posix && !(is_mac || is_ios)) {
-    if (enable_profiling && !is_debug) {
-      cflags += [
-        "-fno-omit-frame-pointer",
-        "-g",
-      ]
+    if (enable_profiling) {
+      # Explicitly ask for frame pointers. Otherwise they are omitted when
+      # any optimization level is used (and Android debug builds use -Os).
+      cflags += [ "-fno-omit-frame-pointer" ]
+      if (!is_debug) {
+        cflags += [ "-g" ]
 
-      if (enable_full_stack_frames_for_profiling) {
-        cflags += [
-          "-fno-inline",
-          "-fno-optimize-sibling-calls",
-        ]
+        if (enable_full_stack_frames_for_profiling) {
+          cflags += [
+            "-fno-inline",
+            "-fno-optimize-sibling-calls",
+          ]
+        }
       }
     }
 
@@ -306,33 +302,41 @@ config("compiler") {
 
   # Linux-specific compiler flags setup.
   # ------------------------------------
-  if (use_gold) {
-    ldflags += [
-      "-B$gold_path",
+  if (is_posix && use_lld && !is_nacl) {
+    ldflags += [ "-fuse-ld=lld" ]
+  } else if (use_gold) {
+    ldflags += [ "-fuse-ld=gold" ]
+    if (is_android) {
+      if (is_clang) {
+        _rebased_android_toolchain_root =
+            rebase_path(android_toolchain_root, root_build_dir)
 
-      # Newer gccs and clangs support -fuse-ld, use the flag to force gold
-      # selection.
-      # gcc -- http://gcc.gnu.org/onlinedocs/gcc-4.8.0/gcc/Optimize-Options.html
-      "-fuse-ld=gold",
+        # Let clang find the ld.gold in the NDK.
+        ldflags += [ "--gcc-toolchain=$_rebased_android_toolchain_root" ]
+      }
 
-      # Experimentation found that using four linking threads
-      # saved ~20% of link time.
-      # https://groups.google.com/a/chromium.org/group/chromium-dev/browse_thread/thread/281527606915bb36
-      # Only apply this to the target linker, since the host
-      # linker might not be gold, but isn't used much anyway.
-      # TODO(raymes): Disable threading because gold is frequently
-      # crashing on the bots: crbug.com/161942.
-      #"-Wl,--threads",
-      #"-Wl,--thread-count=4",
-    ]
+      # Use -mstackrealign due to a bug on ia32 Jelly Bean.
+      # See crbug.com/521527
+      if (current_cpu == "x86") {
+        cflags += [ "-mstackrealign" ]
+      }
+    } else {
+      ldflags += [
+        "-B$gold_path",
+        # Experimentation found that using four linking threads
+        # saved ~20% of link time.
+        # https://groups.google.com/a/chromium.org/group/chromium-dev/browse_thread/thread/281527606915bb36
+        # Only apply this to the target linker, since the host
+        # linker might not be gold, but isn't used much anyway.
+        # TODO(raymes): Disable threading because gold is frequently
+        # crashing on the bots: crbug.com/161942.
+        #"-Wl,--threads",
+        #"-Wl,--thread-count=4",
+      ]
+    }
 
     if (gdb_index) {
       ldflags += [ "-Wl,--gdb-index" ]
-    }
-
-    if (!using_sanitizer && !(is_android && use_order_profiling)) {
-      # TODO(brettw) common.gypi has this only for target toolset.
-      ldflags += [ "-Wl,--icf=${gold_icf_level}" ]
     }
 
     # TODO(thestig): Make this flag work with GN.
@@ -345,6 +349,27 @@ config("compiler") {
     # Gold is the default linker for the bundled binutils so we explicitly
     # enable the bfd linker when use_gold is not set.
     ldflags += [ "-fuse-ld=bfd" ]
+  } else if (is_android && is_clang &&
+             (current_cpu == "mipsel" || current_cpu == "mips64el")) {
+    # Let clang find the ld.bfd in the NDK.
+    _rebased_android_toolchain_root =
+        rebase_path(android_toolchain_root, root_build_dir)
+    ldflags += [ "--gcc-toolchain=$_rebased_android_toolchain_root" ]
+  }
+
+  if (is_posix && (use_gold || (use_lld && !is_nacl)) && !using_sanitizer &&
+      !(is_android && use_order_profiling)) {
+    # TODO(crbug.com/576197) - gcc on x86 platforms + gold + icf=all
+    # doesn't currently work. Once it does, use icf=all everywhere.
+    # Additionally, on Android x86 --icf=safe seems to cause issues as well.
+    # Additionally, on cast Android x86, --icf=all causes issues.
+    if (is_android && current_cpu == "x86") {
+      ldflags += [ "-Wl,--icf=none" ]
+    } else if (is_clang || (current_cpu != "x86" && current_cpu != "x64")) {
+      ldflags += [ "-Wl,--icf=all" ]
+    } else if (!is_android) {
+      ldflags += [ "-Wl,--icf=safe" ]
+    }
   }
 
   if (linux_use_bundled_binutils) {
@@ -361,7 +386,7 @@ config("compiler") {
   # clang-cl (used if is_win) doesn't expose this flag.
   # Currently disabled for nacl since its toolchain lacks this flag (too old).
   # TODO(zforman): Once nacl's toolchain is updated, remove check.
-  if (is_clang && !is_win && !is_nacl) {
+  if (is_clang && is_linux) {
     absolute_path = rebase_path("//.")
     cflags += [ "-fdebug-prefix-map=$absolute_path=." ]
   }
@@ -427,7 +452,11 @@ config("compiler") {
 
     # Apply a lower LTO optimization level as the default is too slow.
     if (is_linux) {
-      ldflags += [ "-Wl,-plugin-opt,O1" ]
+      if (use_lld) {
+        ldflags += [ "-Wl,--lto-O1" ]
+      } else {
+        ldflags += [ "-Wl,-plugin-opt,O1" ]
+      }
     } else if (is_mac) {
       ldflags += [ "-Wl,-mllvm,-O1" ]
     }
@@ -447,14 +476,7 @@ config("compiler") {
 
     # TODO(pcc): Make these flags work correctly with CFI.
     if (!is_cfi) {
-      cflags += [
-        "-fwhole-program-vtables",
-
-        # TODO(pcc): Remove this flag once the upstream interface change
-        # (http://reviews.llvm.org/D18635) lands.
-        "-fwhole-program-vtables-blacklist=" +
-            rebase_path("//tools/cfi/blacklist.txt", root_build_dir),
-      ]
+      cflags += [ "-fwhole-program-vtables" ]
       ldflags += [ "-fwhole-program-vtables" ]
     }
   }
@@ -493,16 +515,17 @@ config("compiler_cpu_abi") {
     } else if (current_cpu == "x86") {
       cflags += [ "-m32" ]
       ldflags += [ "-m32" ]
+      if (!is_nacl) {
+        cflags += [
+          "-msse2",
+          "-mfpmath=sse",
+          "-mmmx",
+        ]
+      }
     } else if (current_cpu == "arm") {
       if (is_clang && !is_android && !is_nacl) {
-        cflags += [
-          "-target",
-          "arm-linux-gnueabihf",
-        ]
-        ldflags += [
-          "-target",
-          "arm-linux-gnueabihf",
-        ]
+        cflags += [ "--target=arm-linux-gnueabihf" ]
+        ldflags += [ "--target=arm-linux-gnueabihf" ]
       }
       if (!is_nacl) {
         cflags += [
@@ -520,18 +543,25 @@ config("compiler_cpu_abi") {
       if (arm_tune != "") {
         cflags += [ "-mtune=$arm_tune" ]
       }
+    } else if (current_cpu == "arm64") {
+      if (is_clang && !is_android && !is_nacl) {
+        cflags += [ "--target=aarch64-linux-gnu" ]
+        ldflags += [ "--target=aarch64-linux-gnu" ]
+      }
     } else if (current_cpu == "mipsel") {
+      if (is_clang) {
+        # Temporarily needed due to unsupported MIPS macro instructions
+        # in inline asm code in third_party projects (libwebp and webrtc).
+        # TODO(lmilko) Enable integrated-as.
+        cflags += [ "-fno-integrated-as" ]
+      }
       if (mips_arch_variant == "r6") {
         if (is_clang) {
           cflags += [
-            "-target",
-            "mipsel-linux-gnu",
+            "--target=mipsel-linux-gnu",
             "-march=mips32r6",
           ]
-          ldflags += [
-            "-target",
-            "mipsel-linux-gnu",
-          ]
+          ldflags += [ "--target=mipsel-linux-gnu" ]
         } else {
           cflags += [
             "-mips32r6",
@@ -548,26 +578,18 @@ config("compiler_cpu_abi") {
         if (is_clang) {
           if (is_android) {
             cflags += [
-              "-target",
-              "mipsel-linux-android",
+              "--target=mipsel-linux-android",
               "-march=mipsel",
               "-mcpu=mips32r2",
             ]
-            ldflags += [
-              "-target",
-              "mipsel-linux-android",
-            ]
+            ldflags += [ "--target=mipsel-linux-android" ]
           } else {
             cflags += [
-              "-target",
-              "mipsel-linux-gnu",
+              "--target=mipsel-linux-gnu",
               "-march=mipsel",
               "-mcpu=mips32r2",
             ]
-            ldflags += [
-              "-target",
-              "mipsel-linux-gnu",
-            ]
+            ldflags += [ "--target=mipsel-linux-gnu" ]
           }
         } else {
           cflags += [
@@ -582,26 +604,18 @@ config("compiler_cpu_abi") {
         if (is_clang) {
           if (is_android) {
             cflags += [
-              "-target",
-              "mipsel-linux-android",
+              "--target=mipsel-linux-android",
               "-march=mipsel",
               "-mcpu=mips32",
             ]
-            ldflags += [
-              "-target",
-              "mipsel-linux-android",
-            ]
+            ldflags += [ "--target=mipsel-linux-android" ]
           } else {
             cflags += [
-              "-target",
-              "mipsel-linux-gnu",
+              "--target=mipsel-linux-gnu",
               "-march=mipsel",
               "-mcpu=mips32",
             ]
-            ldflags += [
-              "-target",
-              "mipsel-linux-gnu",
-            ]
+            ldflags += [ "--target=mipsel-linux-gnu" ]
           }
         } else {
           cflags += [
@@ -620,11 +634,22 @@ config("compiler_cpu_abi") {
       cflags += [ "-m${mips_float_abi}-float" ]
     } else if (current_cpu == "mips64el") {
       if (mips_arch_variant == "r6") {
-        cflags += [
-          "-mips64r6",
-          "-Wa,-mips64r6",
-        ]
-        ldflags += [ "-mips64r6" ]
+        if (is_clang) {
+          if (is_android) {
+            cflags += [
+              "--target=mips64el-linux-android",
+              "-march=mips64el",
+              "-mcpu=mips64r6",
+            ]
+            ldflags += [ "--target=mips64el-linux-android" ]
+          }
+        } else {
+          cflags += [
+            "-mips64r6",
+            "-Wa,-mips64r6",
+          ]
+          ldflags += [ "-mips64r6" ]
+        }
       } else if (mips_arch_variant == "r2") {
         cflags += [
           "-mips64r2",
@@ -928,6 +953,10 @@ config("default_warnings") {
       # for gcc 4.8.
       # TODO: remove this flag once all builds work. See crbug.com/227506
       cflags += [ "-Wno-unused-local-typedefs" ]
+
+      # Don't warn about "maybe" uninitialized. Clang doesn't include this
+      # in -Wall but gcc does, and it gives false positives.
+      cflags += [ "-Wno-maybe-uninitialized" ]
     }
   }
 
@@ -986,12 +1015,15 @@ config("default_warnings") {
       cflags += [
         # TODO(thakis): Enable this, crbug.com/507717
         "-Wno-shift-negative-value",
+
+        # TODO(thakis): https://crbug.com/604888
+        "-Wno-undefined-var-template",
       ]
 
       if (llvm_force_head_revision) {
         cflags += [
-          # TODO(thakis): https://crbug.com/604888
-          "-Wno-undefined-var-template",
+          # TODO(thakis): https://crbug.com/617318
+          "-Wno-nonportable-include-path",
         ]
       }
     }
@@ -1094,11 +1126,13 @@ config("no_chromium_code") {
 config("rtti") {
   if (is_win) {
     cflags_cc = [ "/GR" ]
+  } else {
+    cflags_cc = [ "-frtti" ]
   }
 }
 config("no_rtti") {
   # CFI diagnostics and UBsan vptr require RTTI.
-  if (!use_cfi_diag && !is_ubsan_vptr) {
+  if (!use_cfi_diag && !is_ubsan_vptr && !is_ubsan_security) {
     if (is_win) {
       cflags_cc = [ "/GR-" ]
     } else {
@@ -1193,6 +1227,9 @@ if (is_win) {
       # This gives a 5-10% link speedup.
       "/cgthreads:8",
     ]
+    if (full_wpo_on_official) {
+      arflags = [ "/LTCG" ]
+    }
   }
 } else {
   common_optimize_on_cflags = [
@@ -1211,7 +1248,7 @@ if (is_win) {
     # We don't omit frame pointers on arm64 since they are required
     # to correctly unwind stackframes which contain system library
     # function frames (crbug.com/391706).
-    if (!using_sanitizer && target_cpu != "arm64") {
+    if (!using_sanitizer && !enable_profiling && current_cpu != "arm64") {
       common_optimize_on_cflags += [ "-fomit-frame-pointer" ]
     }
 
@@ -1251,6 +1288,34 @@ if (is_win) {
 # Default "optimization on" config.
 config("optimize") {
   if (is_win) {
+    # TODO(thakis): Remove is_clang here, https://crbug.com/598772
+    if (is_official_build && full_wpo_on_official && !is_clang) {
+      common_optimize_on_cflags += [
+        "/GL",  # Whole program optimization.
+
+        # Disable Warning 4702 ("Unreachable code") for the WPO/PGO builds.
+        # Probably anything that this would catch that wouldn't be caught in a
+        # normal build isn't going to actually be a bug, so the incremental
+        # value of C4702 for PGO builds is likely very small.
+        "/wd4702",
+      ]
+    }
+
+    # Favor size over speed, /O1 must be before the common flags. The GYP
+    # build also specifies /Os and /GF but these are implied by /O1.
+    cflags = [ "/O1" ] + common_optimize_on_cflags + [ "/Oi" ]
+  } else if (optimize_for_size) {
+    # Favor size over speed.
+    cflags = [ "-Os" ] + common_optimize_on_cflags
+  } else {
+    cflags = [ "-O2" ] + common_optimize_on_cflags
+  }
+  ldflags = common_optimize_on_ldflags
+}
+
+# Same config as 'optimize' but without the WPO flag.
+config("optimize_no_wpo") {
+  if (is_win) {
     # Favor size over speed, /O1 must be before the common flags. The GYP
     # build also specifies /Os and /GF but these are implied by /O1.
     cflags = [ "/O1" ] + common_optimize_on_cflags + [ "/Oi" ]
@@ -1282,7 +1347,7 @@ config("no_optimize") {
     # We don't omit frame pointers on arm64 since they are required
     # to correctly unwind stackframes which contain system library
     # function frames (crbug.com/391706).
-    if (!using_sanitizer && target_cpu != "arm64") {
+    if (!using_sanitizer && !enable_profiling && current_cpu != "arm64") {
       cflags += [ "-fomit-frame-pointer" ]
     }
 
@@ -1318,9 +1383,6 @@ config("optimize_max") {
 
       # TODO(thakis): Remove is_clang here, https://crbug.com/598772
       if (is_official_build && !is_clang) {
-        # TODO(GYP): TODO(dpranke): Should these only be on in an official
-        # build, or on all the time? For now we'll require official build so
-        # that the compile is clean.
         cflags += [
           "/GL",  # Whole program optimization.
 
@@ -1333,6 +1395,49 @@ config("optimize_max") {
       }
     } else {
       cflags = [ "-O2" ] + common_optimize_on_cflags
+    }
+  }
+}
+
+# This config can be used to override the default settings for per-component
+# and whole-program optimization, optimizing the particular target for speed
+# instead of code size. This config is exactly the same as "optimize_max"
+# except that we use -O3 instead of -O2 on non-win, non-IRT platforms.
+#
+# TODO(crbug.com/621335) - rework how all of these configs are related
+# so that we don't need this disclaimer.
+config("optimize_speed") {
+  if (is_nacl_irt) {
+    # The NaCl IRT is a special case and always wants its own config.
+    # Various components do:
+    #   if (!is_debug) {
+    #     configs -= [ "//build/config/compiler:default_optimization" ]
+    #     configs += [ "//build/config/compiler:optimize_max" ]
+    #   }
+    # So this config has to have the selection logic just like
+    # "default_optimization", below.
+    configs = [ "//build/config/nacl:irt_optimize" ]
+  } else {
+    ldflags = common_optimize_on_ldflags
+    if (is_win) {
+      # Favor speed over size, /O2 must be before the common flags. The GYP
+      # build also specifies /Ot, /Oi, and /GF, but these are implied by /O2.
+      cflags = [ "/O2" ] + common_optimize_on_cflags
+
+      # TODO(thakis): Remove is_clang here, https://crbug.com/598772
+      if (is_official_build && !is_clang) {
+        cflags += [
+          "/GL",  # Whole program optimization.
+
+          # Disable Warning 4702 ("Unreachable code") for the WPO/PGO builds.
+          # Probably anything that this would catch that wouldn't be caught in a
+          # normal build isn't going to actually be a bug, so the incremental
+          # value of C4702 for PGO builds is likely very small.
+          "/wd4702",
+        ]
+      }
+    } else {
+      cflags = [ "-O3" ] + common_optimize_on_cflags
     }
   }
 }

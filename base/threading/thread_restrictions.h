@@ -37,13 +37,14 @@ namespace content {
 class BrowserGpuChannelHostFactory;
 class BrowserGpuMemoryBufferManager;
 class BrowserShutdownProfileDumper;
+class BrowserSurfaceViewManager;
 class BrowserTestBase;
 class NestedMessagePumpAndroid;
 class ScopedAllowWaitForAndroidLayoutTests;
 class ScopedAllowWaitForDebugURL;
 class SoftwareOutputDeviceMus;
 class TextInputClientMac;
-class RasterWorkerPool;
+class CategorizedWorkerPool;
 }  // namespace content
 namespace dbus {
 class Bus;
@@ -52,9 +53,6 @@ namespace disk_cache {
 class BackendImpl;
 class InFlightIO;
 }
-namespace gles2 {
-class CommandBufferClientImpl;
-}
 namespace gpu {
 class GpuChannelHost;
 }
@@ -62,8 +60,10 @@ namespace mojo {
 namespace common {
 class MessagePumpMojo;
 }
+class SyncCallRestrictions;
 }
 namespace mus {
+class CommandBufferClientImpl;
 class CommandBufferLocal;
 class GpuState;
 }
@@ -83,6 +83,7 @@ class WindowResizeHelperMac;
 }
 
 namespace views {
+class ClipboardMus;
 class ScreenMus;
 }
 
@@ -191,6 +192,7 @@ class BASE_EXPORT ThreadRestrictions {
   // DO NOT ADD ANY OTHER FRIEND STATEMENTS, talk to jam or brettw first.
   // BEGIN ALLOWED USAGE.
   friend class content::BrowserShutdownProfileDumper;
+  friend class content::BrowserSurfaceViewManager;
   friend class content::BrowserTestBase;
   friend class content::NestedMessagePumpAndroid;
   friend class content::ScopedAllowWaitForAndroidLayoutTests;
@@ -199,7 +201,7 @@ class BASE_EXPORT ThreadRestrictions {
   friend class ::ScopedAllowWaitForLegacyWebViewApi;
   friend class cc::CompletionEvent;
   friend class cc::SingleThreadTaskGraphRunner;
-  friend class content::RasterWorkerPool;
+  friend class content::CategorizedWorkerPool;
   friend class remoting::AutoThread;
   friend class ui::WindowResizeHelperMac;
   friend class MessagePumpDefault;
@@ -209,8 +211,9 @@ class BASE_EXPORT ThreadRestrictions {
   friend class ThreadTestHelper;
   friend class PlatformThread;
   friend class android::JavaHandlerThread;
-  friend class gles2::CommandBufferClientImpl;
   friend class mojo::common::MessagePumpMojo;
+  friend class mojo::SyncCallRestrictions;
+  friend class mus::CommandBufferClientImpl;
   friend class mus::CommandBufferLocal;
   friend class mus::GpuState;
 
@@ -235,6 +238,10 @@ class BASE_EXPORT ThreadRestrictions {
 #if !defined(OFFICIAL_BUILD)
   friend class content::SoftwareOutputDeviceMus;  // Interim non-production code
 #endif
+  // In the non-mus case, we called blocking OS functions in the ui::Clipboard
+  // implementation which weren't caught by threading restrictions. Our
+  // blocking calls to mus, however, are.
+  friend class views::ClipboardMus;
   friend class views::ScreenMus;
 // END USAGE THAT NEEDS TO BE FIXED.
 

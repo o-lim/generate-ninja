@@ -14,9 +14,6 @@
 #
 # 'gyp_remaining' lists all of the targets that still need to be converted,
 # i.e., all of the other (non-empty) targets that a GYP build will build.
-#
-# TODO(GYP): crbug.com/481694. Add a build step to the bot that enforces the
-# above contracts.
 
 {
   'includes': [
@@ -54,7 +51,6 @@
         '../content/content.gyp:content_app_browser',
         '../content/content.gyp:content_app_child',
         '../content/content_shell_and_tests.gyp:content_browsertests',
-        '../content/content_shell_and_tests.gyp:content_gl_tests',
         '../content/content_shell_and_tests.gyp:content_perftests',
         '../content/content_shell_and_tests.gyp:content_unittests',
         '../crypto/crypto.gyp:crypto_unittests',
@@ -122,8 +118,8 @@
         '../ui/snapshot/snapshot.gyp:snapshot_unittests',
         '../ui/touch_selection/ui_touch_selection.gyp:ui_touch_selection_unittests',
         '../url/url.gyp:url_unittests',
-        '../v8/tools/gyp/v8.gyp:v8_snapshot',
-        '../v8/tools/gyp/v8.gyp:postmortem-metadata',
+        '../v8/src/v8.gyp:v8_snapshot',
+        '../v8/src/v8.gyp:postmortem-metadata',
       ],
       'conditions': [
         ['clang==1', {
@@ -160,8 +156,12 @@
         }],
         ['toolkit_views==1', {
           'dependencies': [
-            '../ui/app_list/app_list.gyp:app_list_demo',
             '../ui/views/views.gyp:views_unittests',
+          ],
+        }],
+        ['enable_app_list==1', {
+          'dependencies': [
+            '../ui/app_list/app_list.gyp:app_list_demo',
           ],
         }],
         ['use_ash==1', {
@@ -227,12 +227,10 @@
             '../components/components_tests.gyp:components_unittests_apk',
             '../content/content_shell_and_tests.gyp:chromium_linker_test_apk',
             '../content/content_shell_and_tests.gyp:content_browsertests_apk',
-            '../content/content_shell_and_tests.gyp:content_gl_tests_apk',
             '../content/content_shell_and_tests.gyp:content_junit_tests',
             '../content/content_shell_and_tests.gyp:content_shell_apk',
             '../content/content_shell_and_tests.gyp:content_shell_test_apk',
             '../content/content_shell_and_tests.gyp:content_unittests_apk',
-            '../content/content_shell_and_tests.gyp:video_decode_accelerator_unittest_apk',
             '../device/device_tests.gyp:device_unittests_apk',
             '../gpu/gpu.gyp:command_buffer_gles2_tests_apk',
             '../gpu/gpu.gyp:gl_tests_apk',
@@ -242,6 +240,7 @@
             '../media/cast/cast.gyp:cast_unittests_apk',
             '../media/media.gyp:media_perftests_apk',
             '../media/media.gyp:media_unittests_apk',
+            '../media/media.gyp:video_decode_accelerator_unittest_apk',
             '../media/midi/midi.gyp:midi_unittests_apk',
             '../net/net.gyp:net_junit_tests',
             '../net/net.gyp:net_unittests_apk',
@@ -365,8 +364,12 @@
             '../third_party/cacheinvalidation/cacheinvalidation.gyp:cacheinvalidation_unittests',
             '../third_party/libphonenumber/libphonenumber.gyp:libphonenumber_unittests',
             '../tools/imagediff/image_diff.gyp:image_diff',
-            '../ui/app_list/app_list.gyp:app_list_unittests',
             '../ui/compositor/compositor.gyp:compositor_unittests',
+          ],
+        }],
+        ['enable_app_list==1', {
+          'dependencies': [
+            '../ui/app_list/app_list.gyp:app_list_unittests',
           ],
         }],
         ['OS!="android" and chromecast==0', {
@@ -518,8 +521,8 @@
         ['OS=="win"', {
           'dependencies': [
             '../base/base.gyp:pe_image_test',
-            '../chrome/chrome.gyp:crash_service',
             '../chrome/chrome.gyp:installer_util_unittests',
+            '../chrome/chrome.gyp:install_static_unittests',
             '../chrome/chrome.gyp:setup',
             '../chrome/chrome.gyp:setup_unittests',
             '../chrome/installer/mini_installer.gyp:mini_installer',
@@ -538,6 +541,13 @@
             '../third_party/codesighs/codesighs.gyp:msdump2symdb',
             '../third_party/codesighs/codesighs.gyp:msmap2tsv',
             '../third_party/pdfium/samples/samples.gyp:pdfium_diff',
+          ],
+          'conditions': [
+            ['component!="shared_library" or target_arch!="ia32"', {
+              'dependencies': [
+                '../chrome/installer/mini_installer.gyp:next_version_mini_installer',
+              ],
+            }],
           ],
         }],
         ['chromecast==1', {
@@ -601,7 +611,6 @@
             '../tools/battor_agent/battor_agent.gyp:battor_agent_unittests_run',
             '../tools/gn/gn.gyp:gn_unittests_run',
             '../ui/accessibility/accessibility.gyp:accessibility_unittests_run',
-            '../ui/app_list/app_list.gyp:app_list_unittests_run',
             '../ui/compositor/compositor.gyp:compositor_unittests_run',
             '../ui/display/display.gyp:display_unittests_run',
             '../ui/events/events_unittests.gyp:events_unittests_run',
@@ -638,14 +647,32 @@
                 '../ui/touch_selection/ui_touch_selection.gyp:ui_touch_selection_unittests_run',
               ],
             }],
+            ['OS!="android" and OS!="ios" and chromecast==0', {
+              'dependencies': [
+                '../ipc/mojo/ipc_mojo.gyp:ipc_mojo_unittests_run',
+                '../mojo/mojo_edk_tests.gyp:mojo_js_unittests_run',
+                '../mojo/mojo_edk_tests.gyp:mojo_js_integration_tests_run',
+                '../mojo/mojo_edk_tests.gyp:mojo_system_unittests_run',
+                '../services/shell/shell.gyp:mojo_shell_unittests_run',
+              ],
+            }],
             ['use_ash==1', {
               'dependencies': [
                 '../ash/ash.gyp:ash_unittests_run',
               ],
             }],
+            ['enable_app_list==1', {
+              'dependencies': [
+                '../ui/app_list/app_list.gyp:app_list_unittests_run',
+              ],
+            }],
             ['use_aura==1', {
               'dependencies': [
                 '../ui/app_list/presenter/app_list_presenter.gyp:app_list_presenter_unittests_run',
+              ],
+            }],
+            ['use_aura==1', {
+              'dependencies': [
                 '../ui/aura/aura.gyp:aura_unittests_run',
                 '../ui/wm/wm.gyp:wm_unittests_run',
               ],
@@ -669,22 +696,22 @@
         }],
         ['chromeos==1', {
           'dependencies': [
-            '../content/content_shell_and_tests.gyp:jpeg_decode_accelerator_unittest',
+            '../media/media.gyp:jpeg_decode_accelerator_unittest',
           ],
         }],
         ['chromeos==1 or OS=="mac"', {
           'dependencies': [
-            '../content/content_shell_and_tests.gyp:video_encode_accelerator_unittest',
+            '../media/media.gyp:video_encode_accelerator_unittest',
           ],
         }],
         ['chromeos==1 and target_arch != "arm"', {
           'dependencies': [
-            '../content/content_shell_and_tests.gyp:vaapi_jpeg_decoder_unittest',
+            '../media/media.gyp:vaapi_jpeg_decoder_unittest',
           ],
         }],
         ['chromeos==1 or OS=="win" or OS=="android"', {
           'dependencies': [
-            '../content/content_shell_and_tests.gyp:video_decode_accelerator_unittest',
+            '../media/media.gyp:video_decode_accelerator_unittest',
           ],
         }],
         ['OS=="linux" or OS=="win"', {
@@ -709,10 +736,6 @@
             # to the GN build.
             '../chrome/chrome.gyp:sb_sigutil',
 
-            # This project is up in the air. Don't need to convert it unless
-            # we decide we need for something. Owner: scottmg.
-            '../chrome/tools/crash_service/caps/caps.gyp:caps',
-
             '../components/test_runner/test_runner.gyp:layout_test_helper',
             '../content/content_shell_and_tests.gyp:content_shell_crash_service',
             '../gpu/gpu.gyp:angle_end2end_tests',
@@ -730,7 +753,6 @@
             # TODO(GYP): All of these targets need to be ported over.
             '../base/base.gyp:base_win64',
             '../base/base.gyp:base_i18n_nacl_win64',
-            '../chrome/chrome.gyp:crash_service_win64',
             '../chrome/chrome.gyp:launcher_support64',
             '../components/components.gyp:breakpad_win64',
             '../courgette/courgette.gyp:courgette64',

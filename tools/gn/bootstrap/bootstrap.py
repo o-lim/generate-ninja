@@ -114,22 +114,31 @@ def main(argv):
   return 0
 
 
-def build_gn_with_ninja_manually(tempdir, options):
-  root_gen_dir = os.path.join(tempdir, 'gen')
-  mkdir_p(root_gen_dir)
-
-  mkdir_p(os.path.join(root_gen_dir, 'base', 'allocator'))
+def write_buildflag_header_manually(root_gen_dir, header, flags):
+  mkdir_p(os.path.join(root_gen_dir, os.path.dirname(header)))
   with tempfile.NamedTemporaryFile() as f:
-    f.write('--flags USE_EXPERIMENTAL_ALLOCATOR_SHIM=%s'
-            % ('true' if is_linux else 'false'))
+    f.write('--flags')
+    for name,value in flags.items():
+      f.write(' ' + name + '=' + value)
     f.flush()
 
     check_call([
         os.path.join(SRC_ROOT, 'build', 'write_buildflag_header.py'),
-        '--output', 'base/allocator/features.h',
+        '--output', header,
         '--gen-dir', root_gen_dir,
         '--definitions', f.name,
     ])
+
+
+def build_gn_with_ninja_manually(tempdir, options):
+  root_gen_dir = os.path.join(tempdir, 'gen')
+  mkdir_p(root_gen_dir)
+
+  write_buildflag_header_manually(root_gen_dir, 'base/allocator/features.h',
+      {'USE_EXPERIMENTAL_ALLOCATOR_SHIM': 'true' if is_linux else 'false'})
+
+  write_buildflag_header_manually(root_gen_dir, 'base/debug/debugging_flags.h',
+      {'ENABLE_PROFILING': 'false'})
 
   if is_mac:
     # //base/build_time.cc needs base/generated_build_date.h,
@@ -215,6 +224,7 @@ def write_ninja(path, root_gen_dir, options):
       'base/files/file_path_constants.cc',
       'base/files/file_tracing.cc',
       'base/files/file_util.cc',
+      'base/files/important_file_writer.cc',
       'base/files/memory_mapped_file.cc',
       'base/files/scoped_file.cc',
       'base/hash.cc',
@@ -260,7 +270,7 @@ def write_ninja(path, root_gen_dir, options):
       'base/run_loop.cc',
       'base/sequence_checker_impl.cc',
       'base/sequenced_task_runner.cc',
-      'base/sha1_portable.cc',
+      'base/sha1.cc',
       'base/strings/pattern.cc',
       'base/strings/string16.cc',
       'base/strings/string_number_conversions.cc',
@@ -279,9 +289,9 @@ def write_ninja(path, root_gen_dir, options):
       'base/third_party/dmg_fp/g_fmt.cc',
       'base/third_party/icu/icu_utf.cc',
       'base/third_party/nspr/prtime.cc',
-      'base/thread_task_runner_handle.cc',
       'base/threading/non_thread_safe_impl.cc',
       'base/threading/post_task_and_reply_impl.cc',
+      'base/threading/sequenced_task_runner_handle.cc',
       'base/threading/sequenced_worker_pool.cc',
       'base/threading/simple_thread.cc',
       'base/threading/thread.cc',
@@ -290,6 +300,7 @@ def write_ninja(path, root_gen_dir, options):
       'base/threading/thread_id_name_manager.cc',
       'base/threading/thread_local_storage.cc',
       'base/threading/thread_restrictions.cc',
+      'base/threading/thread_task_runner_handle.cc',
       'base/threading/worker_pool.cc',
       'base/time/time.cc',
       'base/timer/elapsed_timer.cc',
@@ -305,6 +316,7 @@ def write_ninja(path, root_gen_dir, options):
       'base/trace_event/memory_dump_manager.cc',
       'base/trace_event/memory_dump_request_args.cc',
       'base/trace_event/memory_dump_session_state.cc',
+      'base/trace_event/memory_infra_background_whitelist.cc',
       'base/trace_event/process_memory_dump.cc',
       'base/trace_event/process_memory_maps.cc',
       'base/trace_event/process_memory_totals.cc',
@@ -342,6 +354,7 @@ def write_ninja(path, root_gen_dir, options):
         'base/process/process_posix.cc',
         'base/synchronization/condition_variable_posix.cc',
         'base/synchronization/lock_impl_posix.cc',
+        'base/synchronization/read_write_lock_posix.cc',
         'base/synchronization/waitable_event_posix.cc',
         'base/sys_info_posix.cc',
         'base/threading/platform_thread_internal_posix.cc',

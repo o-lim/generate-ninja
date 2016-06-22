@@ -14,6 +14,7 @@
 
 class BuildSettings;
 class Err;
+class Pool;
 class Settings;
 class Target;
 class Toolchain;
@@ -28,12 +29,14 @@ class NinjaBuildWriter {
       const std::vector<const Settings*>& all_settings,
       const Toolchain* default_toolchain,
       const std::vector<const Target*>& default_toolchain_targets,
+      const std::vector<const Pool*>& all_pools,
       Err* err);
 
   NinjaBuildWriter(const BuildSettings* settings,
                    const std::vector<const Settings*>& all_settings,
                    const Toolchain* default_toolchain,
                    const std::vector<const Target*>& default_toolchain_targets,
+                   const std::vector<const Pool*>& all_pools,
                    std::ostream& out,
                    std::ostream& dep_out);
   ~NinjaBuildWriter();
@@ -42,21 +45,17 @@ class NinjaBuildWriter {
 
  private:
   void WriteNinjaRules();
-  void WriteLinkPool();
+  void WriteAllPools();
   void WriteSubninjas();
   bool WritePhonyAndAllRules(Err* err);
 
-  // Writes a phony rule for the given target with the given name. Adds the new
-  // name to the given set. If the name is already in the set, does nothing.
-  void WritePhonyRule(const Target* target,
-                      const OutputFile& target_file,
-                      const std::string& phony_name,
-                      std::set<std::string>* written_rules);
+  void WritePhonyRule(const Target* target, const std::string& phony_name);
 
   const BuildSettings* build_settings_;
   std::vector<const Settings*> all_settings_;
   const Toolchain* default_toolchain_;
   std::vector<const Target*> default_toolchain_targets_;
+  std::vector<const Pool*> all_pools_;
   std::ostream& out_;
   std::ostream& dep_out_;
   PathOutput path_output_;

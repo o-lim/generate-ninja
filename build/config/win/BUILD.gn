@@ -5,6 +5,7 @@
 import("//build/config/compiler/compiler.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/win/visual_studio_version.gni")
+import("//build/toolchain/toolchain.gni")
 
 assert(is_win)
 
@@ -40,10 +41,6 @@ config("compiler") {
     # and unsupported but very handy.
     "/d2FastFail",
   ]
-  if (!is_clang) {
-    # TODO(thakis): Enable this with clang too, https://crbug.com/598767
-    cflags += [ "/GS" ]  # Enable buffer security checking.
-  }
 
   # Force C/C++ mode for the given GN detected file type. This is necessary
   # for precompiled headers where the same source file is compiled in both
@@ -69,8 +66,9 @@ config("compiler") {
   if (is_clang) {
     cflags += [
       # Many files use intrinsics without including this header.
-      # TODO(hans): Fix those files, or move this to sub-GYPs.
-      "/FIIntrin.h",
+      # TODO(hans): Fix those files, or move this to sub-GYPs,
+      # https://crbug.com/592745
+      "/FIintrin.h",
     ]
 
     if (visual_studio_version == "2013") {
@@ -95,7 +93,7 @@ config("compiler") {
     }
 
     # Clang runtime libraries, such as the sanitizer runtimes, live here.
-    lib_dirs = [ "//third_party/llvm-build/Release+Asserts/lib/clang/3.9.0/lib/windows" ]
+    lib_dirs = [ "//third_party/llvm-build/Release+Asserts/lib/clang/$clang_version/lib/windows" ]
   }
 
   if (is_syzyasan) {
@@ -103,6 +101,18 @@ config("compiler") {
     assert(!is_win_fastlink, "/PROFILE and /DEBUG:FASTLINK are incompatible")
     ldflags = [ "/PROFILE" ]
   }
+
+  # arflags apply only to static_libraries. The normal linker configs are only
+  # set for executable and shared library targets so arflags must be set
+  # elsewhere. Since this is relatively contained, we just apply them in this
+  # more general config and they will only have an effect on static libraries.
+  arflags = [
+    # "No public symbols found; archive member will be inaccessible." This
+    # means that one or more object files in the library can never be
+    # pulled in to targets that link to this library. It's just a warning that
+    # the source file is a no-op.
+    "/ignore:4221",
+  ]
 }
 
 config("vs_code_analysis") {
@@ -270,14 +280,6 @@ config("common_linker_setup") {
   } else {
     ldflags += [ "/DYNAMICBASE" ]
   }
-
-  # Delay loaded DLLs.
-  ldflags += [
-    "/DELAYLOAD:dbghelp.dll",
-    "/DELAYLOAD:dwmapi.dll",
-    "/DELAYLOAD:shell32.dll",
-    "/DELAYLOAD:uxtheme.dll",
-  ]
 }
 
 # Subsystem --------------------------------------------------------------------
@@ -304,11 +306,8 @@ config("windowed") {
 incremental_linking_on_switch = [ "/INCREMENTAL" ]
 incremental_linking_off_switch = [ "/INCREMENTAL:NO" ]
 
-# MSVC2015's incremental linker complains about clang's .obj files sometimes,
-# https://crbug.com/595702.  Disable incremental linking with clang for now.
-# TODO(thakis): Remove this once that problem is fixed, or when the win_clang
-# bot uses lld.
-if (is_debug && !is_clang) {
+# Disable incremental linking for syzyasan
+if (is_debug && !is_syzyasan) {
   default_incremental_linking_switch = incremental_linking_on_switch
 } else {
   default_incremental_linking_switch = incremental_linking_off_switch

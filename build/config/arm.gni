@@ -2,12 +2,13 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/v8_target_cpu.gni")
+
 # These are primarily relevant in current_cpu == "arm" contexts, where
 # ARM code is being compiled.  But they can also be relevant in the
-# host toolchain context when target_cpu == "arm", where a host-side
-# build tool being built will change its behavior depending on the
-# details of the target configuration.
-if (target_cpu == "arm" || current_cpu == "arm") {
+# other contexts when the code will change its behavior based on the
+# cpu it wants to generate code for.
+if (current_cpu == "arm" || v8_target_cpu == "arm") {
   declare_args() {
     # Version of the ARM processor when compiling on ARM. Ignored on non-ARM
     # platforms.
@@ -28,6 +29,10 @@ if (target_cpu == "arm" || current_cpu == "arm") {
 
     # Whether to enable optional NEON code paths.
     arm_optionally_use_neon = false
+
+    # Thumb is a reduced instruction set available on some ARM processors that
+    # has increased code density.
+    arm_use_thumb = true
   }
 
   assert(arm_float_abi == "" || arm_float_abi == "hard" ||
@@ -42,9 +47,6 @@ if (target_cpu == "arm" || current_cpu == "arm") {
       arm_float_abi = "softfp"
     }
     arm_fpu = "vfp"
-
-    # Thumb is a reduced instruction set available on some ARM processors that
-    # has increased code density.
     arm_use_thumb = false
   } else if (arm_version == 7) {
     arm_arch = "armv7-a"
@@ -53,14 +55,12 @@ if (target_cpu == "arm" || current_cpu == "arm") {
     }
 
     if (arm_float_abi == "") {
-      if (is_android) {
+      if (current_os == "android" || target_os == "android") {
         arm_float_abi = "softfp"
       } else {
         arm_float_abi = "hard"
       }
     }
-
-    arm_use_thumb = true
 
     if (arm_use_neon) {
       arm_fpu = "neon"
@@ -74,14 +74,12 @@ if (target_cpu == "arm" || current_cpu == "arm") {
     }
 
     if (arm_float_abi == "") {
-      if (is_android) {
+      if (current_os == "android" || target_os == "android") {
         arm_float_abi = "softfp"
       } else {
         arm_float_abi = "hard"
       }
     }
-
-    arm_use_thumb = true
 
     if (arm_use_neon) {
       arm_fpu = "neon"
@@ -89,7 +87,8 @@ if (target_cpu == "arm" || current_cpu == "arm") {
       arm_fpu = "vfpv3-d16"
     }
   }
-} else if (current_cpu == "arm64") {
+} else if (current_cpu == "arm64" || v8_target_cpu == "arm64") {
   # arm64 supports only "hard".
   arm_float_abi = "hard"
+  arm_use_neon = true
 }

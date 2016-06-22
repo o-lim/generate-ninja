@@ -6,9 +6,12 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/callback.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
@@ -30,12 +33,12 @@ TestTaskFactory::~TestTaskFactory() {
 }
 
 bool TestTaskFactory::PostTask(PostNestedTask post_nested_task,
-                               WaitableEvent* event) {
+                               const Closure& after_task_closure) {
   AutoLock auto_lock(lock_);
   return task_runner_->PostTask(
       FROM_HERE,
       Bind(&TestTaskFactory::RunTaskCallback, Unretained(this),
-           num_posted_tasks_++, post_nested_task, Unretained(event)));
+           num_posted_tasks_++, post_nested_task, after_task_closure));
 }
 
 void TestTaskFactory::WaitForAllTasksToRun() const {
@@ -46,11 +49,32 @@ void TestTaskFactory::WaitForAllTasksToRun() const {
 
 void TestTaskFactory::RunTaskCallback(size_t task_index,
                                       PostNestedTask post_nested_task,
-                                      WaitableEvent* event) {
+                                      const Closure& after_task_closure) {
   if (post_nested_task == PostNestedTask::YES)
-    PostTask(PostNestedTask::NO, nullptr);
+    PostTask(PostNestedTask::NO, Closure());
 
   EXPECT_TRUE(task_runner_->RunsTasksOnCurrentThread());
+
+  // Verify TaskRunnerHandles are set as expected in the task's scope.
+  switch (execution_mode_) {
+    case ExecutionMode::PARALLEL:
+      EXPECT_FALSE(ThreadTaskRunnerHandle::IsSet());
+      EXPECT_FALSE(SequencedTaskRunnerHandle::IsSet());
+      break;
+    case ExecutionMode::SEQUENCED:
+      EXPECT_FALSE(ThreadTaskRunnerHandle::IsSet());
+      EXPECT_TRUE(SequencedTaskRunnerHandle::IsSet());
+      EXPECT_EQ(task_runner_, SequencedTaskRunnerHandle::Get());
+      break;
+    case ExecutionMode::SINGLE_THREADED:
+      // SequencedTaskRunnerHandle inherits from ThreadTaskRunnerHandle so
+      // both are expected to be "set" in the SINGLE_THREADED case.
+      EXPECT_TRUE(ThreadTaskRunnerHandle::IsSet());
+      EXPECT_TRUE(SequencedTaskRunnerHandle::IsSet());
+      EXPECT_EQ(task_runner_, ThreadTaskRunnerHandle::Get());
+      EXPECT_EQ(task_runner_, SequencedTaskRunnerHandle::Get());
+      break;
+  }
 
   {
     AutoLock auto_lock(lock_);
@@ -73,8 +97,8 @@ void TestTaskFactory::RunTaskCallback(size_t task_index,
     cv_.Signal();
   }
 
-  if (event)
-    event->Wait();
+  if (!after_task_closure.is_null())
+    after_task_closure.Run();
 }
 
 }  // namespace test

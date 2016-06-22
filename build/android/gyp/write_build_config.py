@@ -203,6 +203,8 @@ def main(argv):
   parser.add_option('--android-manifest', help='Path to android manifest.')
   parser.add_option('--is-locale-resource', action='store_true',
                     help='Whether it is locale resource.')
+  parser.add_option('--resource-dirs', action='append', default=[],
+                    help='GYP-list of resource dirs')
 
   # android_assets options
   parser.add_option('--asset-sources', help='List of asset sources.')
@@ -282,12 +284,8 @@ def main(argv):
   possible_deps_config_paths = build_utils.ParseGypList(
       options.possible_deps_configs)
 
-  allow_unknown_deps = (options.type in
-                        ('android_apk', 'android_assets', 'android_resources'))
   unknown_deps = [
       c for c in possible_deps_config_paths if not os.path.exists(c)]
-  if unknown_deps and not allow_unknown_deps:
-    raise Exception('Unknown deps: ' + str(unknown_deps))
 
   direct_deps_config_paths = [
       c for c in possible_deps_config_paths if not c in unknown_deps]
@@ -357,8 +355,6 @@ def main(argv):
           str(deps_not_support_android))
 
   if options.type in ('java_binary', 'java_library', 'android_apk'):
-    javac_classpath = [c['jar_path'] for c in direct_library_deps]
-    java_full_classpath = [c['jar_path'] for c in all_library_deps]
     deps_info['resources_deps'] = [c['path'] for c in all_resources_deps]
     deps_info['jar_path'] = options.jar_path
     if options.type == 'android_apk' or options.supports_android:
@@ -378,7 +374,12 @@ def main(argv):
     # resources, and (like Android's default build system) we allow a library to
     # refer to the resources in any of its dependents.
     config['javac']['srcjars'] = [
-        c['srcjar'] for c in direct_resources_deps if 'srcjar' in c]
+        c['srcjar'] for c in all_resources_deps if 'srcjar' in c]
+
+    # Used to strip out R.class for android_prebuilt()s.
+    if options.type == 'java_library':
+      config['javac']['resource_packages'] = [
+          c['package_name'] for c in all_resources_deps if 'package_name' in c]
 
   if options.type == 'android_apk':
     # Apks will get their resources srcjar explicitly passed to the java step.
@@ -414,6 +415,40 @@ def main(argv):
       deps_info['r_text'] = options.r_text
     if options.is_locale_resource:
       deps_info['is_locale_resource'] = True
+    # Record resources_dirs of this target so dependendent libraries can pick up
+    # them and pass to Lint.
+    lint_info = deps_info['lint'] = {}
+    resource_dirs = []
+    lint_info['resources_zips'] = []
+    for gyp_list in options.resource_dirs:
+      resource_dirs += build_utils.ParseGypList(gyp_list)
+    if resource_dirs:
+      lint_info['resources_dirs'] = resource_dirs
+    # There things become ugly. Resource targets may have resource dependencies
+    # as well. Some of these dependencies are resources from other libraries
+    # so we should not lint them here (they should be linted within their
+    # libraries). But others are just generated resources that also contribute
+    # to this library and we should check them. These generated resources has no
+    # package_name so we skip all direct deps that has package names.
+    for c in direct_resources_deps:
+      if 'package_name' not in c:
+        lint_info['resources_zips'].append(c['resources_zip'])
+
+  if options.supports_android and options.type in ('android_apk',
+                                                   'java_library'):
+    # GN's project model doesn't exactly match traditional Android project
+    # model: GN splits resources into separate targets, while in Android
+    # resources are part of the library/APK. Android Lint expects an Android
+    # project - with java sources and resources combined. So we assume that
+    # direct resource dependencies of the library/APK are the resources of this
+    # library in Android project sense.
+    lint_info = config['lint'] = {}
+    lint_info['resources_dirs'] = []
+    lint_info['resources_zips'] = []
+    for c in direct_resources_deps:
+      lint_info['resources_dirs'] += c['lint'].get('resources_dirs', [])
+      lint_info['resources_zips'] += c['lint'].get('resources_zips', [])
+
 
   if options.type in ('android_resources','android_apk', 'resource_rewriter'):
     config['resources'] = {}
@@ -431,35 +466,42 @@ def main(argv):
   if options.type in ['android_apk', 'deps_dex']:
     deps_dex_files = [c['dex_path'] for c in all_library_deps]
 
-  proguard_enabled = options.proguard_enabled
-  if options.type == 'android_apk':
-    deps_info['proguard_enabled'] = proguard_enabled
-
-  if proguard_enabled:
-    deps_info['proguard_info'] = options.proguard_info
-    config['proguard'] = {}
-    proguard_config = config['proguard']
-    proguard_config['input_paths'] = [options.jar_path] + java_full_classpath
+  if options.type in ('java_binary', 'java_library', 'android_apk'):
+    javac_classpath = [c['jar_path'] for c in direct_library_deps]
+    java_full_classpath = [c['jar_path'] for c in all_library_deps]
 
   # An instrumentation test apk should exclude the dex files that are in the apk
   # under test.
   if options.type == 'android_apk' and options.tested_apk_config:
-    tested_apk_library_deps = tested_apk_deps.All('java_library')
-    tested_apk_deps_dex_files = [c['dex_path'] for c in tested_apk_library_deps]
-    # Include in the classpath classes that are added directly to the apk under
-    # test (those that are not a part of a java_library).
     tested_apk_config = GetDepConfig(options.tested_apk_config)
-    javac_classpath.append(tested_apk_config['jar_path'])
-    # Exclude dex files from the test apk that exist within the apk under test.
-    deps_dex_files = [
-        p for p in deps_dex_files if not p in tested_apk_deps_dex_files]
 
     expected_tested_package = tested_apk_config['package_name']
     AndroidManifest(options.android_manifest).CheckInstrumentation(
         expected_tested_package)
     if tested_apk_config['proguard_enabled']:
-      assert proguard_enabled, ('proguard must be enabled for instrumentation'
-          ' apks if it\'s enabled for the tested apk')
+      assert options.proguard_enabled, ('proguard must be enabled for '
+          'instrumentation apks if it\'s enabled for the tested apk.')
+
+    # Include in the classpath classes that are added directly to the apk under
+    # test (those that are not a part of a java_library).
+    javac_classpath.append(tested_apk_config['jar_path'])
+    java_full_classpath.append(tested_apk_config['jar_path'])
+
+    # Exclude dex files from the test apk that exist within the apk under test.
+    # TODO(agrieve): When proguard is enabled, this filtering logic happens
+    #     within proguard_util.py. Move the logic for the proguard case into
+    #     here as well.
+    tested_apk_library_deps = tested_apk_deps.All('java_library')
+    tested_apk_deps_dex_files = [c['dex_path'] for c in tested_apk_library_deps]
+    deps_dex_files = [
+        p for p in deps_dex_files if not p in tested_apk_deps_dex_files]
+
+  if options.type == 'android_apk':
+    deps_info['proguard_enabled'] = options.proguard_enabled
+    deps_info['proguard_info'] = options.proguard_info
+    config['proguard'] = {}
+    proguard_config = config['proguard']
+    proguard_config['input_paths'] = [options.jar_path] + java_full_classpath
 
   # Dependencies for the final dex file of an apk or a 'deps_dex'.
   if options.type in ['android_apk', 'deps_dex']:

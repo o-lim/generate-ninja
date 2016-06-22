@@ -74,6 +74,10 @@ class BASE_EXPORT BuildInfo {
     return android_build_fp_;
   }
 
+  const char* gms_version_code() const {
+    return gms_version_code_;
+  }
+
   const char* package_version_code() const {
     return package_version_code_;
   }
@@ -96,10 +100,6 @@ class BASE_EXPORT BuildInfo {
 
   int sdk_int() const {
     return sdk_int_;
-  }
-
-  int has_language_apk_splits() const {
-    return has_language_apk_splits_;
   }
 
   const char* java_exception_info() const {
@@ -127,13 +127,13 @@ class BASE_EXPORT BuildInfo {
   const char* const brand_;
   const char* const android_build_id_;
   const char* const android_build_fp_;
+  const char* const gms_version_code_;
   const char* const package_version_code_;
   const char* const package_version_name_;
   const char* const package_label_;
   const char* const package_name_;
   const char* const build_type_;
   const int sdk_int_;
-  const bool has_language_apk_splits_;
   // This is set via set_java_exception_info, not at constructor time.
   const char* java_exception_info_;
 

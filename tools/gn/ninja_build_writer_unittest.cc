@@ -6,6 +6,7 @@
 
 #include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/ninja_build_writer.h"
+#include "tools/gn/pool.h"
 #include "tools/gn/scheduler.h"
 #include "tools/gn/target.h"
 #include "tools/gn/test_with_scope.h"
@@ -31,12 +32,19 @@ TEST(NinjaBuildWriter, TwoTargets) {
   target_bar.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target_bar.OnResolved(&err));
 
+  Pool swiming_pool(setup.settings(),
+                    Label(SourceDir("//swiming/"), "pool",
+                          SourceDir("//other/"), "toolchain"));
+  swiming_pool.set_depth(42);
+
   std::ostringstream ninja_out;
   std::ostringstream depfile_out;
   std::vector<const Settings*> all_settings = {setup.settings()};
   std::vector<const Target*> targets = {&target_foo, &target_bar};
+  std::vector<const Pool*> all_pools = {&swiming_pool};
   NinjaBuildWriter writer(setup.build_settings(), all_settings,
-                          setup.toolchain(), targets, ninja_out, depfile_out);
+                          setup.toolchain(), targets, all_pools, ninja_out,
+                          depfile_out);
   ASSERT_TRUE(writer.Run(&err));
 
   const char expected_rule_gn[] = "rule gn\n";
@@ -48,18 +56,23 @@ TEST(NinjaBuildWriter, TwoTargets) {
   const char expected_link_pool[] =
       "pool link_pool\n"
       "  depth = 0\n"
+      "\n"
+      "pool other_toolchain_swiming_pool\n"
+      "  depth = 42\n"
       "\n";
   const char expected_toolchain[] =
       "subninja toolchain.ninja\n"
       "\n";
   const char expected_targets[] =
+      "build bar: phony obj/bar/bar.stamp\n"
       "build foo$:bar: phony obj/foo/bar.stamp\n"
       "build bar$:bar: phony obj/bar/bar.stamp\n"
-      "build bar: phony obj/bar/bar.stamp\n"
       "\n";
   const char expected_root_target[] =
-      "build all: phony obj/foo/bar.stamp $\n"
+      "build all: phony $\n"
+      "    obj/foo/bar.stamp $\n"
       "    obj/bar/bar.stamp\n"
+      "\n"
       "default all\n";
   std::string out_str = ninja_out.str();
 #define EXPECT_SNIPPET(expected) \
@@ -100,8 +113,10 @@ TEST(NinjaBuildWriter, DuplicateOutputs) {
   std::ostringstream depfile_out;
   std::vector<const Settings*> all_settings = { setup.settings() };
   std::vector<const Target*> targets = { &target_foo, &target_bar };
+  std::vector<const Pool*> all_pools;
   NinjaBuildWriter writer(setup.build_settings(), all_settings,
-                          setup.toolchain(), targets, ninja_out, depfile_out);
+                          setup.toolchain(), targets, all_pools, ninja_out,
+                          depfile_out);
   ASSERT_FALSE(writer.Run(&err));
 
   const char expected_help_test[] =

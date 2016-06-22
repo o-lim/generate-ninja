@@ -8,12 +8,14 @@
 #include <string>
 #include <vector>
 
+#include "tools/gn/action_values.h"
 #include "tools/gn/bundle_file_rule.h"
 #include "tools/gn/source_dir.h"
+#include "tools/gn/source_file.h"
+#include "tools/gn/substitution_list.h"
 #include "tools/gn/unique_vector.h"
 
 class OutputFile;
-class SourceFile;
 class Settings;
 class Target;
 
@@ -77,6 +79,9 @@ class BundleData {
   // of its contents.
   SourceFile GetBundleRootDirOutput(const Settings* settings) const;
 
+  // Performs GetBundleRootDirOutput but returns the result as a directory.
+  SourceDir GetBundleRootDirOutputAsDir(const Settings* settings) const;
+
   // Returns the list of inputs for the compilation of the asset catalog.
   SourceFiles& asset_catalog_sources() { return asset_catalog_sources_; }
   const SourceFiles& asset_catalog_sources() const {
@@ -98,6 +103,31 @@ class BundleData {
   SourceDir& plugins_dir() { return plugins_dir_; }
   const SourceDir& plugins_dir() const { return plugins_dir_; }
 
+  std::string& product_type() { return product_type_; }
+  const std::string& product_type() const { return product_type_; }
+
+  void set_code_signing_script(const SourceFile& script_file) {
+    code_signing_script_ = script_file;
+  }
+  const SourceFile& code_signing_script() const { return code_signing_script_; }
+
+  std::vector<SourceFile>& code_signing_sources() {
+    return code_signing_sources_;
+  }
+  const std::vector<SourceFile>& code_signing_sources() const {
+    return code_signing_sources_;
+  }
+
+  SubstitutionList& code_signing_outputs() { return code_signing_outputs_; }
+  const SubstitutionList& code_signing_outputs() const {
+    return code_signing_outputs_;
+  }
+
+  SubstitutionList& code_signing_args() { return code_signing_args_; }
+  const SubstitutionList& code_signing_args() const {
+    return code_signing_args_;
+  }
+
   // Recursive collection of all bundle_data that the target depends on.
   const UniqueTargets& bundle_deps() const { return bundle_deps_; }
 
@@ -112,6 +142,19 @@ class BundleData {
   SourceDir resources_dir_;
   SourceDir executable_dir_;
   SourceDir plugins_dir_;
+
+  // This is the target type as known to Xcode. This is only used to generate
+  // the Xcode project file when using --ide=xcode.
+  std::string product_type_;
+
+  // Holds the values (script name, sources, outputs, script arguments) for the
+  // code signing step if defined.
+  SourceFile code_signing_script_;
+  std::vector<SourceFile> code_signing_sources_;
+  SubstitutionList code_signing_outputs_;
+  SubstitutionList code_signing_args_;
+
+  DISALLOW_COPY_AND_ASSIGN(BundleData);
 };
 
 #endif  // TOOLS_GN_BUNDLE_DATA_H_

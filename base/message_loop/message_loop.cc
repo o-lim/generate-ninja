@@ -18,8 +18,9 @@
 #include "base/metrics/statistics_recorder.h"
 #include "base/run_loop.h"
 #include "base/third_party/dynamic_annotations/dynamic_annotations.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_id_name_manager.h"
 #include "base/threading/thread_local.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "base/tracked_objects.h"
@@ -120,6 +121,8 @@ MessageLoop::TaskObserver::~TaskObserver() {
 
 MessageLoop::DestructionObserver::~DestructionObserver() {
 }
+
+MessageLoop::NestingObserver::~NestingObserver() {}
 
 //------------------------------------------------------------------------------
 
@@ -263,6 +266,16 @@ void MessageLoop::RemoveDestructionObserver(
   destruction_observers_.RemoveObserver(destruction_observer);
 }
 
+void MessageLoop::AddNestingObserver(NestingObserver* observer) {
+  DCHECK_EQ(this, current());
+  nesting_observers_.AddObserver(observer);
+}
+
+void MessageLoop::RemoveNestingObserver(NestingObserver* observer) {
+  DCHECK_EQ(this, current());
+  nesting_observers_.RemoveObserver(observer);
+}
+
 void MessageLoop::PostTask(
     const tracked_objects::Location& from_here,
     const Closure& task) {
@@ -274,19 +287,6 @@ void MessageLoop::PostDelayedTask(
     const Closure& task,
     TimeDelta delay) {
   task_runner_->PostDelayedTask(from_here, task, delay);
-}
-
-void MessageLoop::PostNonNestableTask(
-    const tracked_objects::Location& from_here,
-    const Closure& task) {
-  task_runner_->PostNonNestableTask(from_here, task);
-}
-
-void MessageLoop::PostNonNestableDelayedTask(
-    const tracked_objects::Location& from_here,
-    const Closure& task,
-    TimeDelta delay) {
-  task_runner_->PostNonNestableDelayedTask(from_here, task, delay);
 }
 
 void MessageLoop::Run() {
@@ -304,9 +304,9 @@ void MessageLoop::RunUntilIdle() {
 void MessageLoop::QuitWhenIdle() {
   DCHECK_EQ(this, current());
   if (run_loop_) {
-    run_loop_->quit_when_idle_received_ = true;
+    run_loop_->QuitWhenIdle();
   } else {
-    NOTREACHED() << "Must be inside Run to call Quit";
+    NOTREACHED() << "Must be inside Run to call QuitWhenIdle";
   }
 }
 
@@ -390,16 +390,14 @@ MessageLoop::MessageLoop(Type type, MessagePumpFactoryCallback pump_factory)
       in_high_res_mode_(false),
 #endif
       nestable_tasks_allowed_(true),
-#if defined(OS_WIN)
-      os_modal_loop_(false),
-#endif  // OS_WIN
       pump_factory_(pump_factory),
       message_histogram_(NULL),
       run_loop_(NULL),
       incoming_task_queue_(new internal::IncomingTaskQueue(this)),
       unbound_task_runner_(
           new internal::MessageLoopTaskRunner(incoming_task_queue_)),
-      task_runner_(unbound_task_runner_) {
+      task_runner_(unbound_task_runner_),
+      thread_id_(kInvalidThreadId) {
   // If type is TYPE_CUSTOM non-null pump_factory must be given.
   DCHECK(type_ != TYPE_CUSTOM || !pump_factory_.is_null());
 }
@@ -418,6 +416,22 @@ void MessageLoop::BindToCurrentThread() {
   unbound_task_runner_->BindToCurrentThread();
   unbound_task_runner_ = nullptr;
   SetThreadTaskRunnerHandle();
+  {
+    // Save the current thread's ID for potential use by other threads
+    // later from GetThreadName().
+    thread_id_ = PlatformThread::CurrentId();
+    subtle::MemoryBarrier();
+  }
+}
+
+std::string MessageLoop::GetThreadName() const {
+  if (thread_id_ == kInvalidThreadId) {
+    // |thread_id_| may already have been initialized but this thread might not
+    // have received the update yet.
+    subtle::MemoryBarrier();
+    DCHECK_NE(kInvalidThreadId, thread_id_);
+  }
+  return ThreadIdNameManager::GetInstance()->GetName(thread_id_);
 }
 
 void MessageLoop::SetTaskRunner(
@@ -550,6 +564,12 @@ void MessageLoop::ScheduleWork() {
   pump_->ScheduleWork();
 }
 
+#if defined(OS_WIN)
+bool MessageLoop::MessagePumpWasSignaled() {
+  return pump_->WasSignaled();
+}
+#endif
+
 //------------------------------------------------------------------------------
 // Method and data for histogramming events and actions taken by each instance
 // on each thread.
@@ -558,13 +578,12 @@ void MessageLoop::StartHistogrammer() {
 #if !defined(OS_NACL)  // NaCl build has no metrics code.
   if (enable_histogrammer_ && !message_histogram_
       && StatisticsRecorder::IsActive()) {
-    DCHECK(!thread_name_.empty());
+    std::string thread_name = GetThreadName();
+    DCHECK(!thread_name.empty());
     message_histogram_ = LinearHistogram::FactoryGetWithRangeDescription(
-        "MsgLoop:" + thread_name_,
-        kLeastNonZeroMessageId, kMaxMessageId,
+        "MsgLoop:" + thread_name, kLeastNonZeroMessageId, kMaxMessageId,
         kNumberOfDistinctMessagesDisplayed,
-        HistogramBase::kHexRangePrintingFlag,
-        event_descriptions_);
+        HistogramBase::kHexRangePrintingFlag, event_descriptions_);
   }
 #endif
 }
@@ -574,6 +593,11 @@ void MessageLoop::HistogramEvent(int event) {
   if (message_histogram_)
     message_histogram_->Add(event);
 #endif
+}
+
+void MessageLoop::NotifyBeginNestedLoop() {
+  FOR_EACH_OBSERVER(NestingObserver, nesting_observers_,
+                    OnBeginNestedMessageLoop());
 }
 
 bool MessageLoop::DoWork() {
@@ -663,14 +687,14 @@ bool MessageLoop::DoIdleWork() {
 void MessageLoop::DeleteSoonInternal(const tracked_objects::Location& from_here,
                                      void(*deleter)(const void*),
                                      const void* object) {
-  PostNonNestableTask(from_here, Bind(deleter, object));
+  task_runner()->PostNonNestableTask(from_here, Bind(deleter, object));
 }
 
 void MessageLoop::ReleaseSoonInternal(
     const tracked_objects::Location& from_here,
     void(*releaser)(const void*),
     const void* object) {
-  PostNonNestableTask(from_here, Bind(releaser, object));
+  task_runner()->PostNonNestableTask(from_here, Bind(releaser, object));
 }
 
 #if !defined(OS_NACL)
@@ -715,15 +739,6 @@ bool MessageLoopForUI::WatchFileDescriptor(
 // MessageLoopForIO
 
 #if !defined(OS_NACL_SFI)
-void MessageLoopForIO::AddIOObserver(
-    MessageLoopForIO::IOObserver* io_observer) {
-  ToPumpIO(pump_.get())->AddIOObserver(io_observer);
-}
-
-void MessageLoopForIO::RemoveIOObserver(
-    MessageLoopForIO::IOObserver* io_observer) {
-  ToPumpIO(pump_.get())->RemoveIOObserver(io_observer);
-}
 
 #if defined(OS_WIN)
 void MessageLoopForIO::RegisterIOHandler(HANDLE file, IOHandler* handler) {

@@ -25,9 +25,9 @@
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
 #include "base/third_party/dynamic_annotations/dynamic_annotations.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread_id_name_manager.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/threading/worker_pool.h"
 #include "base/time/time.h"
 #include "base/trace_event/heap_profiler.h"
@@ -86,7 +86,7 @@ const size_t kEchoToConsoleTraceEventBufferChunks = 256;
 const size_t kTraceEventBufferSizeInBytes = 100 * 1024;
 const int kThreadFlushTimeoutMs = 3000;
 
-#define MAX_CATEGORY_GROUPS 105
+#define MAX_CATEGORY_GROUPS 200
 
 // Parallel arrays g_category_groups and g_category_group_enabled are separate
 // so that a pointer to a member of g_category_group_enabled can be easily
@@ -333,6 +333,15 @@ void TraceLog::ThreadLocalEventBuffer::FlushWhileLocked() {
   // find the generation mismatch and delete this buffer soon.
 }
 
+struct TraceLog::RegisteredAsyncObserver {
+  RegisteredAsyncObserver(WeakPtr<AsyncEnabledStateObserver> observer)
+      : observer(observer), task_runner(ThreadTaskRunnerHandle::Get()) {}
+  ~RegisteredAsyncObserver() {}
+
+  WeakPtr<AsyncEnabledStateObserver> observer;
+  scoped_refptr<SequencedTaskRunner> task_runner;
+};
+
 TraceLogStatus::TraceLogStatus() : event_capacity(0), event_count(0) {}
 
 TraceLogStatus::~TraceLogStatus() {}
@@ -470,6 +479,12 @@ void TraceLog::UpdateCategoryGroupEnabledFlag(size_t category_index) {
   }
 #endif
 
+  // TODO(primiano): this is a temporary workaround for catapult:#2341,
+  // to guarantee that metadata events are always added even if the category
+  // filter is "-*". See crbug.com/618054 for more details and long-term fix.
+  if (mode_ == RECORDING_MODE && !strcmp(category_group, "__metadata"))
+    enabled_flag |= ENABLED_FOR_RECORDING;
+
   g_category_group_enabled[category_index] = enabled_flag;
 }
 
@@ -570,6 +585,7 @@ void TraceLog::GetKnownCategoryGroups(
 
 void TraceLog::SetEnabled(const TraceConfig& trace_config, Mode mode) {
   std::vector<EnabledStateObserver*> observer_list;
+  std::map<AsyncEnabledStateObserver*, RegisteredAsyncObserver> observer_map;
   {
     AutoLock lock(lock_);
 
@@ -634,10 +650,16 @@ void TraceLog::SetEnabled(const TraceConfig& trace_config, Mode mode) {
 
     dispatching_to_observer_list_ = true;
     observer_list = enabled_state_observer_list_;
+    observer_map = async_observers_;
   }
   // Notify observers outside the lock in case they trigger trace events.
   for (size_t i = 0; i < observer_list.size(); ++i)
     observer_list[i]->OnTraceLogEnabled();
+  for (const auto& it : observer_map) {
+    it.second.task_runner->PostTask(
+        FROM_HERE, Bind(&AsyncEnabledStateObserver::OnTraceLogEnabled,
+                        it.second.observer));
+  }
 
   {
     AutoLock lock(lock_);
@@ -719,6 +741,8 @@ void TraceLog::SetDisabledWhileLocked() {
   dispatching_to_observer_list_ = true;
   std::vector<EnabledStateObserver*> observer_list =
       enabled_state_observer_list_;
+  std::map<AsyncEnabledStateObserver*, RegisteredAsyncObserver> observer_map =
+      async_observers_;
 
   {
     // Dispatch to observers outside the lock in case the observer triggers a
@@ -726,6 +750,11 @@ void TraceLog::SetDisabledWhileLocked() {
     AutoUnlock unlock(lock_);
     for (size_t i = 0; i < observer_list.size(); ++i)
       observer_list[i]->OnTraceLogDisabled();
+    for (const auto& it : observer_map) {
+      it.second.task_runner->PostTask(
+          FROM_HERE, Bind(&AsyncEnabledStateObserver::OnTraceLogDisabled,
+                          it.second.observer));
+    }
   }
   dispatching_to_observer_list_ = false;
 }
@@ -1015,7 +1044,7 @@ void TraceLog::OnFlushTimeout(int generation, bool discard_events) {
     for (hash_set<MessageLoop*>::const_iterator it =
              thread_message_loops_.begin();
          it != thread_message_loops_.end(); ++it) {
-      LOG(WARNING) << "Thread: " << (*it)->thread_name();
+      LOG(WARNING) << "Thread: " << (*it)->GetThreadName();
     }
   }
   FinishFlush(generation, discard_events);
@@ -1319,7 +1348,8 @@ TraceEventHandle TraceLog::AddTraceEventWithThreadIdAndTimestamp(
 
   // TODO(primiano): Add support for events with copied name crbug.com/581078
   if (!(flags & TRACE_EVENT_FLAG_COPY)) {
-    if (AllocationContextTracker::capture_enabled()) {
+    if (AllocationContextTracker::capture_mode() ==
+        AllocationContextTracker::CaptureMode::PSEUDO_STACK) {
       if (phase == TRACE_EVENT_PHASE_BEGIN ||
           phase == TRACE_EVENT_PHASE_COMPLETE) {
         AllocationContextTracker::GetInstanceForCurrentThread()
@@ -1452,9 +1482,10 @@ void TraceLog::UpdateTraceEventDuration(
           EventToConsoleMessage(TRACE_EVENT_PHASE_END, now, trace_event);
     }
 
-    if (base::trace_event::AllocationContextTracker::capture_enabled()) {
+    if (AllocationContextTracker::capture_mode() ==
+        AllocationContextTracker::CaptureMode::PSEUDO_STACK) {
       // The corresponding push is in |AddTraceEventWithThreadIdAndTimestamp|.
-      base::trace_event::AllocationContextTracker::GetInstanceForCurrentThread()
+      AllocationContextTracker::GetInstanceForCurrentThread()
           ->PopPseudoStackFrame(name);
     }
   }
@@ -1706,6 +1737,25 @@ void TraceLog::UpdateETWCategoryGroupEnabledFlags() {
 void ConvertableToTraceFormat::EstimateTraceMemoryOverhead(
     TraceEventMemoryOverhead* overhead) {
   overhead->Add("ConvertableToTraceFormat(Unknown)", sizeof(*this));
+}
+
+void TraceLog::AddAsyncEnabledStateObserver(
+    WeakPtr<AsyncEnabledStateObserver> listener) {
+  AutoLock lock(lock_);
+  async_observers_.insert(
+      std::make_pair(listener.get(), RegisteredAsyncObserver(listener)));
+}
+
+void TraceLog::RemoveAsyncEnabledStateObserver(
+    AsyncEnabledStateObserver* listener) {
+  AutoLock lock(lock_);
+  async_observers_.erase(listener);
+}
+
+bool TraceLog::HasAsyncEnabledStateObserver(
+    AsyncEnabledStateObserver* listener) const {
+  AutoLock lock(lock_);
+  return ContainsKey(async_observers_, listener);
 }
 
 }  // namespace trace_event

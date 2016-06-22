@@ -28,8 +28,8 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/test/test_file_util.h"
 #include "base/test/test_timeouts.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -215,7 +215,8 @@ bool FilePathWatcherTest::SetupWatch(const FilePath& target,
                                      FilePathWatcher* watcher,
                                      TestDelegateBase* delegate,
                                      bool recursive_watch) {
-  base::WaitableEvent completion(false, false);
+  base::WaitableEvent completion(WaitableEvent::ResetPolicy::AUTOMATIC,
+                                 WaitableEvent::InitialState::NOT_SIGNALED);
   bool result;
   file_thread_.task_runner()->PostTask(
       FROM_HERE, base::Bind(SetupWatchCallback, target, watcher, delegate,
