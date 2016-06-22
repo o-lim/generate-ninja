@@ -5672,10 +5672,11 @@
   will be treated as being relative to the current build file.
 
   libs and lib_dirs work differently than other flags in two respects.
-  First, then are inherited across static library boundaries until a
+  First, they are inherited across static library boundaries until a
   shared library or executable target is reached. Second, they are
-  uniquified so each one is only passed once (the first instance of it
-  will be the one used).
+  uniquified so each one is only passed once. For "libs", the first
+  instance of it will be the one used, while for "lib_dirs", the
+  last instance of it will be the one used).
 
 ```
 
@@ -5737,10 +5738,11 @@
   shared library) containing the current target.
 
   libs and lib_dirs work differently than other flags in two respects.
-  First, then are inherited across static library boundaries until a
+  First, they are inherited across static library boundaries until a
   shared library or executable target is reached. Second, they are
-  uniquified so each one is only passed once (the first instance of it
-  will be the one used).
+  uniquified so each one is only passed once. For "libs", the first
+  instance of it will be the one used, while for "lib_dirs", the
+  last instance of it will be the one used).
 
 ```
 

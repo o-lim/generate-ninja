@@ -277,18 +277,17 @@ bool Target::OnResolved(Err* err) {
                            dep.ptr->public_configs().end());
   }
 
-  // Copy our own libs and lib_dirs to the final set. This will be from our
-  // target and all of our configs. We do this specially since these must be
-  // inherited through the dependency tree (other flags don't work this way).
+  // Copy our own lib_dirs to the final set. This will be from our target and
+  // all of our configs. We do this specially since these must be inherited
+  // through the dependency tree (other flags don't work this way).
   //
   // This needs to happen after we pull dependent target configs for the
   // public config's libs to be included here. And it needs to happen
-  // before pulling the dependent target libs so the libs are in the correct
-  // order (local ones first, then the dependency's).
+  // before pulling the dependent target libs so the lib_dirs are in the
+  // correct order (local ones first, then the dependency's).
   for (ConfigValuesIterator iter(this); !iter.done(); iter.Next()) {
     const ConfigValues& cur = iter.cur();
     all_lib_dirs_.append(cur.lib_dirs().begin(), cur.lib_dirs().end());
-    all_libs_.append(cur.libs().begin(), cur.libs().end());
   }
 
   PullRecursiveBundleData();
@@ -296,6 +295,19 @@ bool Target::OnResolved(Err* err) {
   PullRecursiveHardDeps();
   if (!ResolvePrecompiledHeaders(err))
     return false;
+
+  // Copy our own libs to the final set. This will be from our target and
+  // all of our configs. We do this specially since these must be inherited
+  // through the dependency tree (other flags don't work this way).
+  //
+  // This needs to happen after we pull dependent target configs for the
+  // public config's libs to be included here. And it needs to happen
+  // after pulling the dependent target libs so the libs are in the correct
+  // order (inner-most ones first, and outer-most ones last).
+  for (ConfigValuesReverseIterator iter(this); !iter.done(); iter.Next()) {
+    const ConfigValues& cur = iter.cur();
+    all_libs_.preappend(cur.libs().begin(), cur.libs().end());
+  }
 
   FillOutputFiles();
 
@@ -491,7 +503,7 @@ void Target::PullDependentTargetLibsFrom(const Target* dep, bool is_public) {
   // Library settings are always inherited across static library boundaries.
   if (!dep->IsFinal() || dep->output_type() == STATIC_LIBRARY) {
     all_lib_dirs_.append(dep->all_lib_dirs());
-    all_libs_.append(dep->all_libs());
+    all_libs_.preappend(dep->all_libs());
   }
 
   // Direct dependent libraries.
