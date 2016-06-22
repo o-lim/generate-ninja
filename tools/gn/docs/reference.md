@@ -525,6 +525,7 @@
   public
   script
   sources
+  sys_include_dirs [--blame]
   testonly
   visibility
 

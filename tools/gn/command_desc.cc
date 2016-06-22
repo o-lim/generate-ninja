@@ -671,6 +671,7 @@ bool PrintTarget(const Target* target,
     CONFIG_VALUE_ARRAY_HANDLER(defines, std::string)
     CONFIG_VALUE_ARRAY_HANDLER(include_dirs, SourceDir)
     CONFIG_VALUE_ARRAY_HANDLER(ldflags, std::string)
+    CONFIG_VALUE_ARRAY_HANDLER(sys_include_dirs, SourceDir)
     // Libs and lib_dirs are handled specially below.
 
     #undef CONFIG_VALUE_ARRAY_HANDLER
@@ -762,6 +763,7 @@ bool PrintConfig(const Config* config,
   CONFIG_VALUE_ARRAY_HANDLER(ldflags, std::string)
   CONFIG_VALUE_ARRAY_HANDLER(lib_dirs, SourceDir)
   CONFIG_VALUE_ARRAY_HANDLER(libs, LibFile)
+  CONFIG_VALUE_ARRAY_HANDLER(sys_include_dirs, SourceDir)
 
 #undef CONFIG_VALUE_ARRAY_HANDLER
 
@@ -830,6 +832,7 @@ const char kDesc_Help[] =
     "  public\n"
     "  script\n"
     "  sources\n"
+    "  sys_include_dirs [--blame]\n"
     "  testonly\n"
     "  visibility\n"
     "\n"
