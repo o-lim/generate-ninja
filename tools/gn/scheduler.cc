@@ -5,9 +5,11 @@
 #include "tools/gn/scheduler.h"
 
 #include <algorithm>
+#include <sstream>
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/files/file_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
 #include "tools/gn/filesystem_utils.h"
@@ -68,6 +70,7 @@ Scheduler::Scheduler()
       input_file_manager_(new InputFileManager),
       verbose_logging_(false),
       verbose_log_file_(),
+      env_logging_(false),
       work_count_(0),
       is_failed_(false),
       has_been_shutdown_(false) {
@@ -110,6 +113,22 @@ void Scheduler::Log(const std::string& verb, const std::string& msg) {
                         base::Bind(&Scheduler::LogOnMainThread,
                                    base::Unretained(this), verb, msg));
   }
+}
+
+void Scheduler::LogEnv(const std::string& var, const std::string& value) {
+  base::AutoLock lock(lock_);
+  if (env_logging_)
+    env_vars_.insert(std::make_pair(var, value));
+}
+
+void Scheduler::SaveEnvLog(const base::FilePath& file_name) {
+  std::ostringstream out;
+  for (auto var : env_vars_) {
+    out << var.first << "=" << var.second << std::endl;
+  }
+  std::string out_str = out.str();
+  base::WriteFile(file_name, out_str.data(),
+                       static_cast<int>(out_str.size()));
 }
 
 void Scheduler::FailWithError(const Err& err) {

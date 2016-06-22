@@ -272,6 +272,7 @@ bool Setup::DoSetup(const std::string& build_dir, bool force_create) {
 
   scheduler_.set_verbose_logging(cmdline->HasSwitch(switches::kVerbose));
   scheduler_.set_verbose_log(cmdline->GetSwitchValuePath(switches::kVerbose));
+  scheduler_.set_env_logging(cmdline->HasSwitch(switches::kEnvlog));
   if (cmdline->HasSwitch(switches::kTime) ||
       cmdline->HasSwitch(switches::kTracelog))
     EnableTracing();
@@ -366,6 +367,8 @@ bool Setup::RunPostMessageLoop() {
     PrintLongHelp(SummarizeTraces());
   if (cmdline->HasSwitch(switches::kTracelog))
     SaveTraces(cmdline->GetSwitchValuePath(switches::kTracelog));
+  if (cmdline->HasSwitch(switches::kEnvlog))
+    scheduler_.SaveEnvLog(cmdline->GetSwitchValuePath(switches::kEnvlog));
 
   return true;
 }

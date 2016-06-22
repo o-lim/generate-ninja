@@ -40,6 +40,10 @@ extern const char kDotfile[];
 extern const char kDotfile_HelpShort[];
 extern const char kDotfile_Help[];
 
+extern const char kEnvlog[];
+extern const char kEnvlog_HelpShort[];
+extern const char kEnvlog_Help[];
+
 extern const char kFailOnUnusedArgs[];
 extern const char kFailOnUnusedArgs_HelpShort[];
 extern const char kFailOnUnusedArgs_Help[];

@@ -37,14 +37,19 @@ class Scheduler {
 
   bool verbose_logging() const { return verbose_logging_; }
   void set_verbose_logging(bool v) { verbose_logging_ = v; }
-
   void set_verbose_log(const base::FilePath& file_name);
+
+  bool env_logging() const { return env_logging_; }
+  void set_env_logging(bool e) { env_logging_ = e; }
 
   // TODO(brettw) data race on this access (benign?).
   bool is_failed() const { return is_failed_; }
 
   void Log(const std::string& verb, const std::string& msg);
+  void LogEnv(const std::string& var, const std::string& value);
   void FailWithError(const Err& err);
+
+  void SaveEnvLog(const base::FilePath& file_name);
 
   void ScheduleWork(const base::Closure& work);
 
@@ -112,6 +117,8 @@ class Scheduler {
   bool verbose_logging_;
   std::ofstream verbose_log_file_;
 
+  bool env_logging_;
+
   base::AtomicRefCount work_count_;
 
   mutable base::Lock lock_;
@@ -127,6 +134,7 @@ class Scheduler {
   std::vector<SourceFile> written_files_;
   std::vector<const Target*> write_runtime_deps_targets_;
   std::multimap<SourceFile, const Target*> unknown_generated_inputs_;
+  std::map<std::string, std::string> env_vars_;
 
   DISALLOW_COPY_AND_ASSIGN(Scheduler);
 };
