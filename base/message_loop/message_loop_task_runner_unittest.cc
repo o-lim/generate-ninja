@@ -12,8 +12,8 @@
 #include "base/message_loop/message_loop.h"
 #include "base/message_loop/message_loop_task_runner.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
 
@@ -24,7 +24,8 @@ class MessageLoopTaskRunnerTest : public testing::Test {
   MessageLoopTaskRunnerTest()
       : current_loop_(new MessageLoop()),
         task_thread_("task_thread"),
-        thread_sync_(true, false) {}
+        thread_sync_(WaitableEvent::ResetPolicy::MANUAL,
+                     WaitableEvent::InitialState::NOT_SIGNALED) {}
 
   void DeleteCurrentMessageLoop() { current_loop_.reset(); }
 

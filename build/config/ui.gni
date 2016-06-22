@@ -46,10 +46,6 @@ declare_args() {
   # Whether we should use glib, a low level C utility library.
   use_glib = is_linux
 
-  # Indicates if material design elements in the top chrome of the browser are
-  # enabled.
-  enable_topchrome_md = is_chromeos || is_win || is_linux || is_mac
-
   # Indicates if Wayland display server support is enabled.
   enable_wayland_server = is_chromeos
 
@@ -84,4 +80,4 @@ if (is_linux && use_glib) {
 # Whether to use atk, the Accessibility ToolKit library
 use_atk = is_desktop_linux && use_x11
 
-use_clipboard_aurax11 = is_linux && use_aura && use_x11
+use_clipboard_aurax11 = is_desktop_linux && use_aura && use_x11

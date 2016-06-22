@@ -10,9 +10,13 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
+#include "tools/gn/label.h"
+#include "tools/gn/label_ptr.h"
 #include "tools/gn/substitution_list.h"
 #include "tools/gn/substitution_pattern.h"
 #include "tools/gn/value.h"
+
+class Pool;
 
 class Tool {
  public:
@@ -175,6 +179,9 @@ class Tool {
     rspfile_content_ = content;
   }
 
+  const LabelPtrPair<Pool>& pool() const { return pool_; }
+  void set_pool(const LabelPtrPair<Pool>& pool) { pool_ = pool; }
+
   const std::vector<std::string> & source_extensions() const {
     return source_extensions_;
   }
@@ -200,6 +207,8 @@ class Tool {
     return substitution_bits_;
   }
 
+  bool OnResolved(Err* err);
+
  private:
   SubstitutionPattern command_;
   std::string default_output_extension_;
@@ -218,6 +227,7 @@ class Tool {
   bool restat_;
   SubstitutionPattern rspfile_;
   SubstitutionPattern rspfile_content_;
+  LabelPtrPair<Pool> pool_;
   std::vector<std::string> source_extensions_;
 
   bool complete_;

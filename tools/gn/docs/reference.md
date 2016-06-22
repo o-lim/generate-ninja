@@ -70,6 +70,20 @@
 
 
 ```
+## **\--envlog**: Writes a list of environment variables to the given file.
+```
+  The env log will show a list of environment variables used referenced
+  in gn files as well their values.
+
+```
+
+### **Examples**
+
+```
+  gn gen out/Default --envlog=myenv.log
+
+
+```
 ## **\--fail-on-unused-args**: Treat unused build args as fatal errors.
 
 ```
@@ -176,6 +190,16 @@
 
 
 ```
+## **\--script-executable**: Set the executable used to execute scripts.
+
+```
+  By default GN searches the PATH for Python to execute scripts in
+  action targets and exec_script calls. This flag allows the
+  specification of a specific Python executable or potentially
+  a different language interpreter.
+
+
+```
 ## **\--threads**: Specify number of worker threads.
 
 ```
@@ -232,6 +256,15 @@
 ```
   This will spew logging events to the console for debugging issues.
   Good luck!
+
+  If a file is specified, the log is written to the given file.
+
+```
+
+### **Examples**
+
+```
+  gn gen out/Default -v=mylog.log
 
 
 ```
@@ -442,87 +475,58 @@
 
 
 ```
-## **gn desc**: Show lots of insightful information about a target.
+## **gn desc**: Show lots of insightful information about a target or config.
 
 ```
-  gn desc <out_dir> <target label> [<what to show>] [--blame]
+  gn desc <out_dir> <label or pattern> [<what to show>] [--blame]
 
-  Displays information about a given labeled target for the given build.
-  The build parameters will be taken for the build in the given
-  <out_dir>.
+  Displays information about a given target or config. The build
+  build parameters will be taken for the build in the given <out_dir>.
+
+  The <label or pattern> can be a target label, a config label, or a
+  label pattern (see "gn help label_pattern"). A label pattern will
+  only match targets.
 
 ```
 
 ### **Possibilities for <what to show>**
+
 ```
   (If unspecified an overall summary will be displayed.)
 
-  sources
-      Source files.
-
-  inputs
-      Additional input dependencies.
-
-  public
-      Public header files.
-
-  check_includes
-      Whether "gn check" checks this target for include usage.
-
-  allow_circular_includes_from
-      Permit includes from these targets.
-
-  visibility
-      Prints which targets can depend on this one.
-
-  testonly
-      Whether this target may only be used in tests.
-
-  configs
-      Shows configs applied to the given target, sorted in the order
-      they're specified. This includes both configs specified in the
-      "configs" variable, as well as configs pushed onto this target
-      via dependencies specifying "all" or "direct" dependent
-      configs.
-
-  deps
-      Show immediate or recursive dependencies. See below for flags that
-      control deps printing.
-
-  public_configs
   all_dependent_configs
-      Shows the labels of configs applied to targets that depend on this
-      one (either directly or all of them).
-
-  command
-  script
+  allow_circular_includes_from
+  arflags [--blame]
   args
+  asmflags [--blame]
+  asmppflags [--blame]
+  cflags [--blame]
+  cflags_c [--blame]
+  cflags_cc [--blame]
+  cflags_objc [--blame]
+  cflags_objcc [--blame]
+  check_includes
+  configs [--tree] (see below)
+  cppflags [--blame]
+  cppflags_c [--blame]
+  cppflags_cc [--blame]
+  cppflags_objc [--blame]
+  cppflags_objcc [--blame]
+  defines [--blame]
   depfile
-      Actions only. The script and related values.
-
-  outputs
-      Outputs for script and copy target types.
-
-  arflags         [--blame]
-  asmflags        [--blame]
-  asmppflags      [--blame]
-  defines         [--blame]
-  include_dirs    [--blame]
-  cflags          [--blame]
-  cflags_c        [--blame]
-  cflags_cc       [--blame]
-  cflags_objc     [--blame]
-  cflags_objcc    [--blame]
-  cppflags        [--blame]
-  cppflags_c      [--blame]
-  cppflags_cc     [--blame]
-  cppflags_objc   [--blame]
-  cppflags_objcc  [--blame]
-  ldflags         [--blame]
+  deps [--all] [--tree] (see below)
+  include_dirs [--blame]
+  inputs
+  ldflags [--blame]
   lib_dirs
   libs
-      Shows the given values taken from the target and all configs
-      applying. See "--blame" below.
+  outputs
+  public_configs
+  public
+  script
+  sources
+  testonly
+  visibility
 
   runtime_deps
       Compute all runtime deps for the given target. This is a
@@ -539,17 +543,49 @@
 ### **Shared flags**
 
 ```
+  --all-toolchains
+      Normally only inputs in the default toolchain will be included.
+      This switch will turn on matching all toolchains.
+
+      For example, a file is in a target might be compiled twice:
+      once in the default toolchain and once in a secondary one. Without
+      this flag, only the default toolchain one will be matched by
+      wildcards. With this flag, both will be matched.
+
+```
+
+### **Target flags**
+
+```
   --blame
-      Used with any value specified by a config, this will name
-      the config that specified the value. This doesn't currently work
-      for libs and lib_dirs because those are inherited and are more
-      complicated to figure out the blame (patches welcome).
+      Used with any value specified on a config, this will name
+      the config that cause that target to get the flag. This doesn't
+      currently work for libs and lib_dirs because those are inherited
+      and are more complicated to figure out the blame (patches
+      welcome).
 
 ```
 
-### **Flags that control how deps are printed**
+### **Configs**
 
 ```
+  The "configs" section will list all configs that apply. For targets
+  this will include configs specified in the "configs" variable of
+  the target, and also configs pushed onto this target via public
+  or "all dependent" configs.
+
+  Configs can have child configs. Specifying --tree will show the
+  hierarchy.
+
+```
+
+### **Printing deps**
+
+```
+  Deps will include all public, private, and data deps (TODO this could
+  be clarified and enhanced) sorted in order applying. The following
+  may be used:
+
   --all
       Collects all recursive dependencies and prints a sorted flat list.
       Also usable with --tree (see below).
@@ -697,16 +733,53 @@
              (default Visual Studio version: 2015)
       "vs2013" - Visual Studio 2013 project/solution files.
       "vs2015" - Visual Studio 2015 project/solution files.
-
-  --sln=<file_name>
-      Override default sln file name ("all"). Solution file is written
-      to the root build directory. Only for Visual Studio.
+      "xcode" - Xcode workspace/solution files.
+      "qtcreator" - QtCreator project files.
 
   --filters=<path_prefixes>
       Semicolon-separated list of label patterns used to limit the set
       of generated projects (see "gn help label_pattern"). Only
-      matching targets will be included to the solution. Only for Visual
-      Studio.
+      matching targets and their dependencies will be included in the
+      solution. Only used for Visual Studio and Xcode.
+
+```
+
+### **Visual Studio Flags**
+
+```
+  --sln=<file_name>
+      Override default sln file name ("all"). Solution file is written
+      to the root build directory.
+
+```
+
+### **Xcode Flags**
+
+```
+  --workspace=<file_name>
+      Override defaut workspace file name ("all"). The workspace file
+      is written to the root build directory.
+
+  --ninja-extra-args=<string>
+      This string is passed without any quoting to the ninja invocation
+      command-line. Can be used to configure ninja flags, like "-j" if
+      using goma for example.
+
+  --root-target=<target_name>
+      Name of the target corresponding to "All" target in Xcode.
+      If unset, "All" invokes ninja without any target
+      and builds everything.
+
+```
+
+### **QtCreator Flags**
+
+```
+  --root-target=<target_name>
+      Name of the root target for which the QtCreator project will be
+      generated to contain files of it and its dependencies. If unset, 
+      the whole build graph will be emitted.
+
 
 ```
 
@@ -785,10 +858,13 @@
           root build directory.
 
   --all-toolchains
-      Matches all toolchains. When set, if the label pattern does not
-      specify an explicit toolchain, labels from all toolchains will be
-      matched. When unset, only targets in the default toolchain will
-      be matched unless an explicit toolchain in the label is set.
+      Normally only inputs in the default toolchain will be included.
+      This switch will turn on matching all toolchains.
+
+      For example, a file is in a target might be compiled twice:
+      once in the default toolchain and once in a secondary one. Without
+      this flag, only the default toolchain one will be matched by
+      wildcards. With this flag, both will be matched.
 
   --testonly=(true|false)
       Restrict outputs to targets with the testonly flag set
@@ -836,8 +912,8 @@
 
   Finds paths of dependencies between two targets. Each unique path
   will be printed in one group, and groups will be separate by newlines.
-  The two targets can appear in either order: paths will be found going
-  in either direction.
+  The two targets can appear in either order (paths will be found going
+  in either direction).
 
   By default, a single path will be printed. If there is a path with
   only public dependencies, the shortest public path will be printed.
@@ -848,13 +924,23 @@
 
 ```
 
+### **Interesting paths**
+
+```
+  In a large project, there can be 100's of millions of unique paths
+  between a very high level and a common low-level target. To make the
+  output more useful (and terminate in a reasonable time), GN will not
+  revisit sub-paths previously known to lead to the target.
+
+```
+
 ### **Options**
 
 ```
   --all
-     Prints all paths found rather than just the first one. Public paths
-     will be printed first in order of increasing length, followed by
-     non-public paths in order of increasing length.
+     Prints all "interesting" paths found rather than just the first
+     one. Public paths will be printed first in order of increasing
+     length, followed by non-public paths in order of increasing length.
 
   --public
      Considers only public paths. Can't be used with --with-data.
@@ -922,10 +1008,8 @@
 
       For example, a file is in a target might be compiled twice:
       once in the default toolchain and once in a secondary one. Without
-      this flag, only the default toolchain one will be matched and
-      printed (potentially with its recursive dependencies, depending on
-      the other options). With this flag, both will be printed
-      (potentially with both of their recursive dependencies).
+      this flag, only the default toolchain one will be matched by
+      wildcards. With this flag, both will be matched.
 
   --as=(buildfile|label|output)
       How to print targets.
@@ -1404,13 +1488,40 @@
   generate iOS/OS X bundle. In cross-platform projects, it is advised to
   put it behind iOS/Mac conditionals.
 
+  If a create_bundle is specified as a data_deps for another target, the
+  bundle is considered a leaf, and its public and private dependencies
+  will not contribute to any data or data_deps. Required runtime
+  dependencies should be placed in the bundle. A create_bundle can
+  declare its own explicit data and data_deps, however.
+
+```
+
+### **Code signing**
+
+```
+  Some bundle needs to be code signed as part of the build (on iOS all
+  application needs to be code signed to run on a device). The code
+  signature can be configured via the code_signing_script variable.
+
+  If set, code_signing_script is the path of a script that invoked after
+  all files have been moved into the bundle. The script must not change
+  any file in the bundle, but may add new files.
+
+  If code_signing_script is defined, then code_signing_outputs must also
+  be defined and non-empty to inform when the script needs to be re-run.
+  The code_signing_args will be passed as is to the script (so path have
+  to be rebased) and additional inputs may be listed with the variable
+  code_signing_sources.
+
 ```
 
 ### **Variables**
 
 ```
   bundle_root_dir*, bundle_resources_dir*, bundle_executable_dir*,
-  bundle_plugins_dir*, deps, data_deps, public_deps, visibility
+  bundle_plugins_dir*, deps, data_deps, public_deps, visibility,
+  product_type, code_signing_args, code_signing_script,
+  code_signing_sources, code_signing_outputs
   * = required
 
 ```
@@ -1446,24 +1557,26 @@
 
       executable("${app_name}_generate_executable") {
         forward_variables_from(invoker, "*", [
-                                                "output_name",
-                                                "visibility",
-                                               ])
+                                               "output_name",
+                                               "visibility",
+                                             ])
         output_name =
             rebase_path("$gen_path/$app_name", root_build_dir)
       }
 
-      bundle_data("${app_name}_bundle_executable") {
-        deps = [ ":${app_name}_generate_executable" ]
-        sources = [ "$gen_path/$app_name" ]
-        outputs = [ "{{bundle_executable_dir}}/$app_name" ]
+      code_signing =
+          defined(invoker.code_signing) && invoker.code_signing
+
+      if (is_ios && !code_signing) {
+        bundle_data("${app_name}_bundle_executable") {
+          deps = [ ":${app_name}_generate_executable" ]
+          sources = [ "$gen_path/$app_name" ]
+          outputs = [ "{{bundle_executable_dir}}/$app_name" ]
+        }
       }
 
       create_bundle("${app_name}.app") {
-        deps = [
-          ":${app_name}_bundle_executable",
-          ":${app_name}_bundle_info_plist",
-        ]
+        product_type = "com.apple.product-type.application"
         if (is_ios) {
           bundle_root_dir = "${root_build_dir}/$target_name"
           bundle_resources_dir = bundle_root_dir
@@ -1475,11 +1588,33 @@
           bundle_executable_dir = bundle_root_dir + "/MacOS"
           bundle_plugins_dir = bundle_root_dir + "/Plugins"
         }
-      }
-
-      group(target_name) {
-        forward_variables_from(invoker, ["visibility"])
-        deps = [ ":${app_name}.app" ]
+        deps = [ ":${app_name}_bundle_info_plist" ]
+        if (is_ios && code_signing) {
+          deps += [ ":${app_name}_generate_executable" ]
+          code_signing_script = "//build/config/ios/codesign.py"
+          code_signing_sources = [
+            invoker.entitlements_path,
+            "$target_gen_dir/$app_name",
+          ]
+          code_signing_outputs = [
+            "$bundle_root_dir/$app_name",
+            "$bundle_root_dir/_CodeSignature/CodeResources",
+            "$bundle_root_dir/embedded.mobileprovision",
+            "$target_gen_dir/$app_name.xcent",
+          ]
+          code_signing_args = [
+            "-i=" + ios_code_signing_identity,
+            "-b=" + rebase_path(
+                "$target_gen_dir/$app_name", root_build_dir),
+            "-e=" + rebase_path(
+                invoker.entitlements_path, root_build_dir),
+            "-e=" + rebase_path(
+                "$target_gen_dir/$app_name.xcent", root_build_dir),
+            rebase_path(bundle_root_dir, root_build_dir),
+          ]
+        } else {
+          deps += [ ":${app_name}_bundle_executable" ]
+        }
       }
     }
   }
@@ -2227,6 +2362,47 @@
 
 
 ```
+## **pool**: Defines a pool object.
+
+```
+  Pool objects can be applied to a tool to limit the parallelism of the
+  build. This object has a single property "depth" corresponding to
+  the number of tasks that may run simultaneously.
+
+  As the file containing the pool definition may be executed in the
+  context of more than one toolchain it is recommended to specify an
+  explicit toolchain when defining and referencing a pool.
+
+  A pool is referenced by its label just like a target.
+
+```
+
+### **Variables**
+
+```
+  depth*
+  * = required
+
+```
+
+### **Example**
+
+```
+  if (current_toolchain == default_toolchain) {
+    pool("link_pool") {
+      depth = 1
+    }
+  }
+
+  toolchain("toolchain") {
+    tool("link") {
+      command = "..."
+      pool = ":link_pool($default_toolchain)")
+    }
+  }
+
+
+```
 ## **print**: Prints to the console.
 
 ```
@@ -2650,6 +2826,7 @@
 
 ### **Variables**
 
+### **complete_static_lib**
 ```
   Flags: asmflags, cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
          cppflags, cppflags_c, cppflags_cc, cppflags_objc, cppflags_objcc,
@@ -2962,7 +3139,7 @@
 
         These strings will be prepended to the libraries and library
         search directories, respectively, because linkers differ on how
-        specify them. If you specified:
+        you specify them. If you specified:
           lib_switch = "-l"
           lib_dir_switch = "-L"
         then the "{{libs}}" expansion for [ "freetype", "expat"]
@@ -2999,6 +3176,14 @@
             "{{output_dir}}/{{target_output_name}}{{output_extension}}",
             "{{output_dir}}/{{target_output_name}}.lib",
           ]
+
+    pool [label, optional]
+
+        Label of the pool to use for the tool. Pools are used to limit
+        the number of tasks that can execute concurrently during the
+        build.
+
+        See also "gn help pool".
 
     link_output  [string with substitutions]
     depend_output  [string with substitutions]
@@ -3157,13 +3342,17 @@
     {{cflags_objcc}}
     {{defines}}
     {{include_dirs}}
-        Strings correspond that to the processed flags/defines/include
+    {{sys_include_dirs}}
+        Strings that correspond to the processed flags/defines/include
         directories specified for the target.
         Example: "--enable-foo --enable-bar"
 
-        Defines will be prefixed by "-D" and include directories will
-        be prefixed by "-I" (these work with Posix tools as well as
-        Microsoft ones).
+        Defines will be prefixed by "-D", include directories will be
+        prefixed by "-I" (these work with Posix tools as well as
+        Microsoft ones), and system include directories will be prefixed
+        by "-isystem", unless these prefixes are overridden using the
+        "define_switch", "include_switch", and "sys_include_switch"
+        toolchain variables, respectively.
 
     {{source}}
         The relative path and name of the current input file.
@@ -3372,6 +3561,19 @@
 
     The value used will be the one from the default toolchain of the
     current build.
+
+  define_switch
+    This string will be prepended to the preprocessor macro definitions.
+    Defaults to "-D".
+
+  include_switch
+    This string will be prepended to the include search directories.
+    Defaults to "-I".
+
+  sys_include_switch
+    This string will be prepended to system include search directories.
+    System include directories are searched after the standard include
+    directories. Defaults to "-isystem".
 
   object_extensions
     List of object extensions for this toolchain. Object files are passed
@@ -3681,13 +3883,13 @@
 ```
   This value should be used to indicate the desired architecture for
   the primary objects of the build. It will match the cpu architecture
-  of the default toolchain.
+  of the default toolchain, but not necessarily the current toolchain.
 
   In many cases, this is the same as "host_cpu", but in the case
-  of cross-compiles, this can be set to something different. This 
-  value is different from "current_cpu" in that it can be referenced
-  from inside any toolchain. This value can also be ignored if it is
-  not needed or meaningful for a project.
+  of cross-compiles, this can be set to something different. This
+  value is different from "current_cpu" in that it does not change
+  based on the current toolchain. When writing rules, "current_cpu"
+  should be used rather than "target_cpu" most of the time.
 
   This value is not used internally by GN for any purpose, so it
   may be set to whatever value is needed for the build.
@@ -4361,6 +4563,48 @@
 
 
 ```
+## **code_signing_args**: [string list] Arguments passed to code signing script.
+
+```
+  For create_bundle targets, code_signing_args is the list of arguments
+  to pass to the code signing script. Typically you would use source
+  expansion (see "gn help source_expansion") to insert the source file
+  names.
+
+  See also "gn help create_bundle".
+
+
+```
+## **code_signing_outputs**: [file list] Output files for code signing step.
+
+```
+  Outputs from the code signing step of a create_bundle target. Must
+  refer to files in the build directory.
+
+  See also "gn help create_bundle".
+
+
+```
+## **code_signing_script**: [file name] Script for code signing.
+```
+  An absolute or buildfile-relative file name of a Python script to run
+  for a create_bundle target to perform code signing step.
+
+  See also "gn help create_bundle".
+
+
+```
+## **code_signing_sources**: [file list] Sources for code signing step.
+
+```
+  A list of files used as input for code signing script step of a
+  create_bundle target. Non-absolute paths will be resolved relative to
+  the current build file.
+
+  See also "gn help create_bundle".
+
+
+```
 ## **command**: Command to run for actions.
 
 ```
@@ -4740,6 +4984,9 @@
   However, no verification is done on these so GN doesn't enforce this.
   The paths are just rebased and passed along when requested.
 
+  Note: On iOS and OS X, create_bundle targets will not be recursed
+  into when gathering data. See "gn help create_bundle" for details.
+
   See "gn help runtime_deps" for how these are used.
 
 
@@ -4755,6 +5002,10 @@
 
   This is normally used for things like plugins or helper programs that
   a target needs at runtime.
+
+  Note: On iOS and OS X, create_bundle targets will not be recursed
+  into when gathering data_deps. See "gn help create_bundle" for
+  details.
 
   See also "gn help deps" and "gn help data".
 
@@ -4964,7 +5215,7 @@
 
   The problem happens if a file is ever removed because the inputs are
   not listed on the command line to the script. Because the script
-  hasn't changed and all inputs are up-to-date, the script will not
+  hasn't changed and all inputs are up to date, the script will not
   re-run and you will get a stale build. Instead, either list all
   inputs on the command line to the script, or if there are many, create
   a separate list file that the script reads. As long as this file is
@@ -4981,13 +5232,11 @@
   files in a target are compiled. So if you depend on generated headers,
   you do not typically need to list them in the inputs section.
 
-  Inputs for binary targets will be treated as order-only dependencies,
-  meaning that they will be forced up-to-date before compiling or
-  any files in the target, but changes in the inputs will not
-  necessarily force the target to compile. This is because it is
-  expected that the compiler will report the precise list of input
-  dependencies required to recompile each file once the initial build
-  is done.
+  Inputs for binary targets will be treated as implicit dependencies,
+  meaning that changes in any of the inputs will force all sources in
+  the target to be recompiled. If an input only applies to a subset of
+  source files, you may want to split those into a separate target to
+  avoid unnecessary recompiles.
 
 ```
 
@@ -5397,6 +5646,18 @@
   The source file that goes along with the precompiled_header when
   using "msvc"-style precompiled headers. It will be implicitly added
   to the sources of the target. See "gn help precompiled_header".
+
+
+```
+## **product_type**: Product type for Xcode projects.
+
+```
+  Correspond to the type of the product of a create_bundle target. Only
+  meaningful to Xcode (used as part of the Xcode project generation).
+
+  When generating Xcode project files, only create_bundle target with
+  a non-empty product_type will have a corresponding target in Xcode
+  project.
 
 
 ```
@@ -6236,8 +6497,8 @@
   When a tool produces more than one output, only the first output
   is considered. For example, a shared library target may produce a
   .dll and a .lib file on Windows. Only the .dll file will be considered
-  a runtime dependency. This applies only to linker tools, scripts and
-  copy steps with multiple outputs will also get all outputs listed.
+  a runtime dependency. This applies only to linker tools. Scripts and
+  copy steps with multiple outputs will get all outputs listed.
 
 
 ```
@@ -6378,12 +6639,14 @@
 **  \--args**: Specifies build arguments overrides.
 **  \--color**: Force colored output.
 **  \--dotfile**: Override the name of the ".gn" file.
+**  \--envlog**: Writes a list of environment variables to the given file.
 **  \--fail-on-unused-args**: Treat unused build args as fatal errors.
 **  \--markdown**: Write help output in the Markdown format.
 **  \--nocolor**: Force non-colored output.
 **  -q**: Quiet mode. Don't print output on success.
 **  \--root**: Explicitly specify source root.
 **  \--runtime-deps-list-file**: Save runtime dependencies for targets in file.
+**  \--script-executable**: Set the executable used to execute scripts.
 **  \--threads**: Specify number of worker threads.
 **  \--time**: Outputs a summary of how long everything took.
 **  \--tracelog**: Writes a Chrome-compatible trace log to the given file.

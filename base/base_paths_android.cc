@@ -23,11 +23,10 @@ bool PathProviderAndroid(int key, FilePath* result) {
     case base::FILE_EXE: {
       char bin_dir[PATH_MAX + 1];
       int bin_dir_size = readlink(kProcSelfExe, bin_dir, PATH_MAX);
-      // TODO(falken): This PCHECK is for debugging crbug.com/600226.
-      // Revert to NOTREACHED when the cause of the bug is understood.
-      PCHECK(bin_dir_size > 0 && bin_dir_size <= PATH_MAX)
-          << "Unable to resolve " << kProcSelfExe
-          << ". bin_dir_size=" << bin_dir_size;
+      if (bin_dir_size < 0 || bin_dir_size > PATH_MAX) {
+        NOTREACHED() << "Unable to resolve " << kProcSelfExe << ".";
+        return false;
+      }
       bin_dir[bin_dir_size] = 0;
       *result = FilePath(bin_dir);
       return true;
@@ -39,8 +38,10 @@ bool PathProviderAndroid(int key, FilePath* result) {
     case base::DIR_MODULE:
       return base::android::GetNativeLibraryDirectory(result);
     case base::DIR_SOURCE_ROOT:
-      // This const is only used for tests.
-      return base::android::GetExternalStorageDirectory(result);
+      // Used only by tests.
+      // In that context, hooked up via base/test/test_support_android.cc.
+      NOTIMPLEMENTED();
+      return false;
     case base::DIR_USER_DESKTOP:
       // Android doesn't support GetUserDesktop.
       NOTIMPLEMENTED();

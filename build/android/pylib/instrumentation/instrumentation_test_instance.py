@@ -33,6 +33,8 @@ _DEFAULT_ANNOTATIONS = [
     'EnormousTest', 'IntegrationTest']
 _EXCLUDE_UNLESS_REQUESTED_ANNOTATIONS = [
     'DisabledTest', 'FlakyTest']
+_VALID_ANNOTATIONS = set(['Manual', 'PerfTest'] + _DEFAULT_ANNOTATIONS +
+                         _EXCLUDE_UNLESS_REQUESTED_ANNOTATIONS)
 _EXTRA_DRIVER_TEST_LIST = (
     'org.chromium.test.driver.OnDeviceInstrumentationDriver.TestList')
 _EXTRA_DRIVER_TEST_LIST_FILE = (
@@ -48,6 +50,13 @@ _PARAMETERIZED_TEST_ANNOTATION = 'ParameterizedTest'
 _PARAMETERIZED_TEST_SET_ANNOTATION = 'ParameterizedTest$Set'
 _NATIVE_CRASH_RE = re.compile('native crash', re.IGNORECASE)
 _PICKLE_FORMAT_VERSION = 10
+
+
+class MissingSizeAnnotationError(Exception):
+  def __init__(self, class_name):
+    super(MissingSizeAnnotationError, self).__init__(class_name +
+        ': Test method is missing required size annotation. Add one of: ' +
+        ', '.join('@' + a for a in _VALID_ANNOTATIONS))
 
 
 # TODO(jbudorick): Make these private class methods of
@@ -230,6 +239,9 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     self._timeout_scale = None
     self._initializeTestControlAttributes(args)
 
+    self._coverage_directory = None
+    self._initializeTestCoverageAttributes(args)
+
   def _initializeApkAttributes(self, args, error_func):
     if args.apk_under_test:
       apk_under_test_path = args.apk_under_test
@@ -377,7 +389,11 @@ class InstrumentationTestInstance(test_instance.TestInstance):
       self._driver_apk = None
 
   def _initializeTestControlAttributes(self, args):
+    self._screenshot_dir = args.screenshot_dir
     self._timeout_scale = args.timeout_scale or 1
+
+  def _initializeTestCoverageAttributes(self, args):
+    self._coverage_directory = args.coverage_dir
 
   @property
   def additional_apks(self):
@@ -392,8 +408,8 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     return self._apk_under_test_incremental_install_script
 
   @property
-  def flags(self):
-    return self._flags
+  def coverage_directory(self):
+    return self._coverage_directory
 
   @property
   def driver_apk(self):
@@ -408,8 +424,16 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     return self._driver_name
 
   @property
+  def flags(self):
+    return self._flags
+
+  @property
   def package_info(self):
     return self._package_info
+
+  @property
+  def screenshot_dir(self):
+    return self._screenshot_dir
 
   @property
   def suite(self):
@@ -546,9 +570,12 @@ class InstrumentationTestInstance(test_instance.TestInstance):
   def _FilterTests(self, tests):
 
     def gtest_filter(c, m):
-      t = ['%s.%s' % (c['class'].split('.')[-1], m['method'])]
-      return (not self._test_filter
-              or unittest_util.FilterTestNames(t, self._test_filter))
+      if not self._test_filter:
+        return True
+      # Allow fully-qualified name as well as an omitted package.
+      names = ['%s.%s' % (c['class'], m['method']),
+               '%s.%s' % (c['class'].split('.')[-1], m['method'])]
+      return unittest_util.FilterTestNames(names, self._test_filter)
 
     def annotation_filter(all_annotations):
       if not self._annotations:
@@ -576,6 +603,11 @@ class InstrumentationTestInstance(test_instance.TestInstance):
 
         all_annotations = dict(c['annotations'])
         all_annotations.update(m['annotations'])
+
+        # Enforce that all tests declare their size.
+        if not any(a in _VALID_ANNOTATIONS for a in all_annotations):
+          raise MissingSizeAnnotationError('%s.%s' % (c['class'], m['method']))
+
         if (not annotation_filter(all_annotations)
             or not excluded_annotation_filter(all_annotations)):
           continue

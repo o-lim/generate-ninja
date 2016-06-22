@@ -7,6 +7,7 @@
 
 #include <map>
 #include <memory>
+#include <vector>
 
 #include "base/macros.h"
 #include "base/synchronization/lock.h"
@@ -30,11 +31,16 @@ class ImportManager {
                 Scope* scope,
                 Err* err);
 
+  std::vector<SourceFile> GetImportedFiles() const;
+
  private:
-  base::Lock lock_;
+  struct ImportInfo;
+
+  // Protects access to imports_. Do not hold when actually executing imports.
+  base::Lock imports_lock_;
 
   // Owning pointers to the scopes.
-  typedef std::map<SourceFile, std::unique_ptr<const Scope>> ImportMap;
+  typedef std::map<SourceFile, std::unique_ptr<ImportInfo>> ImportMap;
   ImportMap imports_;
 
   DISALLOW_COPY_AND_ASSIGN(ImportManager);

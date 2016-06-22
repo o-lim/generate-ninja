@@ -284,6 +284,13 @@ def main():
     print 'Did you mean to use the `msvs-ninja` generator?'
     sys.exit(1)
 
+  # We explicitly don't support the native xcode gyp generator. Be nice and
+  # fail here, rather than generating broken projects.
+  if re.search(r'(^|,|\s)xcode($|,|\s)', os.environ.get('GYP_GENERATORS', '')):
+    print 'Error: xcode gyp generator not supported (check GYP_GENERATORS).'
+    print 'Did you mean to use the `xcode-ninja` generator?'
+    sys.exit(1)
+
   # If CHROMIUM_GYP_SYNTAX_CHECK is set to 1, it will invoke gyp with --check
   # to enfore syntax checking.
   syntax_check = os.environ.get('CHROMIUM_GYP_SYNTAX_CHECK')
@@ -319,6 +326,7 @@ def main():
   mac_toolchain_dir = mac_toolchain.GetToolchainDirectory()
   if mac_toolchain_dir:
     args.append('-Gmac_toolchain_dir=' + mac_toolchain_dir)
+    mac_toolchain.SetToolchainEnvironment()
 
   # TODO(crbug.com/432967) - We are eventually going to switch GYP off
   # by default for all Chromium builds, so this list of configurations
@@ -326,7 +334,8 @@ def main():
   running_as_hook = '--running-as-hook'
   if (running_as_hook in args and
       os.environ.get('GYP_CHROMIUM_NO_ACTION', None) != '0' and
-      (sys.platform.startswith('linux') and not gyp_vars_dict)):
+      ((sys.platform.startswith('linux') and not gyp_vars_dict) or
+       (gyp_vars_dict.get('OS') == 'android'))):
     print 'GYP is now disabled in this configuration by default in runhooks.\n'
     print 'If you really want to run this, either run '
     print '`python build/gyp_chromium.py` explicitly by hand'

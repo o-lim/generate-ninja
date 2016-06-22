@@ -20,9 +20,9 @@
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/test_simple_task_runner.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -450,8 +450,6 @@ class TestIOHandler : public MessageLoopForIO::IOHandler {
 TestIOHandler::TestIOHandler(const wchar_t* name, HANDLE signal, bool wait)
     : signal_(signal), wait_(wait) {
   memset(buffer_, 0, sizeof(buffer_));
-  memset(&context_, 0, sizeof(context_));
-  context_.handler = this;
 
   file_.Set(CreateFile(name, GENERIC_READ, 0, NULL, OPEN_EXISTING,
                        FILE_FLAG_OVERLAPPED, NULL));
@@ -583,6 +581,9 @@ RUN_MESSAGE_LOOP_TESTS(UI, &TypeUIMessagePumpFactory);
 RUN_MESSAGE_LOOP_TESTS(IO, &TypeIOMessagePumpFactory);
 
 #if defined(OS_WIN)
+// Additional set of tests for GPU version of UI message loop.
+RUN_MESSAGE_LOOP_TESTS(GPU, &MessagePumpForGpu::CreateMessagePumpForGpu);
+
 TEST(MessageLoopTest, PostDelayedTask_SharedTimer_SubPump) {
   RunTest_PostDelayedTask_SharedTimer_SubPump();
 }
@@ -976,6 +977,22 @@ TEST(MessageLoopTest, DeleteUnboundLoop) {
   unbound_loop.reset();
   EXPECT_EQ(&loop, MessageLoop::current());
   EXPECT_EQ(loop.task_runner(), ThreadTaskRunnerHandle::Get());
+}
+
+TEST(MessageLoopTest, ThreadName) {
+  {
+    std::string kThreadName("foo");
+    MessageLoop loop;
+    PlatformThread::SetName(kThreadName);
+    EXPECT_EQ(kThreadName, loop.GetThreadName());
+  }
+
+  {
+    std::string kThreadName("bar");
+    base::Thread thread(kThreadName);
+    ASSERT_TRUE(thread.StartAndWaitForTesting());
+    EXPECT_EQ(kThreadName, thread.message_loop()->GetThreadName());
+  }
 }
 
 }  // namespace base

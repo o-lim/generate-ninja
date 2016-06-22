@@ -6,14 +6,10 @@ import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/win/visual_studio_version.gni")
 import("//build/toolchain/goma.gni")
 import("//build/toolchain/toolchain.gni")
+import("//build/toolchain/concurrent_links.gni")
 
 # Should only be running on Windows.
 assert(is_win)
-
-declare_args() {
-  # Set to true to use lld, the LLVM linker.
-  use_lld = false
-}
 
 # Setup the Visual Studio state.
 #
@@ -28,9 +24,6 @@ if (use_goma) {
 } else {
   goma_prefix = ""
 }
-
-# This value will be inherited in the toolchain below.
-concurrent_links = exec_script("../get_concurrent_links.py", [], "value")
 
 # Copy the VS runtime DLL for the default toolchain to the root build directory
 # so things will run.
@@ -55,12 +48,21 @@ if (current_toolchain == default_toolchain) {
 #  environment: File name of environment file.
 template("msvc_toolchain") {
   if (defined(invoker.concurrent_links)) {
+    # concurrent_links is picked up from the declare_arg() otherwise.
     concurrent_links = invoker.concurrent_links
   }
 
   env = invoker.environment
 
-  cl = invoker.cl
+  if (invoker.is_clang && host_os != "win") {
+    # This toolchain definition uses response files for compilations.  GN uses
+    # the quoting rules of the host OS, while clang-cl always defaults to
+    # cmd.exe quoting rules for parsing response files.  Tell clang-cl to use
+    # POSIX quoting rules, so it can understand what GN generates.
+    cl = "${invoker.cl} --rsp-quoting=posix"
+  } else {
+    cl = invoker.cl
+  }
 
   if (use_lld) {
     if (host_os == "win") {
@@ -80,6 +82,20 @@ template("msvc_toolchain") {
     link = "link.exe"
   }
 
+  # If possible, pass system includes as flags to the compiler.  When that's
+  # not possible, load a full environment file (containing %INCLUDE% and
+  # %PATH%) -- e.g. 32-bit MSVS builds require %PATH% to be set and just passing
+  # in a list of include directories isn't enough.
+  if (defined(invoker.sys_include_flags)) {
+    env_wrapper = ""
+    sys_include_flags = "${invoker.sys_include_flags} "  # Note trailing space.
+  } else {
+    # clang-cl doesn't need this env hoop, so omit it there.
+    assert(!invoker.is_clang)
+    env_wrapper = "ninja -t msvc -e $env -- "  # Note trailing space.
+    sys_include_flags = ""
+  }
+
   toolchain(target_name) {
     # Make these apply to all tools below.
     lib_switch = ""
@@ -96,13 +112,13 @@ template("msvc_toolchain") {
       # Label names may have spaces in them so the pdbname must be quoted. The
       # source and output don't need to be quoted because GN knows they're a
       # full file name and will quote automatically when necessary.
-      command = "ninja -t msvc -e $env -- $cl /nologo /showIncludes /FC @$rspfile /c {{source}} /Fo{{output}} /Fd\"$pdbname\""
+      command = "$env_wrapper$cl /nologo /showIncludes /FC @$rspfile /c {{source}} /Fo{{output}} /Fd\"$pdbname\""
       depsformat = "msvc"
       description = "CC {{output}}"
       outputs = [
         "$object_subdir/{{source_name_part}}.obj",
       ]
-      rspfile_content = "{{defines}} {{include_dirs}} {{cflags}} {{cflags_c}}"
+      rspfile_content = "$sys_include_flags{{defines}} {{include_dirs}} {{cflags}} {{cflags_c}}"
     }
 
     tool("cxx") {
@@ -113,13 +129,13 @@ template("msvc_toolchain") {
       pdbname = "{{target_out_dir}}/{{label_name}}_cc.pdb"
 
       # See comment in CC tool about quoting.
-      command = "ninja -t msvc -e $env -- $cl /nologo /showIncludes /FC @$rspfile /c {{source}} /Fo{{output}} /Fd\"$pdbname\""
+      command = "$env_wrapper$cl /nologo /showIncludes /FC @$rspfile /c {{source}} /Fo{{output}} /Fd\"$pdbname\""
       depsformat = "msvc"
       description = "CXX {{output}}"
       outputs = [
         "$object_subdir/{{source_name_part}}.obj",
       ]
-      rspfile_content = "{{defines}} {{include_dirs}} {{cflags}} {{cflags_cc}}"
+      rspfile_content = "$sys_include_flags{{defines}} {{include_dirs}} {{cflags}} {{cflags_cc}}"
     }
 
     tool("rc") {
@@ -145,7 +161,7 @@ template("msvc_toolchain") {
 
     tool("alink") {
       rspfile = "{{output}}.rsp"
-      command = "$python_path gyp-win-tool link-wrapper $env False $lib /nologo /ignore:4221 /OUT:{{output}} @$rspfile"
+      command = "$python_path gyp-win-tool link-wrapper $env False $lib /nologo {{arflags}} /OUT:{{output}} @$rspfile"
       description = "LIB {{output}}"
       outputs = [
         # Ignore {{output_extension}} and always use .lib, there's no reason to
@@ -243,16 +259,27 @@ template("msvc_toolchain") {
         current_os = invoker.toolchain_os
       }
 
-      forward_variables_from(invoker,
-                             [
-                               "is_clang",
-                               "is_component_build",
-                             ])
+      # These share a name with global variables that are already defined, and
+      # forward_variables_from won't clobber the existing value, so we need to
+      # set it explicitly.
+      if (defined(invoker.is_clang)) {
+        is_clang = invoker.is_clang
+      }
+      if (defined(invoker.is_component_build)) {
+        is_component_build = invoker.is_component_build
+      }
 
       # This value needs to be passed through unchanged.
       host_toolchain = host_toolchain
     }
   }
+}
+
+if (is_clang) {
+  sys_include_prefix = "-imsvc"
+} else {
+  # MSVC doesn't have the concept of system headers.
+  sys_include_prefix = "/I"
 }
 
 if (host_os == "win") {
@@ -272,6 +299,7 @@ if (target_cpu == "x86") {
                                      windows_sdk_path,
                                      visual_studio_runtime_dirs,
                                      "x86",
+                                     "${sys_include_prefix}",
                                    ],
                                    "scope")
 
@@ -290,6 +318,7 @@ if (target_cpu == "x86") {
     cl = "${goma_prefix}$prefix/${clang_cl}"
     toolchain_os = "win"
     is_clang = true
+    sys_include_flags = "${x86_toolchain_data.include_flags}"
   }
 }
 
@@ -301,6 +330,7 @@ x64_toolchain_data = exec_script("setup_toolchain.py",
                                    windows_sdk_path,
                                    visual_studio_runtime_dirs,
                                    "x64",
+                                   "${sys_include_prefix}",
                                  ],
                                  "scope")
 
@@ -318,7 +348,11 @@ template("win_x64_toolchains") {
     cl = "${goma_prefix}\"${x64_toolchain_data.vc_bin_dir}/cl.exe\""
     is_clang = false
 
-    forward_variables_from(invoker, [ "is_component_build" ])
+    # This shares a name with a global and forward_variables_from won't clobber
+    # the existing value, so we need to set it explicitly.
+    if (defined(invoker.is_component_build)) {
+      is_component_build = invoker.is_component_build
+    }
   }
 
   msvc_toolchain("clang_" + target_name) {
@@ -329,8 +363,13 @@ template("win_x64_toolchains") {
     cl = "${goma_prefix}$prefix/${clang_cl}"
     toolchain_os = "win"
     is_clang = true
+    sys_include_flags = "${x64_toolchain_data.include_flags}"
 
-    forward_variables_from(invoker, [ "is_component_build" ])
+    # This shares a name with a global and forward_variables_from won't clobber
+    # the existing value, so we need to set it explicitly.
+    if (defined(invoker.is_component_build)) {
+      is_component_build = invoker.is_component_build
+    }
   }
 }
 

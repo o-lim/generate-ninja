@@ -51,8 +51,16 @@ void RunLoop::Quit() {
   }
 }
 
+void RunLoop::QuitWhenIdle() {
+  quit_when_idle_received_ = true;
+}
+
 base::Closure RunLoop::QuitClosure() {
   return base::Bind(&RunLoop::Quit, weak_factory_.GetWeakPtr());
+}
+
+base::Closure RunLoop::QuitWhenIdleClosure() {
+  return base::Bind(&RunLoop::QuitWhenIdle, weak_factory_.GetWeakPtr());
 }
 
 bool RunLoop::BeforeRun() {
@@ -67,6 +75,9 @@ bool RunLoop::BeforeRun() {
   previous_run_loop_ = loop_->run_loop_;
   run_depth_ = previous_run_loop_? previous_run_loop_->run_depth_ + 1 : 1;
   loop_->run_loop_ = this;
+
+  if (run_depth_ > 1)
+    loop_->NotifyBeginNestedLoop();
 
   running_ = true;
   return true;

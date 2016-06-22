@@ -19,6 +19,7 @@
 
 namespace base {
 
+class FilePath;
 class PersistentSampleMapRecords;
 class PersistentSparseHistogramDataManager;
 
@@ -222,6 +223,7 @@ class BASE_EXPORT PersistentHistogramAllocator {
   const char* Name() const { return memory_allocator_->Name(); }
   const void* data() const { return memory_allocator_->data(); }
   size_t length() const { return memory_allocator_->length(); }
+  size_t size() const { return memory_allocator_->size(); }
   size_t used() const { return memory_allocator_->used(); }
 
   // Recreate a Histogram from data held in persistent memory. Though this
@@ -247,6 +249,19 @@ class BASE_EXPORT PersistentHistogramAllocator {
   // True, forgetting it otherwise.
   void FinalizeHistogram(Reference ref, bool registered);
 
+  // Merges the data in a persistent histogram with one held globally by the
+  // StatisticsRecorder, updating the "logged" samples within the passed
+  // object so that repeated merges are allowed. Don't call this on a "global"
+  // allocator because histograms created there will already be in the SR.
+  void MergeHistogramDeltaToStatisticsRecorder(HistogramBase* histogram);
+
+  // As above but merge the "final" delta. No update of "logged" samples is
+  // done which means it can operate on read-only objects. It's essential,
+  // however, not to call this more than once or those final samples will
+  // get recorded again.
+  void MergeHistogramFinalDeltaToStatisticsRecorder(
+      const HistogramBase* histogram);
+
   // Returns the object that manages the persistent-sample-map records for a
   // given |id|. Only one |user| of this data is allowed at a time. This does
   // an automatic Acquire() on the records. The user must call Release() on
@@ -266,6 +281,10 @@ class BASE_EXPORT PersistentHistogramAllocator {
   //    UMA.PersistentAllocator.name.UsedPct
   void CreateTrackingHistograms(StringPiece name);
   void UpdateTrackingHistograms();
+
+  // Clears the internal |last_created_| reference so testing can validate
+  // operation without that optimization.
+  void ClearLastCreatedReferenceForTesting();
 
   // Histogram containing creation results. Visible for testing.
   static HistogramBase* GetCreateHistogramResultHistogram();
@@ -327,6 +346,12 @@ class BASE_EXPORT PersistentHistogramAllocator {
   std::unique_ptr<HistogramBase> CreateHistogram(
       PersistentHistogramData* histogram_data_ptr);
 
+  // Gets or creates an object in the global StatisticsRecorder matching
+  // the |histogram| passed. Null is returned if one was not found and
+  // one could not be created.
+  HistogramBase* GetOrCreateStatisticsRecorderHistogram(
+      const HistogramBase* histogram);
+
   // Record the result of a histogram creation.
   static void RecordCreateHistogramResult(CreateHistogramResultType result);
 
@@ -365,6 +390,17 @@ class BASE_EXPORT GlobalHistogramAllocator
   // specified |size| taken from the heap.
   static void CreateWithLocalMemory(size_t size, uint64_t id, StringPiece name);
 
+#if !defined(OS_NACL)
+  // Create a global allocator by memory-mapping a |file|. If the file does
+  // not exist, it will be created with the specified |size|. If the file does
+  // exist, the allocator will use and add to its contents, ignoring the passed
+  // size in favor of the existing size.
+  static void CreateWithFile(const FilePath& file_path,
+                             size_t size,
+                             uint64_t id,
+                             StringPiece name);
+#endif
+
   // Create a global allocator using a block of shared |memory| of the
   // specified |size|. The allocator takes ownership of the shared memory
   // and releases it upon destruction, though the memory will continue to
@@ -389,18 +425,30 @@ class BASE_EXPORT GlobalHistogramAllocator
   // while operating single-threaded so there are no race-conditions.
   static void Set(std::unique_ptr<GlobalHistogramAllocator> allocator);
 
-  // Gets a pointer to the global histogram allocator.
+  // Gets a pointer to the global histogram allocator. Returns null if none
+  // exists.
   static GlobalHistogramAllocator* Get();
 
   // This access to the persistent allocator is only for testing; it extracts
   // the current allocator completely. This allows easy creation of histograms
-  // within persistent memory segments which can then be extracted and used
-  // in other ways.
+  // within persistent memory segments which can then be extracted and used in
+  // other ways.
   static std::unique_ptr<GlobalHistogramAllocator> ReleaseForTesting();
+
+  // Stores a pathname to which the contents of this allocator should be saved
+  // in order to persist the data for a later use.
+  void SetPersistentLocation(const FilePath& location);
+
+  // Writes the internal data to a previously set location. This is generally
+  // called when a process is exiting from a section of code that may not know
+  // the filesystem. The data is written in an atomic manner. The return value
+  // indicates success.
+  bool WriteToPersistentLocation();
 
  private:
   friend class StatisticsRecorder;
 
+  // Creates a new global histogram allocator.
   explicit GlobalHistogramAllocator(
       std::unique_ptr<PersistentMemoryAllocator> memory);
 
@@ -415,6 +463,9 @@ class BASE_EXPORT GlobalHistogramAllocator
   // Import always continues from where it left off, making use of a single
   // iterator to continue the work.
   Iterator import_iterator_;
+
+  // The location to which the data should be persisted.
+  FilePath persistent_location_;
 
   DISALLOW_COPY_AND_ASSIGN(GlobalHistogramAllocator);
 };

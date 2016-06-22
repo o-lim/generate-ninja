@@ -29,9 +29,10 @@ declare_args() {
   enable_pdf = !is_android && !is_ios && !is_chromecast
 
   # Enables Native Client support.
+  # Temporarily disable nacl on arm64 linux to get rid of compilation errors.
   # TODO(mcgrathr): When mipsel-nacl-clang is available, drop the exclusion.
-  enable_nacl =
-      !is_ios && !is_android && !is_chromecast && current_cpu != "mipsel"
+  enable_nacl = !is_ios && !is_android && !is_chromecast &&
+                current_cpu != "mipsel" && !(is_linux && target_cpu == "arm64")
 
   # If debug_devtools is set to true, JavaScript files for DevTools are stored
   # as is and loaded from disk. Otherwise, a concatenated file is stored in
@@ -57,11 +58,9 @@ declare_args() {
 
   enable_plugin_installation = is_win || is_mac
 
-  enable_app_list = !is_ios && !is_android
+  enable_app_list = is_chromeos
 
   enable_supervised_users = !is_ios
-
-  enable_autofill_dialog = !is_ios
 
   enable_remoting = !is_ios && !is_chromecast
 
@@ -116,6 +115,9 @@ declare_args() {
   # Enable printing with print preview. It does not imply
   # enable_basic_printing. It's possible to build Chrome with preview only.
   enable_print_preview = !is_android && !is_chromecast && !is_ios
+
+  # Whether or not to use external popup menu.
+  use_external_popup_menu = is_android || is_mac
 }
 
 # Additional dependent variables -----------------------------------------------
@@ -172,3 +174,6 @@ use_brlapi = is_chromeos
 enable_webvr = is_android
 
 enable_configuration_policy = !is_ios
+
+enable_mac_keystone = is_mac && is_chrome_branded && is_official_build
+enable_mac_crash_collection = is_mac && is_chrome_branded && is_official_build

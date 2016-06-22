@@ -104,17 +104,26 @@ void RecursiveCollectRuntimeDeps(const Target* target,
       AddIfNew(output_file.value(), target, deps, found_files);
   }
 
+  // Data dependencies.
+  for (const auto& dep_pair : target->data_deps()) {
+    RecursiveCollectRuntimeDeps(dep_pair.ptr, true,
+                                deps, seen_targets, found_files);
+  }
+
+  // Do not recurse into bundle targets. A bundle's dependencies should be
+  // copied into the bundle itself for run-time access.
+  if (target->output_type() == Target::CREATE_BUNDLE) {
+    SourceDir bundle_root_dir =
+        target->bundle_data().GetBundleRootDirOutputAsDir(target->settings());
+    AddIfNew(bundle_root_dir.value(), target, deps, found_files);
+    return;
+  }
+
   // Non-data dependencies (both public and private).
   for (const auto& dep_pair : target->GetDeps(Target::DEPS_LINKED)) {
     if (dep_pair.ptr->output_type() == Target::EXECUTABLE)
       continue;  // Skip executables that aren't data deps.
     RecursiveCollectRuntimeDeps(dep_pair.ptr, false,
-                                deps, seen_targets, found_files);
-  }
-
-  // Data dependencies.
-  for (const auto& dep_pair : target->data_deps()) {
-    RecursiveCollectRuntimeDeps(dep_pair.ptr, true,
                                 deps, seen_targets, found_files);
   }
 }
@@ -256,8 +265,8 @@ const char kRuntimeDeps_Help[] =
     "  When a tool produces more than one output, only the first output\n"
     "  is considered. For example, a shared library target may produce a\n"
     "  .dll and a .lib file on Windows. Only the .dll file will be considered\n"
-    "  a runtime dependency. This applies only to linker tools, scripts and\n"
-    "  copy steps with multiple outputs will also get all outputs listed.\n";
+    "  a runtime dependency. This applies only to linker tools. Scripts and\n"
+    "  copy steps with multiple outputs will get all outputs listed.\n";
 
 RuntimeDepsVector ComputeRuntimeDeps(const Target* target) {
   RuntimeDepsVector result;

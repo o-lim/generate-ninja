@@ -18,6 +18,7 @@ check_targets = [
   #"//apps/*",  # Medium-hard.
   "//ash/*",
   "//base/*",
+  "//blimp/*",
   "//blink/*",
   "//breakpad/*",
   "//build/*",
@@ -31,24 +32,28 @@ check_targets = [
   "//chrome/tools/*",
   "//chrome/utility/*",
   "//chromecast/*",
+  "//chromeos/*",
   "//chrome_elf/*",
   "//cloud_print/*",
   "//components/*",
 
   #"//content/*",  # A whole lot of errors.
+  "//content/browser/*",
+  "//content/child/*",
   "//content/gpu/*",
+  "//content/ppapi_plugin/*",
   "//content/public/*",
   "//content/renderer/*",
 
   #"//content/shell/*",  # Needs Android fix, bug 597020.
 
   #"//content/test/*",  # A couple of errors left.
-  "//content/test:content_gl_tests",
   "//content/test:content_perftests",
   "//content/test:content_site_isolation_browsertests",
   "//content/test:content_test_mojo_bindings",
   "//content/test:content_unittests",
   "//content/test:test_support",
+  "//content/utility/*",
   "//courgette/*",
   "//crypto/*",
   "//data/*",
@@ -61,13 +66,31 @@ check_targets = [
   "//google_update/*",
   "//gpu/*",
 
-  #"//ios/*",
+  "//ios/*",
+  "//ios_internal/*",
   "//ipc/*",
 
   #"//jingle/*",
   "//mash/*",
 
   #"//media/*",  # Lots of errors.
+  #"//media/base/*",
+  #"//media/capture/*",
+  #"//media/cast/*",
+  #"//media/test/*",
+  "//media:media",
+  "//media:shared_memory_support",
+  "//media:media_unittests",
+  "//media:audio_unittests",
+  "//media:media_perftests",
+  "//media/audio/*",
+  "//media/blink/*",
+  "//media/cdm/*",
+  "//media/ffmpeg/*",
+  "//media/gpu/*",
+  "//media/midi/*",
+  "//media/mojo/*",
+
   "mojo/*",
 
   #"//native_client/*",
@@ -83,6 +106,7 @@ check_targets = [
 
   #"//sandbox/*",  # Medium-hard.
   "//sdch/*",
+  "//services/*",
   "//skia/*",
   "//sql/*",
   "//storage/*",
@@ -191,7 +215,7 @@ check_targets = [
 #      up a directory. The author notices that the script isn't re-run when the
 #      directory is updated, so adds a glob so all the files are listed as
 #      inputs. This seems to work great... until a file is deleted. When a
-#      file is deleted, all the inputs the glob lists will still be up-to-date
+#      file is deleted, all the inputs the glob lists will still be up to date
 #      and no command-lines will have been changed. The action will not be
 #      re-run and the build will be broken. It is possible to get this correct
 #      using glob, and it's possible to mess it up without glob, but globs make
@@ -218,11 +242,11 @@ exec_script_whitelist = [
   "//build/config/win/visual_studio_version.gni",
   "//build/gn_helpers.py",
   "//build/gypi_to_gn.py",
-  "//build/linux/BUILD.gn",
-  "//build/toolchain/gcc_toolchain.gni",
+  "//build/toolchain/concurrent_links.gni",
   "//build/toolchain/mac/BUILD.gn",
   "//build/toolchain/nacl/BUILD.gn",
   "//build/toolchain/win/BUILD.gn",
+  "//build/util/branding.gni",
   "//build/util/version.gni",
   "//chrome/android/BUILD.gn",
   "//chrome/browser/BUILD.gn",
@@ -307,4 +331,5 @@ exec_script_whitelist = [
   "//tools/gn/setup.cc",
   "//ui/accessibility/BUILD.gn",
   "//ui/views/BUILD.gn",
+  "//ui/views/mus/BUILD.gn",
 ]

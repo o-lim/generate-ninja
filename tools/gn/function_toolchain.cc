@@ -9,6 +9,8 @@
 
 #include "tools/gn/err.h"
 #include "tools/gn/functions.h"
+#include "tools/gn/label.h"
+#include "tools/gn/label_ptr.h"
 #include "tools/gn/parse_tree.h"
 #include "tools/gn/scheduler.h"
 #include "tools/gn/scope.h"
@@ -59,7 +61,6 @@ bool ReadString(Scope* scope,
   return true;
 }
 
-
 // Reads the given string list from the scope (if present) and puts the result
 // into dest. If the value is not a string list, sets the error and returns
 // false.
@@ -80,6 +81,31 @@ bool ReadStringList(Scope* scope,
   std::vector<std::string> sv;
   ExtractListOfStringValues(*v, &sv, err);
   set(sv);
+  return true;
+}
+
+// Reads the given label from the scope (if present) and puts the result into
+// dest. If the value is not a label, sets the error and returns false.
+bool ReadLabel(Scope* scope,
+               const char* var,
+               Tool* tool,
+               const ParseNode* origin,
+               const Label& current_toolchain,
+               void (Tool::*set)(const LabelPtrPair<Pool>&),
+               Err* err) {
+  const Value* v = scope->GetValue(var, true);
+  if (!v)
+    return true;  // Not present is fine.
+
+  Label label =
+      Label::Resolve(scope->GetSourceDir(), current_toolchain, *v, err);
+  if (err->has_error())
+    return false;
+
+  LabelPtrPair<Pool> pair(label);
+  pair.origin = origin;
+
+  (tool->*set)(pair);
   return true;
 }
 
@@ -579,6 +605,14 @@ const char kTool_Help[] =
     "            \"{{output_dir}}/{{target_output_name}}.lib\",\n"
     "          ]\n"
     "\n"
+    "    pool [label, optional]\n"
+    "\n"
+    "        Label of the pool to use for the tool. Pools are used to limit\n"
+    "        the number of tasks that can execute concurrently during the\n"
+    "        build.\n"
+    "\n"
+    "        See also \"gn help pool\".\n"
+    "\n"
     "    link_output  [string with substitutions]\n"
     "    depend_output  [string with substitutions]\n"
     "    runtime_link_output  [string with substitutions]\n"
@@ -988,6 +1022,8 @@ Value RunTool(Scope* scope,
                    &Tool::set_rspfile, err) ||
       !ReadPattern(&block_scope, "rspfile_content", subst_validator, tool.get(),
                    &Tool::set_rspfile_content, err) ||
+      !ReadLabel(&block_scope, "pool", tool.get(), function, toolchain->label(),
+                 &Tool::set_pool, err) ||
       !ReadStringList(&block_scope, "source_extensions",
                       std::bind(&Tool::set_source_extensions, tool.get(), _1),
                       err)) {

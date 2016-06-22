@@ -51,6 +51,8 @@ BuildInfo::BuildInfo(JNIEnv* env)
       android_build_id_(StrDupJString(Java_BuildInfo_getAndroidBuildId(env))),
       android_build_fp_(StrDupJString(
           Java_BuildInfo_getAndroidBuildFingerprint(env))),
+      gms_version_code_(StrDupJString(Java_BuildInfo_getGMSVersionCode(
+          env, GetApplicationContext()))),
       package_version_code_(StrDupJString(Java_BuildInfo_getPackageVersionCode(
           env, GetApplicationContext()))),
       package_version_name_(StrDupJString(Java_BuildInfo_getPackageVersionName(
@@ -61,8 +63,6 @@ BuildInfo::BuildInfo(JNIEnv* env)
           env, GetApplicationContext()))),
       build_type_(StrDupJString(Java_BuildInfo_getBuildType(env))),
       sdk_int_(Java_BuildInfo_getSdkInt(env)),
-      has_language_apk_splits_(Java_BuildInfo_hasLanguageApkSplits(
-          env, GetApplicationContext())),
       java_exception_info_(NULL) {
 }
 
