@@ -125,13 +125,27 @@ TEST(FunctionForwardVariablesFrom, ErrorCases) {
   EXPECT_TRUE(err.has_error());
   EXPECT_EQ("Not a valid list of variables to exclude.", err.message());
 
-  // Programmatic values should error.
-  TestParseInput prog(
+  // Type check the clobber flag
+  TestParseInput invalid_clobber_flag(
     "template(\"d\") {\n"
-    "  forward_variables_from(invoker, [\"root_out_dir\"])\n"
+    "  forward_variables_from(invoker, \"*\", [], [])\n"
     "  print(\"$target_name\")\n"
     "}\n"
     "d(\"target\") {\n"
+    "}\n");
+  ASSERT_FALSE(invalid_clobber_flag.has_error());
+  err = Err();
+  invalid_clobber_flag.parsed()->Execute(setup.scope(), &err);
+  EXPECT_TRUE(err.has_error());
+  EXPECT_EQ("Not a boolean to clobber.", err.message());
+
+  // Programmatic values should error.
+  TestParseInput prog(
+    "template(\"e\") {\n"
+    "  forward_variables_from(invoker, [\"root_out_dir\"])\n"
+    "  print(\"$target_name\")\n"
+    "}\n"
+    "e(\"target\") {\n"
     "}\n");
   ASSERT_FALSE(prog.has_error());
   err = Err();
@@ -141,11 +155,11 @@ TEST(FunctionForwardVariablesFrom, ErrorCases) {
 
   // Not enough arguments.
   TestParseInput not_enough_arguments(
-    "template(\"e\") {\n"
+    "template(\"f\") {\n"
     "  forward_variables_from(invoker)\n"
     "  print(\"$target_name\")\n"
     "}\n"
-    "e(\"target\") {\n"
+    "f(\"target\") {\n"
     "}\n");
   ASSERT_FALSE(not_enough_arguments.has_error());
   err = Err();
@@ -155,11 +169,11 @@ TEST(FunctionForwardVariablesFrom, ErrorCases) {
 
   // Too many arguments.
   TestParseInput too_many_arguments(
-    "template(\"f\") {\n"
-    "  forward_variables_from(invoker, \"*\", [], [])\n"
+    "template(\"g\") {\n"
+    "  forward_variables_from(invoker, \"*\", [], false, [])\n"
     "  print(\"$target_name\")\n"
     "}\n"
-    "f(\"target\") {\n"
+    "g(\"target\") {\n"
     "}\n");
   ASSERT_FALSE(too_many_arguments.has_error());
   err = Err();

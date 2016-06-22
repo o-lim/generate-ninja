@@ -1849,8 +1849,8 @@
 
 ```
   forward_variables_from(from_scope, variable_list_or_star,
-                         variables_to_not_forward_list = [])
-
+                         variables_to_not_forward_list = [],
+                         clobber = false)n
   Copies the given variables from the given scope to the local scope
   if they exist. This is normally used in the context of templates to
   use the values of variables defined in the template invocation to
@@ -1866,11 +1866,12 @@
   Otherwise it would duplicate all global variables.
 
   When an explicit list of variables is supplied, if the variable exists
-  in the current (destination) scope already, an error will be thrown.
+  in the current (destination) scope already, and clobber is false,
+  an error will be thrown, otherwise the current value is clobbered.
   If "*" is specified, variables in the current scope will be
-  clobbered (the latter is important because most targets have an
-  implicit configs list, which means it wouldn't work at all if it
-  didn't clobber).
+  clobbered, regardless of the value of the clobber flag (the latter is
+  important because most targets have an implicit configs list, which
+  means it wouldn't work at all if it didn't clobber).
 
   The sources assignment filter (see "gn help set_sources_assignment_filter")
   is never applied by this function. It's assumed than any desired

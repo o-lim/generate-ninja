@@ -34,6 +34,7 @@ void ForwardValuesFromList(Scope* source,
                            Scope* dest,
                            const std::vector<Value>& list,
                            const std::set<std::string>& exclusion_set,
+                           bool clobber,
                            Err* err) {
   for (const Value& cur : list) {
     if (!cur.VerifyTypeIs(Value::STRING, err))
@@ -54,9 +55,9 @@ void ForwardValuesFromList(Scope* source,
         return;
       }
 
-      // Don't allow clobbering existing values.
+      // Don't allow clobbering existing values when clobber is false.
       const Value* existing_value = dest->GetValue(storage_key);
-      if (existing_value) {
+      if (!clobber && existing_value) {
         *err = Err(cur, "Clobbering existing value.",
             "The current scope already defines a value \"" +
              cur.string_value() + "\".\nforward_variables_from() won't clobber "
@@ -84,7 +85,8 @@ const char kForwardVariablesFrom_Help[] =
     "forward_variables_from: Copies variables from a different scope.\n"
     "\n"
     "  forward_variables_from(from_scope, variable_list_or_star,\n"
-    "                         variables_to_not_forward_list = [])\n"
+    "                         variables_to_not_forward_list = [],\n"
+    "                         clobber = false)n"
     "\n"
     "  Copies the given variables from the given scope to the local scope\n"
     "  if they exist. This is normally used in the context of templates to\n"
@@ -101,11 +103,12 @@ const char kForwardVariablesFrom_Help[] =
     "  Otherwise it would duplicate all global variables.\n"
     "\n"
     "  When an explicit list of variables is supplied, if the variable exists\n"
-    "  in the current (destination) scope already, an error will be thrown.\n"
+    "  in the current (destination) scope already, and clobber is false,\n"
+    "  an error will be thrown, otherwise the current value is clobbered.\n"
     "  If \"*\" is specified, variables in the current scope will be\n"
-    "  clobbered (the latter is important because most targets have an\n"
-    "  implicit configs list, which means it wouldn't work at all if it\n"
-    "  didn't clobber).\n"
+    "  clobbered, regardless of the value of the clobber flag (the latter is\n"
+    "  important because most targets have an implicit configs list, which\n"
+    "  means it wouldn't work at all if it didn't clobber).\n"
     "\n"
     "  The sources assignment filter (see \"gn help "
           "set_sources_assignment_filter\")\n"
@@ -166,9 +169,9 @@ Value RunForwardVariablesFrom(Scope* scope,
                               const ListNode* args_list,
                               Err* err) {
   const auto& args_vector = args_list->contents();
-  if (args_vector.size() != 2 && args_vector.size() != 3) {
+  if (args_vector.size() < 2 || args_vector.size() > 4) {
     *err = Err(function, "Wrong number of arguments.",
-               "Expecting two or three arguments.");
+               "Expecting two to four arguments.");
     return Value();
   }
 
@@ -194,7 +197,7 @@ Value RunForwardVariablesFrom(Scope* scope,
 
   // Extract the exclusion list if defined.
   std::set<std::string> exclusion_set;
-  if (args_vector.size() == 3) {
+  if (args_vector.size() >= 3) {
     Value exclusion_value = args_vector[2]->Execute(scope, err);
     if (err->has_error())
       return Value();
@@ -213,6 +216,21 @@ Value RunForwardVariablesFrom(Scope* scope,
     }
   }
 
+  bool clobber = false;
+  if (args_vector.size() == 4) {
+    Value clobber_value = args_vector[3]->Execute(scope, err);
+    if (err->has_error())
+      return Value();
+
+    if (clobber_value.type() != Value::BOOLEAN) {
+      *err = Err(clobber_value, "Not a boolean to clobber.",
+                 "Expecting a boolean.");
+      return Value();
+    }
+
+    clobber = clobber_value.boolean_value();
+  }
+
   // Extract the list. If all_values is not set, the what_value will be a list.
   Value what_value = args_vector[1]->Execute(scope, err);
   if (err->has_error())
@@ -225,7 +243,7 @@ Value RunForwardVariablesFrom(Scope* scope,
   } else {
     if (what_value.type() == Value::LIST) {
       ForwardValuesFromList(source, scope, what_value.list_value(),
-                            exclusion_set, err);
+                            exclusion_set, clobber, err);
       return Value();
     }
   }
