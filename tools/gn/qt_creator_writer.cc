@@ -34,7 +34,8 @@ base::FilePath::CharType kDefinesFileSuffix[] = FILE_PATH_LITERAL(".config");
 bool QtCreatorWriter::RunAndWriteFile(const BuildSettings* build_settings,
                                       const Builder* builder,
                                       Err* err,
-                                      const std::string& root_target) {
+                                      const std::string& root_target,
+                                      bool all_toolchains) {
   base::FilePath project_dir =
       build_settings->GetFullPath(build_settings->build_dir())
           .Append(kProjectDirName);
@@ -50,7 +51,8 @@ bool QtCreatorWriter::RunAndWriteFile(const BuildSettings* build_settings,
   }
 
   base::FilePath project_prefix = project_dir.Append(kProjectName);
-  QtCreatorWriter gen(build_settings, builder, project_prefix, root_target);
+  QtCreatorWriter gen(build_settings, builder, project_prefix,
+                      root_target, all_toolchains);
   gen.Run();
   if (gen.err_.has_error()) {
     *err = gen.err_;
@@ -62,11 +64,13 @@ bool QtCreatorWriter::RunAndWriteFile(const BuildSettings* build_settings,
 QtCreatorWriter::QtCreatorWriter(const BuildSettings* build_settings,
                                  const Builder* builder,
                                  const base::FilePath& project_prefix,
-                                 const std::string& root_target_name)
+                                 const std::string& root_target_name,
+                                 bool all_toolchains)
     : build_settings_(build_settings),
       builder_(builder),
       project_prefix_(project_prefix),
-      root_target_name_(root_target_name) {}
+      root_target_name_(root_target_name),
+      all_toolchains_(all_toolchains) {}
 
 QtCreatorWriter::~QtCreatorWriter() {}
 
@@ -159,8 +163,8 @@ void QtCreatorWriter::Run() {
     return;
 
   for (const Target* target : targets_) {
-    if (target->toolchain()->label() !=
-        builder_->loader()->GetDefaultToolchain())
+    if (!all_toolchains_ && target->toolchain()->label() !=
+                            builder_->loader()->GetDefaultToolchain())
       continue;
     HandleTarget(target);
   }

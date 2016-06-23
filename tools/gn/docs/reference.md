@@ -778,6 +778,11 @@
 ### **QtCreator Flags**
 
 ```
+  --all-toolchains
+      Generates a QtCreator project that contains files and dependencies
+      for all toolchains. If unset, only files and dependencies for the
+      default toolchain will be used.
+
   --root-target=<target_name>
       Name of the root target for which the QtCreator project will be
       generated to contain files of it and its dependencies. If unset, 

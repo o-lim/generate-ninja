@@ -212,8 +212,9 @@ bool RunIdeWriter(const std::string& ide,
     std::string root_target;
     if (command_line->HasSwitch(kSwitchRootTarget))
       root_target = command_line->GetSwitchValueASCII(kSwitchRootTarget);
-    bool res = QtCreatorWriter::RunAndWriteFile(build_settings, builder, err,
-                                                root_target);
+    bool res = QtCreatorWriter::RunAndWriteFile(
+        build_settings, builder, err,
+        root_target, command_line->HasSwitch(switches::kAllToolchains));
     if (res && !command_line->HasSwitch(switches::kQuiet)) {
       OutputString("Generating QtCreator projects took " +
                    base::Int64ToString(timer.Elapsed().InMilliseconds()) +
@@ -289,6 +290,11 @@ const char kGen_Help[] =
     "      and builds everything.\n"
     "\n"
     "QtCreator Flags\n"
+    "\n"
+    "  --all-toolchains\n"
+    "      Generates a QtCreator project that contains files and dependencies\n"
+    "      for all toolchains. If unset, only files and dependencies for the\n"
+    "      default toolchain will be used.\n"
     "\n"
     "  --root-target=<target_name>\n"
     "      Name of the root target for which the QtCreator project will be\n"
