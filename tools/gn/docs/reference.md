@@ -478,7 +478,7 @@
 ## **gn desc**: Show lots of insightful information about a target or config.
 
 ```
-  gn desc <out_dir> <label or pattern> [<what to show>] [--blame]
+  gn desc <out_dir> <label or pattern> [--show=<what to show>] [--blame]
 
   Displays information about a given target or config. The build
   build parameters will be taken for the build in the given <out_dir>.

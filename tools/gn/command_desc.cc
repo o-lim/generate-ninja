@@ -31,6 +31,7 @@ namespace {
 
 // Desc-specific command line switches.
 const char kBlame[] = "blame";
+const char kShow[] = "show";
 const char kTree[] = "tree";
 
 // Prints the given directory in a nice way for the user to view.
@@ -788,7 +789,7 @@ const char kDesc_HelpShort[] =
 const char kDesc_Help[] =
     "gn desc: Show lots of insightful information about a target or config.\n"
     "\n"
-    "  gn desc <out_dir> <label or pattern> [<what to show>] [--blame]\n"
+    "  gn desc <out_dir> <label or pattern> [--show=<what to show>] [--blame]\n"
     "\n"
     "  Displays information about a given target or config. The build\n"
     "  build parameters will be taken for the build in the given <out_dir>.\n"
@@ -918,9 +919,10 @@ const char kDesc_Help[] =
     "      each one was set from.\n";
 
 int RunDesc(const std::vector<std::string>& args) {
-  if (args.size() != 2 && args.size() != 3) {
+  if (args.size() < 2) {
     Err(Location(), "You're holding it wrong.",
-        "Usage: \"gn desc <out_dir> <target_name> [<what to display>]\"")
+        "Usage: \"gn desc <out_dir> <label or pattern> [--show=<what to show>]"
+        " [--blame]\"")
         .PrintToStdout();
     return 1;
   }
@@ -940,17 +942,15 @@ int RunDesc(const std::vector<std::string>& args) {
   UniqueVector<const Toolchain*> toolchain_matches;
   UniqueVector<SourceFile> file_matches;
 
-  std::vector<std::string> target_list;
-  target_list.push_back(args[1]);
-
+  std::vector<std::string> target_list(args.begin() + 1, args.end());
   if (!ResolveFromCommandLineInput(
           setup, target_list, cmdline->HasSwitch(switches::kAllToolchains),
           &target_matches, &config_matches, &toolchain_matches, &file_matches))
     return 1;
 
   std::string what_to_print;
-  if (args.size() == 3)
-    what_to_print = args[2];
+  if (cmdline->HasSwitch(kShow))
+    what_to_print = cmdline->GetSwitchValueASCII(kShow);
 
   bool multiple_outputs = (target_matches.size() + config_matches.size()) > 1;
 
