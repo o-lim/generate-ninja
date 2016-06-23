@@ -506,6 +506,7 @@
   cflags_objc [--blame]
   cflags_objcc [--blame]
   check_includes
+  command
   configs [--tree] (see below)
   cppflags [--blame]
   cppflags_c [--blame]
@@ -517,6 +518,7 @@
   deps [--all] [--tree] (see below)
   include_dirs [--blame]
   inputs
+  interpreter
   ldflags [--blame]
   lib_dirs
   libs
