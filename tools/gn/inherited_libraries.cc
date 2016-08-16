@@ -70,6 +70,16 @@ void InheritedLibraries::AppendInherited(const InheritedLibraries& other,
     Append(cur.first, is_public && cur.second);
 }
 
+void InheritedLibraries::AppendFinal(const InheritedLibraries& other,
+                                     bool is_public) {
+  // Append only final items in order, mark them public only if the're already
+  // public and we're adding them publically.
+  auto v = other.GetOrderedAndPublicFlag();
+  for (const auto& cur : base::Reversed(v))
+    if (cur.first->IsFinal())
+      Append(cur.first, is_public && cur.second);
+}
+
 void InheritedLibraries::AppendPublicSharedLibraries(
     const InheritedLibraries& other,
     bool is_public) {

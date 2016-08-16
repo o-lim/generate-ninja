@@ -50,6 +50,13 @@ class InheritedLibraries {
   // the current target isn't forwarding them.
   void AppendInherited(const InheritedLibraries& other, bool is_public);
 
+  // Like AppendInherited but only appends the items in "other" that are final
+  // libraries. Since inherited final libraries aren't linked into complete
+  // static libraries, this is used to push those libraries up the dependency
+  // chain, following only public deps, to dependent targets that need to use
+  // them.
+  void AppendFinal(const InheritedLibraries& other, bool is_public);
+
   // Like AppendInherited but only appends the items in "other" that are of
   // type SHARED_LIBRARY and only when they're marked public. This is used
   // to push shared libraries up the dependency chain, following only public

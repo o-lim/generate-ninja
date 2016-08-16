@@ -9,6 +9,7 @@
 #include <algorithm>
 
 #include "base/bind.h"
+#include "base/containers/adapters.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "tools/gn/config_values_extractors.h"
@@ -491,13 +492,7 @@ void Target::PullDependentTargetLibsFrom(const Target* dep, bool is_public) {
     // They are forwarded here so that targets that depend on complete
     // static libraries can link them in. Conversely, since complete static
     // libraries link in non-final targets they shouldn't be inherited.
-    for (const auto& inherited :
-         dep->inherited_libraries().GetOrderedAndPublicFlag()) {
-      if (inherited.first->IsFinal()) {
-        inherited_libraries_.Append(inherited.first,
-                                    is_public && inherited.second);
-      }
-    }
+    inherited_libraries_.AppendFinal(dep->inherited_libraries(), is_public);
   }
 
   // Library settings are always inherited across static library boundaries.
