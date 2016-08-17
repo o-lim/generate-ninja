@@ -161,6 +161,7 @@ class TestRunResults(object):
     """
     assert isinstance(result, BaseTestResult)
     with self._results_lock:
+      self._results.discard(result)
       self._results.add(result)
 
   def AddResults(self, results):
@@ -179,7 +180,8 @@ class TestRunResults(object):
     Args:
       results: An instance of TestRunResults.
     """
-    assert isinstance(results, TestRunResults)
+    assert isinstance(results, TestRunResults), (
+           'Expected TestRunResult object: %s' % type(results))
     with self._results_lock:
       # pylint: disable=W0212
       self._results.update(results._results)

@@ -91,8 +91,8 @@ const char kAction_Help[] =
     "action: Declare a target that runs a script a single time.\n"
     "\n"
     "  This target type allows you to run a script a single time to produce\n"
-    "  or more output files. If you want to run a script once for each of a\n"
-    "  set of input files, see \"gn help action_foreach\".\n"
+    "  one or more output files. If you want to run a script once for each of\n"
+    "  a set of input files, see \"gn help action_foreach\".\n"
     "\n"
     "Inputs\n"
     "\n"
@@ -279,7 +279,7 @@ const char kBundleData_Help[] =
     "  }\n"
     "\n"
     "  bundle_data(\"base_unittests_bundle_data]\") {\n"
-    "    sources = [ \"test/data\" ]\n"
+    "    sources = [ \"test/data\" ]\n"
     "    outputs = [\n"
     "      \"{{bundle_resources_dir}}/{{source_root_relative_dir}}/\" +\n"
     "          \"{{source_file_part}}\"\n"
@@ -353,8 +353,8 @@ const char kCreateBundle_Help[] =
     "Variables\n"
     "\n"
     "  bundle_root_dir*, bundle_resources_dir*, bundle_executable_dir*,\n"
-    "  bundle_plugins_dir*, deps, data_deps, public_deps, visibility,\n"
-    "  product_type, code_signing_args, code_signing_script,\n"
+    "  bundle_plugins_dir*, bundle_deps_filter, deps, data_deps, public_deps,\n"
+    "  visibility, product_type, code_signing_args, code_signing_script,\n"
     "  code_signing_sources, code_signing_outputs\n"
     "  * = required\n"
     "\n"
@@ -773,7 +773,7 @@ Value RunTarget(Scope* scope,
   // Run a template if it is one.
   const Template* templ = scope->GetTemplate(target_type);
   if (templ)
-    return templ->Invoke(scope, function, sub_args, block, err);
+    return templ->Invoke(scope, function, target_type, sub_args, block, err);
 
   // Otherwise, assume the target is a built-in target type.
   return ExecuteGenericTarget(target_type.c_str(), scope, function, sub_args,

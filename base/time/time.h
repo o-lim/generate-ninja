@@ -242,6 +242,11 @@ class BASE_EXPORT TimeDelta {
     return delta_ >= other.delta_;
   }
 
+#if defined(OS_WIN)
+  // This works around crbug.com/635974
+  constexpr TimeDelta(const TimeDelta& other) : delta_(other.delta_) {}
+#endif
+
  private:
   friend int64_t time_internal::SaturatedAdd(TimeDelta delta, int64_t value);
   friend int64_t time_internal::SaturatedSub(TimeDelta delta, int64_t value);
@@ -667,7 +672,13 @@ constexpr TimeDelta TimeDelta::FromDouble(double value) {
 // static
 constexpr TimeDelta TimeDelta::FromProduct(int64_t value,
                                            int64_t positive_value) {
-  return (DCHECK(positive_value > 0),
+  return (
+#if !defined(_PREFAST_) || !defined(OS_WIN)
+          // Avoid internal compiler errors in /analyze builds with VS 2015
+          // update 3.
+          // https://connect.microsoft.com/VisualStudio/feedback/details/2870865
+          DCHECK(positive_value > 0),
+#endif
           value > std::numeric_limits<int64_t>::max() / positive_value
               ? Max()
               : value < -std::numeric_limits<int64_t>::max() / positive_value
@@ -706,6 +717,13 @@ class BASE_EXPORT TimeTicks : public time_internal::TimeBase<TimeTicks> {
   // high resolution clock works but is deemed inefficient, the low resolution
   // clock will be used instead.
   static bool IsHighResolution();
+
+  // Returns true if TimeTicks is consistent across processes, meaning that
+  // timestamps taken on different processes can be safely compared with one
+  // another. (Note that, even on platforms where this returns true, time values
+  // from different threads that are within one tick of each other must be
+  // considered to have an ambiguous ordering.)
+  static bool IsConsistentAcrossProcesses();
 
 #if defined(OS_WIN)
   // Translates an absolute QPC timestamp into a TimeTicks value. The returned

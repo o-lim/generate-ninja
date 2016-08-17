@@ -15,13 +15,16 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task_scheduler/scheduler_worker_pool_params.h"
 #include "base/task_scheduler/task_traits.h"
 #include "base/task_scheduler/test_task_factory.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/simple_thread.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/time/time.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
@@ -38,24 +41,7 @@ struct TraitsExecutionModePair {
   ExecutionMode execution_mode;
 };
 
-class TaskSchedulerImplTest
-    : public testing::TestWithParam<TraitsExecutionModePair> {
- protected:
-  TaskSchedulerImplTest() = default;
-
-  void SetUp() override {
-    scheduler_ = TaskSchedulerImpl::Create();
-    EXPECT_TRUE(scheduler_);
-  }
-  void TearDown() override { scheduler_->JoinForTesting(); }
-
-  std::unique_ptr<TaskSchedulerImpl> scheduler_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TaskSchedulerImplTest);
-};
-
-#if ENABLE_THREAD_RESTRICTIONS
+#if DCHECK_IS_ON()
 // Returns whether I/O calls are allowed on the current thread.
 bool GetIOAllowed() {
   const bool previous_value = ThreadRestrictions::SetIOAllowed(true);
@@ -68,14 +54,19 @@ bool GetIOAllowed() {
 // to run a Task with |traits|.
 // Note: ExecutionMode is verified inside TestTaskFactory.
 void VerifyTaskEnvironement(const TaskTraits& traits) {
-  EXPECT_EQ(traits.priority() == TaskPriority::BACKGROUND
+  const bool supports_background_priority =
+      Lock::HandlesMultipleThreadPriorities() &&
+      PlatformThread::CanIncreaseCurrentThreadPriority();
+
+  EXPECT_EQ(supports_background_priority &&
+                    traits.priority() == TaskPriority::BACKGROUND
                 ? ThreadPriority::BACKGROUND
                 : ThreadPriority::NORMAL,
             PlatformThread::GetCurrentThreadPriority());
 
-#if ENABLE_THREAD_RESTRICTIONS
+#if DCHECK_IS_ON()
   // The #if above is required because GetIOAllowed() always returns true when
-  // !ENABLE_THREAD_RESTRICTIONS, even when |traits| don't allow file I/O.
+  // !DCHECK_IS_ON(), even when |traits| don't allow file I/O.
   EXPECT_EQ(traits.with_file_io(), GetIOAllowed());
 #endif
 
@@ -152,6 +143,62 @@ std::vector<TraitsExecutionModePair> GetTraitsExecutionModePairs() {
   return params;
 }
 
+enum WorkerPoolType {
+  BACKGROUND_WORKER_POOL = 0,
+  BACKGROUND_FILE_IO_WORKER_POOL,
+  FOREGROUND_WORKER_POOL,
+  FOREGROUND_FILE_IO_WORKER_POOL,
+};
+
+size_t GetThreadPoolIndexForTraits(const TaskTraits& traits) {
+  if (traits.with_file_io()) {
+    return traits.priority() == TaskPriority::BACKGROUND
+               ? BACKGROUND_FILE_IO_WORKER_POOL
+               : FOREGROUND_FILE_IO_WORKER_POOL;
+  }
+  return traits.priority() == TaskPriority::BACKGROUND ? BACKGROUND_WORKER_POOL
+                                                       : FOREGROUND_WORKER_POOL;
+}
+
+class TaskSchedulerImplTest
+    : public testing::TestWithParam<TraitsExecutionModePair> {
+ protected:
+  TaskSchedulerImplTest() = default;
+
+  void SetUp() override {
+    using IORestriction = SchedulerWorkerPoolParams::IORestriction;
+
+    std::vector<SchedulerWorkerPoolParams> params_vector;
+
+    ASSERT_EQ(BACKGROUND_WORKER_POOL, params_vector.size());
+    params_vector.emplace_back("Background", ThreadPriority::BACKGROUND,
+                               IORestriction::DISALLOWED, 1U, TimeDelta::Max());
+
+    ASSERT_EQ(BACKGROUND_FILE_IO_WORKER_POOL, params_vector.size());
+    params_vector.emplace_back("BackgroundFileIO", ThreadPriority::BACKGROUND,
+                               IORestriction::ALLOWED, 3U, TimeDelta::Max());
+
+    ASSERT_EQ(FOREGROUND_WORKER_POOL, params_vector.size());
+    params_vector.emplace_back("Foreground", ThreadPriority::NORMAL,
+                               IORestriction::DISALLOWED, 4U, TimeDelta::Max());
+
+    ASSERT_EQ(FOREGROUND_FILE_IO_WORKER_POOL, params_vector.size());
+    params_vector.emplace_back("ForegroundFileIO", ThreadPriority::NORMAL,
+                               IORestriction::ALLOWED, 12U, TimeDelta::Max());
+
+    scheduler_ = TaskSchedulerImpl::Create(params_vector,
+                                           Bind(&GetThreadPoolIndexForTraits));
+    ASSERT_TRUE(scheduler_);
+  }
+
+  void TearDown() override { scheduler_->JoinForTesting(); }
+
+  std::unique_ptr<TaskSchedulerImpl> scheduler_;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(TaskSchedulerImplTest);
+};
+
 }  // namespace
 
 // Verifies that a Task posted via PostTaskWithTraits with parameterized
@@ -194,13 +241,11 @@ INSTANTIATE_TEST_CASE_P(OneTraitsExecutionModePair,
 // TaskTraits and ExecutionModes. Verifies that each Task runs on a thread with
 // the expected priority and I/O restrictions and respects the characteristics
 // of its ExecutionMode.
-TEST(TaskSchedulerImplTest, MultipleTraitsExecutionModePairs) {
-  std::unique_ptr<TaskSchedulerImpl> scheduler = TaskSchedulerImpl::Create();
-
+TEST_F(TaskSchedulerImplTest, MultipleTraitsExecutionModePairs) {
   std::vector<std::unique_ptr<ThreadPostingTasks>> threads_posting_tasks;
   for (const auto& traits_execution_mode_pair : GetTraitsExecutionModePairs()) {
     threads_posting_tasks.push_back(WrapUnique(new ThreadPostingTasks(
-        scheduler.get(), traits_execution_mode_pair.traits,
+        scheduler_.get(), traits_execution_mode_pair.traits,
         traits_execution_mode_pair.execution_mode)));
     threads_posting_tasks.back()->Start();
   }
@@ -209,11 +254,9 @@ TEST(TaskSchedulerImplTest, MultipleTraitsExecutionModePairs) {
     thread->WaitForAllTasksToRun();
     thread->Join();
   }
-
-  scheduler->JoinForTesting();
 }
 
-// TODO(fdoray): Add tests with Sequences that move around thread pools once
+// TODO(fdoray): Add tests with Sequences that move around worker pools once
 // child TaskRunners are supported.
 
 }  // namespace internal

@@ -13,6 +13,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/test/gtest_util.h"
 #include "build/build_config.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -650,28 +651,6 @@ TEST_F(BindTest, ArrayArgumentBinding) {
   EXPECT_EQ(3, const_array_cb.Run());
 }
 
-// Verify SupportsAddRefAndRelease correctly introspects the class type for
-// AddRef() and Release().
-//  - Class with AddRef() and Release()
-//  - Class without AddRef() and Release()
-//  - Derived Class with AddRef() and Release()
-//  - Derived Class without AddRef() and Release()
-//  - Derived Class with AddRef() and Release() and a private destructor.
-TEST_F(BindTest, SupportsAddRefAndRelease) {
-  EXPECT_TRUE(internal::SupportsAddRefAndRelease<HasRef>::value);
-  EXPECT_FALSE(internal::SupportsAddRefAndRelease<NoRef>::value);
-
-  // StrictMock<T> is a derived class of T.  So, we use StrictMock<HasRef> and
-  // StrictMock<NoRef> to test that SupportsAddRefAndRelease works over
-  // inheritance.
-  EXPECT_TRUE(internal::SupportsAddRefAndRelease<StrictMock<HasRef> >::value);
-  EXPECT_FALSE(internal::SupportsAddRefAndRelease<StrictMock<NoRef> >::value);
-
-  // This matters because the implementation creates a dummy class that
-  // inherits from the template type.
-  EXPECT_TRUE(internal::SupportsAddRefAndRelease<HasRefPrivateDtor>::value);
-}
-
 // Unretained() wrapper support.
 //   - Method bound to Unretained() non-const object.
 //   - Const method bound to Unretained() non-const object.
@@ -1060,6 +1039,36 @@ TEST_F(BindTest, ArgumentCopiesAndMoves) {
   EXPECT_EQ(0, move_assigns);
 }
 
+TEST_F(BindTest, CapturelessLambda) {
+  EXPECT_FALSE(internal::IsConvertibleToRunType<void>::value);
+  EXPECT_FALSE(internal::IsConvertibleToRunType<int>::value);
+  EXPECT_FALSE(internal::IsConvertibleToRunType<void(*)()>::value);
+  EXPECT_FALSE(internal::IsConvertibleToRunType<void(NoRef::*)()>::value);
+
+  auto f = []() {};
+  EXPECT_TRUE(internal::IsConvertibleToRunType<decltype(f)>::value);
+
+  int i = 0;
+  auto g = [i]() {};
+  EXPECT_FALSE(internal::IsConvertibleToRunType<decltype(g)>::value);
+
+  auto h = [](int, double) { return 'k'; };
+  EXPECT_TRUE((std::is_same<
+      char(int, double),
+      internal::ExtractCallableRunType<decltype(h)>>::value));
+
+  EXPECT_EQ(42, Bind([] { return 42; }).Run());
+  EXPECT_EQ(42, Bind([](int i) { return i * 7; }, 6).Run());
+
+  int x = 1;
+  base::Callback<void(int)> cb =
+      Bind([](int* x, int i) { *x *= i; }, Unretained(&x));
+  cb.Run(6);
+  EXPECT_EQ(6, x);
+  cb.Run(7);
+  EXPECT_EQ(42, x);
+}
+
 // Callback construction and assignment tests.
 //   - Construction from an InvokerStorageHolder should not cause ref/deref.
 //   - Assignment from other callback should only cause one ref
@@ -1087,17 +1096,12 @@ TEST_F(BindTest, WindowsCallingConventions) {
 }
 #endif
 
-#if (!defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)) && GTEST_HAS_DEATH_TEST
-
 // Test null callbacks cause a DCHECK.
 TEST(BindDeathTest, NullCallback) {
   base::Callback<void(int)> null_cb;
   ASSERT_TRUE(null_cb.is_null());
-  EXPECT_DEATH(base::Bind(null_cb, 42), "");
+  EXPECT_DCHECK_DEATH(base::Bind(null_cb, 42));
 }
-
-#endif  // (!defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)) &&
-        //     GTEST_HAS_DEATH_TEST
 
 }  // namespace
 }  // namespace base

@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Copyright 2014 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -15,6 +15,12 @@ REPO_BASEDIR="${APT_REPO}/dists/${DIST}"
 #   gpg --recv-keys $KEYS
 #   gpg --output ./debian-archive-jessie-stable.gpg --export $KEYS
 KEYRING_FILE=${SCRIPT_DIR}/debian-archive-jessie-stable.gpg
+
+HAS_ARCH_AMD64=1
+HAS_ARCH_I386=1
+HAS_ARCH_ARM=1
+HAS_ARCH_ARM64=1
+HAS_ARCH_MIPS=1
 
 # Sysroot packages: these are the packages needed to build chrome.
 # NOTE: When DEBIAN_PACKAGES is modified, the packagelist files must be updated
@@ -141,6 +147,7 @@ DEBIAN_PACKAGES="\
   libx11-6
   libx11-dev
   libx11-xcb1
+  libx11-xcb-dev
   libxau6
   libxau-dev
   libxcb1

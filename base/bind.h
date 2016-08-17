@@ -21,90 +21,21 @@
 // If you're reading the implementation, before proceeding further, you should
 // read the top comment of base/bind_internal.h for a definition of common
 // terms and concepts.
-//
-// RETURN TYPES
-//
-// Though Bind()'s result is meant to be stored in a Callback<> type, it
-// cannot actually return the exact type without requiring a large amount
-// of extra template specializations. The problem is that in order to
-// discern the correct specialization of Callback<>, Bind would need to
-// unwrap the function signature to determine the signature's arity, and
-// whether or not it is a method.
-//
-// Each unique combination of (arity, function_type, num_prebound) where
-// function_type is one of {function, method, const_method} would require
-// one specialization.  We eventually have to do a similar number of
-// specializations anyways in the implementation (see the Invoker<>,
-// classes).  However, it is avoidable in Bind if we return the result
-// via an indirection like we do below.
-//
-// TODO(ajwong): We might be able to avoid this now, but need to test.
-//
-// It is possible to move most of the static_assert into BindState<>, but it
-// feels a little nicer to have the asserts here so people do not need to crack
-// open bind_internal.h.  On the other hand, it makes Bind() harder to read.
 
 namespace base {
 
-namespace internal {
-
-// Don't use Alias Template directly here to avoid a compile error on MSVC2013.
 template <typename Functor, typename... Args>
-struct MakeUnboundRunTypeImpl {
-  using Type =
-      typename BindState<
-          typename FunctorTraits<Functor>::RunnableType,
-          typename FunctorTraits<Functor>::RunType,
-          Args...>::UnboundRunType;
-};
+inline base::Callback<MakeUnboundRunType<Functor, Args...>> Bind(
+    Functor&& functor,
+    Args&&... args) {
+  using BindState = internal::MakeBindStateType<Functor, Args...>;
+  using UnboundRunType = MakeUnboundRunType<Functor, Args...>;
+  using Invoker = internal::Invoker<BindState, UnboundRunType>;
 
-}  // namespace internal
-
-template <typename Functor, typename... Args>
-using MakeUnboundRunType =
-    typename internal::MakeUnboundRunTypeImpl<Functor, Args...>::Type;
-
-template <typename Functor, typename... Args>
-base::Callback<MakeUnboundRunType<Functor, Args...>>
-Bind(Functor functor, Args&&... args) {
-  // Type aliases for how to store and run the functor.
-  using RunnableType = typename internal::FunctorTraits<Functor>::RunnableType;
-  using RunType = typename internal::FunctorTraits<Functor>::RunType;
-
-  // Use RunnableType::RunType instead of RunType above because our
-  // checks below for bound references need to know what the actual
-  // functor is going to interpret the argument as.
-  using BoundRunType = typename RunnableType::RunType;
-
-  using BoundArgs =
-      internal::TakeTypeListItem<sizeof...(Args),
-                                 internal::ExtractArgs<BoundRunType>>;
-
-  // Do not allow binding a non-const reference parameter. Non-const reference
-  // parameters are disallowed by the Google style guide.  Also, binding a
-  // non-const reference parameter can make for subtle bugs because the
-  // invoked function will receive a reference to the stored copy of the
-  // argument and not the original.
-  static_assert(!internal::HasNonConstReferenceItem<BoundArgs>::value,
-                "do not bind functions with nonconst ref");
-
-  const bool is_method = internal::HasIsMethodTag<RunnableType>::value;
-
-  // For methods, we need to be careful for parameter 1.  We do not require
-  // a scoped_refptr because BindState<> itself takes care of AddRef() for
-  // methods. We also disallow binding of an array as the method's target
-  // object.
-  static_assert(!internal::BindsArrayToFirstArg<is_method, Args...>::value,
-                "first bound argument to method cannot be array");
-  static_assert(
-      !internal::HasRefCountedParamAsRawPtr<is_method, Args...>::value,
-      "a parameter is a refcounted type and needs scoped_refptr");
-
-  using BindState = internal::BindState<RunnableType, RunType, Args...>;
-
-  return Callback<typename BindState::UnboundRunType>(
-      new BindState(internal::MakeRunnable(functor),
-                    std::forward<Args>(args)...));
+  using CallbackType = Callback<UnboundRunType>;
+  return CallbackType(new BindState(std::forward<Functor>(functor),
+                                    std::forward<Args>(args)...),
+                      &Invoker::Run);
 }
 
 }  // namespace base

@@ -17,14 +17,18 @@ TaskScheduler* g_task_scheduler = nullptr;
 }  // namespace
 
 // static
-void TaskScheduler::SetInstance(std::unique_ptr<TaskScheduler> task_scheduler) {
-  delete g_task_scheduler;
-  g_task_scheduler = task_scheduler.release();
+void TaskScheduler::CreateAndSetDefaultTaskScheduler(
+    const std::vector<SchedulerWorkerPoolParams>& worker_pool_params_vector,
+    const WorkerPoolIndexForTraitsCallback&
+        worker_pool_index_for_traits_callback) {
+  SetInstance(internal::TaskSchedulerImpl::Create(
+      worker_pool_params_vector, worker_pool_index_for_traits_callback));
 }
 
 // static
-void TaskScheduler::InitializeDefaultTaskScheduler() {
-  SetInstance(internal::TaskSchedulerImpl::Create());
+void TaskScheduler::SetInstance(std::unique_ptr<TaskScheduler> task_scheduler) {
+  delete g_task_scheduler;
+  g_task_scheduler = task_scheduler.release();
 }
 
 // static

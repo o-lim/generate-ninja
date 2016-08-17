@@ -222,6 +222,8 @@ places are noted in the table below.
 | `mac_sdk_min`                                   | `mac_sdk_min`                              | `//build/config/mac/mac_sdk.gni`               |
 | `mac_sdk_path`                                  | `mac_sdk_path`                             | `//build/config/mac/mac_sdk.gni`               |
 | `mac_sdk`                                       | `mac_sdk_version`                          | `//build/config/mac/mac_sdk.gni`               |
+| `mac_strip_release`                             | `enable_stripping`                         | `//build/config/mac/symbols.gni`               |
+| `mac_want_real_dsym`                            | `enable_dsyms`                             | `//build/config/mac/symbols.gni`               |
 | `msan` (0/1)                                    | `is_msan` (true/false)                     | `//build/config/sanitizers/sanitizers.gni`     |
 | `SDKROOT` (Mac)                                 | `sysroot`                                  | `//build/config/sysroot.gni`                   |
 | `sysroot`                                       | `sysroot`                                  | `//build/config/sysroot.gni`                   |
@@ -259,7 +261,6 @@ places are noted in the table below.
 | `enable_service_discovery` (0/1)        | `enable_service_discovery` (true/false)        | `//build/config/features.gni` |
 | `enable_spellcheck` (0/1)               | `enable_spellcheck` (true/false)               | `//build/config/features.gni` |
 | `enable_session_service` (0/1)          | `enable_session_service` (true/false)          | `//build/config/features.gni` |
-| `enable_settings_app` (0/1)             | `enable_settings_app` (true/false)             | `//build/config/features.gni` |
 | `enable_task_manager` (0/1)             | `enable_task_manager` (true/false)             | `//build/config/features.gni` |
 | `enable_themes` (0/1)                   | `enable_themes` (true/false)                   | `//build/config/features.gni` |
 | `enable_webrtc` (0/1)                   | `enable_webrtc` (true/false)                   | `//build/config/features.gni` |
@@ -281,7 +282,7 @@ places are noted in the table below.
 | `use_dbus` (0/1)                        | `use_dbus` (true/false)                        | `//build/config/features.gni` |
 | `use_gconf` (0/1)                       | `use_gconf` (true/false)                       | `//build/config/features.gni` |
 | `use_glib` (0/1)                        | `is_linux` (true/false)                        | (global)                      |
-| `use_gnome_keyring` (0/1)               | `is_desktop_linux` (true/false)                |                               |
+| `use_gnome_keyring` (0/1)               | `use_gnome_keyring` (true/false)               |                               |
 | `use_goma` (0/1)                        | `use_goma` (true/false)                        | `//build/toolchain/goma.gni`  |
 | `use_nss_certs` (0/1)                   | `use_nss_certs` (true/false)                   | `//build/config/crypto.gni` (Many of these conditions can be deleted, see the "SSL" notes on targets below.) |
 | `use_pango` (0/1)                       | `use_pango` (true/false)                       | `//build/config/ui.gni`       |

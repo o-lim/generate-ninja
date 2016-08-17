@@ -97,10 +97,10 @@ BASE_EXPORT extern NSString* const NSAppearanceNameVibrantLight;
 @property BOOL allowsExpansionToolTips;
 @end
 
-// NSProgress is public API in 10.9, but a version of it exists and is usable
-// in 10.8.
-@class NSProgress;
-@class NSAppearance;
+@interface NSNib (MountainLionSDK)
+- (BOOL)instantiateWithOwner:(id)owner
+             topLevelObjects:(NSArray**)topLevelObjects;
+@end
 
 #endif  // MAC_OS_X_VERSION_10_8
 
@@ -108,6 +108,11 @@ BASE_EXPORT extern NSString* const NSAppearanceNameVibrantLight;
 // block can be removed.
 #if !defined(MAC_OS_X_VERSION_10_9) || \
     MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_9
+
+// NSProgress is public API in 10.9, but a version of it exists and is usable
+// in 10.8.
+@class NSProgress;
+@class NSAppearance;
 
 @interface NSProgress (MavericksSDK)
 

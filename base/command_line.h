@@ -33,15 +33,15 @@ class BASE_EXPORT CommandLine {
  public:
 #if defined(OS_WIN)
   // The native command line string type.
-  typedef base::string16 StringType;
+  using StringType = string16;
 #elif defined(OS_POSIX)
-  typedef std::string StringType;
+  using StringType = std::string;
 #endif
 
-  typedef StringType::value_type CharType;
-  typedef std::vector<StringType> StringVector;
-  typedef std::map<std::string, StringType> SwitchMap;
-  typedef std::map<base::StringPiece, const StringType*> StringPieceSwitchMap;
+  using CharType = StringType::value_type;
+  using StringVector = std::vector<StringType>;
+  using SwitchMap = std::map<std::string, StringType>;
+  using StringPieceSwitchMap = std::map<StringPiece, const StringType*>;
 
   // A constructor for CommandLines that only carry switches and arguments.
   enum NoProgram { NO_PROGRAM };
@@ -69,6 +69,13 @@ class BASE_EXPORT CommandLine {
   // object and the behavior will be the same as Posix systems (only hyphens
   // begin switches, everything else will be an arg).
   static void set_slash_is_not_a_switch();
+
+  // Normally when the CommandLine singleton is initialized it gets the command
+  // line via the GetCommandLineW API and then uses the shell32 API
+  // CommandLineToArgvW to parse the command line and convert it back to
+  // argc and argv. Tests who don't want this dependency on shell32 and need
+  // to honor the arguments passed in should use this function.
+  static void InitUsingArgvForTesting(int argc, const char* const* argv);
 #endif
 
   // Initialize the current process CommandLine singleton. On Windows, ignores
@@ -83,6 +90,7 @@ class BASE_EXPORT CommandLine {
   // you want to reset the base library to its initial state (for example, in an
   // outer library that needs to be able to terminate, and be re-initialized).
   // If Init is called only once, as in main(), Reset() is not necessary.
+  // Do not call this in tests. Use base::test::ScopedCommandLine instead.
   static void Reset();
 
   // Get the singleton CommandLine representing the current process's
@@ -94,7 +102,7 @@ class BASE_EXPORT CommandLine {
   static bool InitializedForCurrentProcess();
 
 #if defined(OS_WIN)
-  static CommandLine FromString(const base::string16& command_line);
+  static CommandLine FromString(const string16& command_line);
 #endif
 
   // Initialize from an argv vector.
@@ -152,15 +160,15 @@ class BASE_EXPORT CommandLine {
   // The second override provides an optimized version to avoid inlining codegen
   // at every callsite to find the length of the constant and construct a
   // StringPiece.
-  bool HasSwitch(const base::StringPiece& switch_string) const;
+  bool HasSwitch(const StringPiece& switch_string) const;
   bool HasSwitch(const char switch_constant[]) const;
 
   // Returns the value associated with the given switch. If the switch has no
   // value or isn't present, this method returns the empty string.
   // Switch names must be lowercase.
-  std::string GetSwitchValueASCII(const base::StringPiece& switch_string) const;
-  FilePath GetSwitchValuePath(const base::StringPiece& switch_string) const;
-  StringType GetSwitchValueNative(const base::StringPiece& switch_string) const;
+  std::string GetSwitchValueASCII(const StringPiece& switch_string) const;
+  FilePath GetSwitchValuePath(const StringPiece& switch_string) const;
+  StringType GetSwitchValueNative(const StringPiece& switch_string) const;
 
   // Get a copy of all switches, along with their values.
   const SwitchMap& GetSwitches() const { return switches_; }
@@ -203,7 +211,7 @@ class BASE_EXPORT CommandLine {
 #if defined(OS_WIN)
   // Initialize by parsing the given command line string.
   // The program name is assumed to be the first item in the string.
-  void ParseFromString(const base::string16& command_line);
+  void ParseFromString(const string16& command_line);
 #endif
 
  private:

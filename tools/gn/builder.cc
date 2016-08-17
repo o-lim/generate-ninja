@@ -33,7 +33,7 @@ typedef BuilderRecord::BuilderRecordSet BuilderRecordSet;
 bool RecursiveFindCycle(const BuilderRecord* search_in,
                         std::vector<const BuilderRecord*>* path) {
   path->push_back(search_in);
-  for (const auto& cur : search_in->unresolved_deps()) {
+  for (auto* cur : search_in->unresolved_deps()) {
     std::vector<const BuilderRecord*>::iterator found =
         std::find(path->begin(), path->end(), cur);
     if (found != path->end()) {
@@ -182,7 +182,7 @@ bool Builder::CheckForBadItems(Err* err) const {
       bad_records.push_back(src);
 
       // Check dependencies.
-      for (const auto& dest : src->unresolved_deps()) {
+      for (auto* dest : src->unresolved_deps()) {
         if (!dest->item()) {
           depstring += src->label().GetUserVisibleName(true) +
               "\n  needs " + dest->label().GetUserVisibleName(true) + "\n";
@@ -204,7 +204,7 @@ bool Builder::CheckForBadItems(Err* err) const {
       // Something's very wrong, just dump out the bad nodes.
       depstring = "I have no idea what went wrong, but these are unresolved, "
           "possibly due to an\ninternal error:";
-      for (const auto& bad_record : bad_records) {
+      for (auto* bad_record : bad_records) {
         depstring += "\n\"" +
             bad_record->label().GetUserVisibleName(false) + "\"";
       }
@@ -252,7 +252,7 @@ bool Builder::ConfigDefined(BuilderRecord* record, Err* err) {
   // anything they depend on is actually written, the "generate" flag isn't
   // relevant and means extra book keeping. Just force load any deps of this
   // config.
-  for (const auto& cur : record->all_deps())
+  for (auto* cur : record->all_deps())
     ScheduleItemLoadIfNecessary(cur);
 
   return true;
@@ -404,11 +404,17 @@ bool Builder::AddToolchainDep(BuilderRecord* record,
 
 void Builder::RecursiveSetShouldGenerate(BuilderRecord* record,
                                          bool force) {
-  if (!force && record->should_generate())
-    return;  // Already set.
-  record->set_should_generate(true);
+  if (!record->should_generate()) {
+    record->set_should_generate(true);
 
-  for (const auto& cur : record->all_deps()) {
+    // This may have caused the item to go into "resolved and generated" state.
+    if (record->resolved() && !resolved_and_generated_callback_.is_null())
+      resolved_and_generated_callback_.Run(record);
+  } else if (!force) {
+    return;  // Already set and we're not required to iterate dependencies.
+  }
+
+  for (auto* cur : record->all_deps()) {
     if (!cur->should_generate()) {
       ScheduleItemLoadIfNecessary(cur);
       RecursiveSetShouldGenerate(cur, false);
@@ -451,8 +457,8 @@ bool Builder::ResolveItem(BuilderRecord* record, Err* err) {
 
   if (!record->item()->OnResolved(err))
     return false;
-  if (!resolved_callback_.is_null())
-    resolved_callback_.Run(record);
+  if (record->should_generate() && !resolved_and_generated_callback_.is_null())
+    resolved_and_generated_callback_.Run(record);
 
   // Recursively update everybody waiting on this item to be resolved.
   for (BuilderRecord* waiting : record->waiting_on_resolution()) {

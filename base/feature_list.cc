@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -23,6 +24,9 @@ namespace {
 // have more control over initialization timing. Leaky.
 FeatureList* g_instance = nullptr;
 
+// Tracks whether the FeatureList instance was initialized via an accessor.
+bool g_initialized_from_accessor = false;
+
 // Some characters are not allowed to appear in feature names or the associated
 // field trial names, as they are used as special characters for command-line
 // serialization. This function checks that the strings are ASCII (since they
@@ -35,10 +39,7 @@ bool IsValidFeatureOrFieldTrialName(const std::string& name) {
 
 }  // namespace
 
-FeatureList::FeatureList()
-  : initialized_(false),
-    initialized_from_command_line_(false) {
-}
+FeatureList::FeatureList() {}
 
 FeatureList::~FeatureList() {}
 
@@ -133,7 +134,11 @@ void FeatureList::GetFeatureOverrides(std::string* enable_overrides,
 
 // static
 bool FeatureList::IsEnabled(const Feature& feature) {
-  return GetInstance()->IsFeatureEnabled(feature);
+  if (!g_instance) {
+    g_initialized_from_accessor = true;
+    return feature.default_state == FEATURE_ENABLED_BY_DEFAULT;
+  }
+  return g_instance->IsFeatureEnabled(feature);
 }
 
 // static
@@ -158,6 +163,10 @@ bool FeatureList::InitializeInstance(const std::string& enable_features,
   // For example, we initialize an instance in chrome/browser/
   // chrome_browser_main.cc and do not override it in content/browser/
   // browser_main_loop.cc.
+  // If the singleton was previously initialized from within an accessor, we
+  // want to prevent callers from reinitializing the singleton and masking the
+  // accessor call(s) which likely returned incorrect information.
+  CHECK(!g_initialized_from_accessor);
   bool instance_existed_before = false;
   if (g_instance) {
     if (g_instance->initialized_from_command_line_)
@@ -189,9 +198,19 @@ void FeatureList::SetInstance(std::unique_ptr<FeatureList> instance) {
 }
 
 // static
-void FeatureList::ClearInstanceForTesting() {
-  delete g_instance;
+std::unique_ptr<FeatureList> FeatureList::ClearInstanceForTesting() {
+  FeatureList* old_instance = g_instance;
   g_instance = nullptr;
+  g_initialized_from_accessor = false;
+  return base::WrapUnique(old_instance);
+}
+
+// static
+void FeatureList::RestoreInstanceForTesting(
+    std::unique_ptr<FeatureList> instance) {
+  DCHECK(!g_instance);
+  // Note: Intentional leak of global singleton.
+  g_instance = instance.release();
 }
 
 void FeatureList::FinalizeInitialization() {

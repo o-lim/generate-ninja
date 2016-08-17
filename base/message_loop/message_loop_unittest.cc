@@ -259,7 +259,7 @@ void RecursiveFunc(TaskList* order, int cookie, int depth,
   if (depth > 0) {
     if (is_reentrant)
       MessageLoop::current()->SetNestableTasksAllowed(true);
-    MessageLoop::current()->PostTask(
+    ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
         Bind(&RecursiveFunc, order, cookie, depth - 1, is_reentrant));
   }
@@ -416,9 +416,8 @@ void RunTest_RecursiveSupport2(MessageLoop::Type message_loop_type) {
 
 void PostNTasksThenQuit(int posts_remaining) {
   if (posts_remaining > 1) {
-    MessageLoop::current()->PostTask(
-        FROM_HERE,
-        Bind(&PostNTasksThenQuit, posts_remaining - 1));
+    MessageLoop::current()->task_runner()->PostTask(
+        FROM_HERE, Bind(&PostNTasksThenQuit, posts_remaining - 1));
   } else {
     MessageLoop::current()->QuitWhenIdle();
   }
@@ -639,8 +638,8 @@ TEST(MessageLoopTest, TaskObserver) {
 
   MessageLoop loop;
   loop.AddTaskObserver(&observer);
-  loop.PostTask(FROM_HERE, Bind(&PostNTasksThenQuit, kNumPosts));
-  loop.Run();
+  loop.task_runner()->PostTask(FROM_HERE, Bind(&PostNTasksThenQuit, kNumPosts));
+  RunLoop().Run();
   loop.RemoveTaskObserver(&observer);
 
   EXPECT_EQ(kNumPosts, observer.num_tasks_started());
@@ -815,11 +814,10 @@ TEST(MessageLoopTest, DestructionObserverTest) {
 
   MLDestructionObserver observer(&task_destroyed, &destruction_observer_called);
   loop->AddDestructionObserver(&observer);
-  loop->PostDelayedTask(
-      FROM_HERE,
-      Bind(&DestructionObserverProbe::Run,
-                 new DestructionObserverProbe(&task_destroyed,
-                                              &destruction_observer_called)),
+  loop->task_runner()->PostDelayedTask(
+      FROM_HERE, Bind(&DestructionObserverProbe::Run,
+                      new DestructionObserverProbe(
+                          &task_destroyed, &destruction_observer_called)),
       kDelay);
   delete loop;
   EXPECT_TRUE(observer.task_destroyed_before_message_loop());
@@ -840,12 +838,12 @@ TEST(MessageLoopTest, ThreadMainTaskRunner) {
       &Foo::Test1ConstRef, foo.get(), a));
 
   // Post quit task;
-  MessageLoop::current()->PostTask(
+  MessageLoop::current()->task_runner()->PostTask(
       FROM_HERE,
       Bind(&MessageLoop::QuitWhenIdle, Unretained(MessageLoop::current())));
 
   // Now kick things off
-  MessageLoop::current()->Run();
+  RunLoop().Run();
 
   EXPECT_EQ(foo->test_count(), 1);
   EXPECT_EQ(foo->result(), "a");
@@ -862,8 +860,10 @@ TEST(MessageLoopTest, IsType) {
 void EmptyFunction() {}
 
 void PostMultipleTasks() {
-  MessageLoop::current()->PostTask(FROM_HERE, base::Bind(&EmptyFunction));
-  MessageLoop::current()->PostTask(FROM_HERE, base::Bind(&EmptyFunction));
+  ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                          base::Bind(&EmptyFunction));
+  ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                          base::Bind(&EmptyFunction));
 }
 
 static const int kSignalMsg = WM_USER + 2;
@@ -891,19 +891,20 @@ LRESULT CALLBACK TestWndProcThunk(HWND hwnd, UINT message,
     // First, we post a task that will post multiple no-op tasks to make sure
     // that the pump's incoming task queue does not become empty during the
     // test.
-    MessageLoop::current()->PostTask(FROM_HERE, base::Bind(&PostMultipleTasks));
+    ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                            base::Bind(&PostMultipleTasks));
     // Next, we post a task that posts a windows message to trigger the second
     // stage of the test.
-    MessageLoop::current()->PostTask(FROM_HERE,
-                                     base::Bind(&PostWindowsMessage, hwnd));
+    ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(&PostWindowsMessage, hwnd));
     break;
   case 2:
     // Since we're about to enter a modal loop, tell the message loop that we
     // intend to nest tasks.
     MessageLoop::current()->SetNestableTasksAllowed(true);
     bool did_run = false;
-    MessageLoop::current()->PostTask(FROM_HERE,
-                                     base::Bind(&EndTest, &did_run, hwnd));
+    ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(&EndTest, &did_run, hwnd));
     // Run a nested windows-style message loop and verify that our task runs. If
     // it doesn't, then we'll loop here until the test times out.
     MSG msg;
@@ -964,7 +965,7 @@ TEST(MessageLoopTest, OriginalRunnerWorks) {
   scoped_refptr<Foo> foo(new Foo());
   original_runner->PostTask(FROM_HERE,
                             Bind(&Foo::Test1ConstRef, foo.get(), "a"));
-  loop.RunUntilIdle();
+  RunLoop().RunUntilIdle();
   EXPECT_EQ(1, foo->test_count());
 }
 

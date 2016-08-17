@@ -571,6 +571,9 @@
       # SpellCheckerSession on Android.
       'use_browser_spellchecker%': 0,
 
+      # Use Minikin hyphenation engine.
+      'use_minikin_hyphenation%': 0,
+
       # Webrtc compilation is enabled by default. Set to 0 to disable.
       'enable_webrtc%': 1,
 
@@ -698,6 +701,8 @@
       # Control Flow Integrity for virtual calls and casts.
       # See http://clang.llvm.org/docs/ControlFlowIntegrity.html
       'cfi_vptr%': 0,
+      # TODO(krasin): remove it. See https://crbug.com/626794.
+      'cfi_cast%': 0,
       'cfi_diag%': 0,
 
       'cfi_blacklist%': '<(PRODUCT_DIR)/../../tools/cfi/blacklist.txt',
@@ -824,6 +829,11 @@
         # Android and OSX have built-in spellcheckers that can be utilized.
         ['OS=="android" or OS=="mac"', {
           'use_browser_spellchecker%': 1,
+        }],
+
+        # Android has hyphenation dictionaries for Minikin to use.
+        ['OS=="android"', {
+          'use_minikin_hyphenation%': 1,
         }],
 
         # Enables proprietary codecs and demuxers; e.g. H264, AAC, MP3, and MP4.
@@ -966,15 +976,8 @@
         }],
 
         ['chromeos==1', {
-          'enable_basic_printing%': 0,
+          'enable_basic_printing%': 1,
           'enable_print_preview%': 1,
-        }],
-
-        # Do not enable the Settings App on ChromeOS.
-        ['enable_app_list==1 and chromeos==0', {
-          'enable_settings_app%': 1,
-        }, {
-          'enable_settings_app%': 0,
         }],
 
         # Whether tests targets should be run, archived or just have the
@@ -1035,19 +1038,6 @@
           # which causes the linker to produce an invalid ELF.
           # http://crbug.com/574476
           'fastbuild%': 2,
-        }],
-        # Enable hang report capture. Capture can only be enabled for 32bit
-        # Windows.
-        ['OS=="win" and target_arch=="ia32" and branding=="Chrome"', {
-          # Enable hang reports from the watcher process.
-          'kasko_hang_reports%': 0,
-          # Enable failed rendez-vous reports.
-          'kasko_failed_rdv_reports%': 0,
-        }, {
-          # Enable hang reports from the watcher process.
-          'kasko_hang_reports%': 0,
-          # Enable failed rendez-vous reports.
-          'kasko_failed_rdv_reports%': 0,
         }],
       ],
 
@@ -1203,8 +1193,6 @@
     'use_sanitizer_options%': '<(use_sanitizer_options)',
     'syzyasan%': '<(syzyasan)',
     'kasko%': '<(kasko)',
-    'kasko_hang_reports%': '<(kasko_hang_reports)',
-    'kasko_failed_rdv_reports%': '<(kasko_failed_rdv_reports)',
     'syzygy_optimize%': '<(syzygy_optimize)',
     'lsan%': '<(lsan)',
     'msan%': '<(msan)',
@@ -1241,6 +1229,7 @@
     'enable_print_preview%': '<(enable_print_preview)',
     'enable_spellcheck%': '<(enable_spellcheck)',
     'use_browser_spellchecker%': '<(use_browser_spellchecker)',
+    'use_minikin_hyphenation%': '<(use_minikin_hyphenation)',
     'cld2_table_size%': '<(cld2_table_size)',
     'enable_captive_portal_detection%': '<(enable_captive_portal_detection)',
     'disable_file_support%': '<(disable_file_support)',
@@ -1257,7 +1246,6 @@
     'create_standalone_apk%': 1,
     'enable_app_list%': '<(enable_app_list)',
     'use_default_render_theme%': '<(use_default_render_theme)',
-    'enable_settings_app%': '<(enable_settings_app)',
     'google_api_key%': '<(google_api_key)',
     'google_default_client_id%': '<(google_default_client_id)',
     'google_default_client_secret%': '<(google_default_client_secret)',
@@ -1274,6 +1262,7 @@
     'video_hole%': '<(video_hole)',
     'v8_use_external_startup_data%': '<(v8_use_external_startup_data)',
     'cfi_vptr%': '<(cfi_vptr)',
+    'cfi_cast%': '<(cfi_cast)',
     'cfi_diag%': '<(cfi_diag)',
     'cfi_blacklist%': '<(cfi_blacklist)',
     'mac_views_browser%': '<(mac_views_browser)',
@@ -1427,8 +1416,6 @@
     # Default of 'use_allocator' is set to 'none' if OS=='android' later.
     'use_allocator%': 'tcmalloc',
 
-    # Set to 1 to link against libgnome-keyring instead of using dlopen().
-    'linux_link_gnome_keyring%': 0,
     # Set to 1 to link against gsettings APIs instead of using dlopen().
     'linux_link_gsettings%': 0,
 
@@ -1574,9 +1561,7 @@
     # Ozone platforms to include in the build.
     'ozone_platform_caca%': 0,
     'ozone_platform_cast%': 0,
-    'ozone_platform_egltest%': 0,
     'ozone_platform_gbm%': 0,
-    'ozone_platform_ozonex%': 0,
     'ozone_platform_headless%': 0,
     'ozone_platform_wayland%': 0,
 
@@ -2014,14 +1999,8 @@
           }, {
             'win_console_app%': 0,
           }],
-          # Disable hang reporting for syzyasan builds.
+          # Enable the Kasko reporter for syzyasan builds.
           ['syzyasan==1', {
-            # Note: override.
-            'kasko_hang_reports': 0,
-            'kasko_failed_rdv_reports': 0,
-          }],
-          # Enable the Kasko reporter for syzyasan builds and hang reporting.
-          ['syzyasan==1 or kasko_hang_reports==1 or kasko_failed_rdv_reports==1', {
             'kasko': 1,
           }],
           ['component=="shared_library"', {
@@ -2038,7 +2017,7 @@
           },{
             'msvs_large_module_debug_link_mode%': '2',  # Yes
           }],
-          ['chrome_pgo_phase!=0 or target_arch=="x64"', {
+          ['chrome_pgo_phase!=0', {
             'full_wpo_on_official%': 1,
           }],
         ],
@@ -2183,9 +2162,6 @@
       }],
       ['enable_app_list==1', {
         'grit_defines': ['-D', 'enable_app_list'],
-      }],
-      ['enable_settings_app==1', {
-        'grit_defines': ['-D', 'enable_settings_app'],
       }],
       ['use_concatenated_impulse_responses==1', {
         'grit_defines': ['-D', 'use_concatenated_impulse_responses'],
@@ -2377,12 +2353,11 @@
             'ozone_platform_cast%': 1,
             'conditions': [
               # For desktop non-audio Chromecast builds, run with
-              # --ozone-platform=egltest
+              # --ozone-platform=x11
               # TODO(slan|halliwell): Make the default platform "cast" on
               # desktop non-audio builds too.
               ['is_cast_desktop_build==1 and disable_display==0', {
-                'ozone_platform_egltest%': 1,
-                'ozone_platform_ozonex%': 1,
+                # Use GN instead. 
               }, {
                 'ozone_platform%': 'cast',
               }],
@@ -2390,7 +2365,6 @@
           }, {  # chromecast!=1
             # Build all platforms whose deps are in install-build-deps.sh.
             # Only these platforms will be compile tested by buildbots.
-            'ozone_platform_egltest%': 1,
             'conditions': [
               ['chromeos==1', {
                 'ozone_platform_gbm%': 1,
@@ -2413,12 +2387,6 @@
             'fastbuild': 1,
           }],
         ],
-      }],
-
-      ['OS=="win" and clang==1 and asan==0', {
-        # TODO(thakis): Remove this again once building with clang/win and
-        # debug info doesn't make link.exe run for hours.
-        'fastbuild': 1,
       }],
 
       ['host_clang==1', {
@@ -2640,6 +2608,9 @@
 
         # TODO(thakis): https://crbug.com/604888
         '-Wno-undefined-var-template',
+
+        # TODO(thakis): https://crbug.com/617318
+        '-Wno-nonportable-include-path',
       ],
     },
     'includes': [ 'set_clang_warning_flags.gypi', ],
@@ -2959,14 +2930,14 @@
       ['use_browser_spellchecker', {
         'defines': ['USE_BROWSER_SPELLCHECKER=1'],
       }],
+      ['use_minikin_hyphenation', {
+        'defines': ['USE_MINIKIN_HYPHENATION=1'],
+      }],
       ['enable_captive_portal_detection==1', {
         'defines': ['ENABLE_CAPTIVE_PORTAL_DETECTION=1'],
       }],
       ['enable_app_list==1', {
         'defines': ['ENABLE_APP_LIST=1'],
-      }],
-      ['enable_settings_app==1', {
-        'defines': ['ENABLE_SETTINGS_APP=1'],
       }],
       ['disable_file_support==1', {
         'defines': ['DISABLE_FILE_SUPPORT=1'],
@@ -3047,10 +3018,6 @@
       ['enable_wexit_time_destructors==1 and OS!="win"', {
         # TODO: Enable on Windows too, http://crbug.com/404525
         'variables': { 'clang_warning_flags': ['-Wexit-time-destructors']},
-      }],
-      ['"<!(python <(DEPTH)/tools/clang/scripts/update.py --print-revision)"!="270823-1"', {
-        # TODO(thakis): https://crbug.com/617318
-        'variables': { 'clang_warning_flags': ['-Wno-nonportable-include-path']},
       }],
       ['chromium_code==0', {
         'variables': {
@@ -3776,6 +3743,14 @@
                 'variables': {
                   'release_optimize%': 's',
                 },
+              }, {
+                'ldflags': [
+                  # TODO(pcc): Fix linker bug which requires us to link pthread
+                  # unconditionally here (crbug.com/623236).
+                  '-Wl,--no-as-needed',
+                  '-lpthread',
+                  '-Wl,--as-needed',
+                ],
               }],
               ['profiling==1', {
                 'cflags': [
@@ -4648,18 +4623,19 @@
 
             'target_conditions': [
               ['_toolset=="target"', {
-                'ldflags': [
-                  # Experimentation found that using four linking threads
-                  # saved ~20% of link time.
-                  # https://groups.google.com/a/chromium.org/group/chromium-dev/browse_thread/thread/281527606915bb36
-                  # Only apply this to the target linker, since the host
-                  # linker might not be gold, but isn't used much anyway.
-                  # TODO(raymes): Disable threading because gold is frequently
-                  # crashing on the bots: crbug.com/161942.
-                  # '-Wl,--threads',
-                  # '-Wl,--thread-count=4',
-                ],
                 'conditions': [
+                  # TODO(thestig): Enable this for disabled cases.
+                  [ 'linux_use_bundled_binutils==1', {
+                    'ldflags': [
+                      # Experimentation found that using four linking threads
+                      # saved ~20% of link time.
+                      # https://groups.google.com/a/chromium.org/group/chromium-dev/browse_thread/thread/281527606915bb36
+                      # Only apply this to the target linker, since the host
+                      # linker might not be gold, but isn't used much anyway.
+                      '-Wl,--threads',
+                      '-Wl,--thread-count=4',
+                    ],
+                  }],
                   # TODO(thestig): Enable this for disabled cases.
                   [ 'buildtype!="Official" and chromeos==0 and release_valgrind_build==0 and asan==0 and lsan==0 and tsan==0 and msan==0 and ubsan==0 and ubsan_security==0 and ubsan_vptr==0', {
                     'ldflags': [
@@ -5430,17 +5406,6 @@
               'ARCHS': [
                 'x86_64',
               ],
-              'WARNING_CFLAGS': [
-                # TODO(thakis): Remove this once the deployment target on OS X
-                # is 10.7 too, http://crbug.com/547071
-                # In general, it is NOT OK to add -Wno-deprecated-declarations
-                # anywhere, you should instead fix your code instead.  But host
-                # compiles on iOS are really mac compiles, so this will be fixed
-                # when the mac deployment target is increased.  (Some of the
-                # fixes depend on OS X 10.7 so they can't be done before mac
-                # upgrades).
-                '-Wno-deprecated-declarations',
-              ],
             },
           }],
           ['_toolset=="target"', {
@@ -5727,6 +5692,7 @@
           'VCCLCompilerTool': {
             'AdditionalOptions': ['/MP'],
             'MinimalRebuild': 'false',
+            'BufferSecurityCheck': 'true',
             'EnableFunctionLevelLinking': 'true',
             'RuntimeTypeInfo': 'false',
             'WarningLevel': '4',
@@ -5799,14 +5765,6 @@
             }],
           ],
           'conditions': [
-            ['clang==0', {
-              'VCCLCompilerTool': {
-                 # TODO(thakis): Enable this with clang too,
-                 # https://crbug.com/598767
-                 'BufferSecurityCheck': 'true',
-              },
-            }],
-
             # Building with Clang on Windows is a work in progress and very
             # experimental. See crbug.com/82385.
             # Keep this in sync with the similar blocks in build/config/compiler/BUILD.gn
@@ -5819,11 +5777,6 @@
                   # Don't warn about the "struct foo f = {0};" initialization
                   # pattern.
                   '-Wno-missing-field-initializers',
-
-                  # Many files use intrinsics without including this header.
-                  # TODO(hans): Fix those files, or move this to sub-GYPs,
-                  # https://crbug.com/592745
-                  '/FIintrin.h',
 
                   # TODO(hans): Make this list shorter eventually, http://crbug.com/504657
                   '-Wno-microsoft-enum-value',  # http://crbug.com/505296
@@ -6115,6 +6068,12 @@
             'arflags': [
               '--plugin', '../../<(make_clang_dir)/lib/LLVMgold.so',
             ],
+            'cflags': [
+              '-fwhole-program-vtables',
+            ],
+            'ldflags': [
+              '-fwhole-program-vtables',
+            ],
           }],
         ],
         'msvs_settings': {
@@ -6242,8 +6201,6 @@
           ['_toolset=="target"', {
             'cflags': [
               '-fsanitize=cfi-vcall',
-              '-fsanitize=cfi-derived-cast',
-              '-fsanitize=cfi-unrelated-cast',
               '-fsanitize-blacklist=<(cfi_blacklist)',
             ],
             'ldflags': [
@@ -6254,8 +6211,6 @@
             'xcode_settings': {
               'OTHER_CFLAGS': [
                 '-fsanitize=cfi-vcall',
-                '-fsanitize=cfi-derived-cast',
-                '-fsanitize=cfi-unrelated-cast',
                 '-fsanitize-blacklist=<(cfi_blacklist)',
               ],
             },
@@ -6264,6 +6219,34 @@
             'xcode_settings':  {
               'OTHER_LDFLAGS': [
                 '-fsanitize=cfi-vcall',
+              ],
+            },
+          }],
+        ],
+      },
+    }],
+    ['cfi_vptr==1 and cfi_cast==1', {
+      'target_defaults': {
+        'target_conditions': [
+          ['_toolset=="target"', {
+            'cflags': [
+              '-fsanitize=cfi-derived-cast',
+              '-fsanitize=cfi-unrelated-cast',
+            ],
+            'ldflags': [
+              '-fsanitize=cfi-derived-cast',
+              '-fsanitize=cfi-unrelated-cast',
+            ],
+            'xcode_settings': {
+              'OTHER_CFLAGS': [
+                '-fsanitize=cfi-derived-cast',
+                '-fsanitize=cfi-unrelated-cast',
+              ],
+            },
+          }],
+          ['_toolset=="target" and _type!="static_library"', {
+            'xcode_settings':  {
+              'OTHER_LDFLAGS': [
                 '-fsanitize=cfi-derived-cast',
                 '-fsanitize=cfi-unrelated-cast',
               ],
@@ -6300,21 +6283,6 @@
                 ],
               },
             },
-          }],
-        ],
-      },
-    }],
-    # TODO(pcc): Make these flags work correctly with CFI.
-    ['use_lto!=0 and cfi_vptr==0', {
-      'target_defaults': {
-        'target_conditions': [
-          ['_toolset=="target"', {
-            'cflags': [
-              '-fwhole-program-vtables',
-            ],
-            'ldflags': [
-              '-fwhole-program-vtables',
-            ],
           }],
         ],
       },

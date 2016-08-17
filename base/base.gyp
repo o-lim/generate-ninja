@@ -276,6 +276,7 @@
       'dependencies': [
         'base',
         'third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
+        '../third_party/ced/ced.gyp:ced',
         '../third_party/icu/icu.gyp:icui18n',
         '../third_party/icu/icu.gyp:icuuc',
       ],
@@ -398,6 +399,8 @@
         'containers/small_map_unittest.cc',
         'containers/stack_container_unittest.cc',
         'cpu_unittest.cc',
+        'debug/activity_analyzer_unittest.cc',
+        'debug/activity_tracker_unittest.cc',
         'debug/crash_logging_unittest.cc',
         'debug/debugger_unittest.cc',
         'debug/leak_tracker_unittest.cc',
@@ -407,7 +410,7 @@
         'deferred_sequenced_task_runner_unittest.cc',
         'environment_unittest.cc',
         'feature_list_unittest.cc',
-        'file_version_info_unittest.cc',
+        'file_version_info_win_unittest.cc',
         'files/dir_reader_posix_unittest.cc',
         'files/file_locking_unittest.cc',
         'files/file_path_unittest.cc',
@@ -450,7 +453,6 @@
         'mac/call_with_eh_frame_unittest.mm',
         'mac/dispatch_source_mach_unittest.cc',
         'mac/foundation_util_unittest.mm',
-        'mac/libdispatch_task_runner_unittest.cc',
         'mac/mac_util_unittest.mm',
         'mac/mach_port_broker_unittest.cc',
         'mac/objc_property_releaser_unittest.mm',
@@ -521,6 +523,8 @@
         'scoped_native_library_unittest.cc',
         'security_unittest.cc',
         'sequence_checker_unittest.cc',
+        'sequence_token_unittest.cc',
+        'sequenced_task_runner_unittest.cc',
         'sha1_unittest.cc',
         'stl_util_unittest.cc',
         'strings/nullable_string16_unittest.cc',
@@ -540,7 +544,7 @@
         'strings/utf_string_conversions_unittest.cc',
         'supports_user_data_unittest.cc',
         'sync_socket_unittest.cc',
-        'synchronization/cancellation_flag_unittest.cc',
+        'synchronization/atomic_flag_unittest.cc',
         'synchronization/condition_variable_unittest.cc',
         'synchronization/lock_unittest.cc',
         'synchronization/read_write_lock_unittest.cc',
@@ -555,16 +559,15 @@
         'task_scheduler/priority_queue_unittest.cc',
         'task_scheduler/scheduler_lock_unittest.cc',
         'task_scheduler/scheduler_service_thread_unittest.cc',
-        'task_scheduler/scheduler_thread_pool_impl_unittest.cc',
-        'task_scheduler/scheduler_worker_thread_stack_unittest.cc',
-        'task_scheduler/scheduler_worker_thread_unittest.cc',
+        'task_scheduler/scheduler_worker_pool_impl_unittest.cc',
+        'task_scheduler/scheduler_worker_stack_unittest.cc',
+        'task_scheduler/scheduler_worker_unittest.cc',
         'task_scheduler/sequence_sort_key_unittest.cc',
         'task_scheduler/sequence_unittest.cc',
         'task_scheduler/task_scheduler_impl_unittest.cc',
         'task_scheduler/task_tracker_unittest.cc',
         'task_scheduler/test_task_factory.cc',
         'task_scheduler/test_task_factory.h',
-        'task_scheduler/test_utils.h',
         'template_util_unittest.cc',
         'test/histogram_tester_unittest.cc',
         'test/test_pending_task_unittest.cc',
@@ -573,8 +576,9 @@
         'test/user_action_tester_unittest.cc',
         'threading/non_thread_safe_unittest.cc',
         'threading/platform_thread_unittest.cc',
-        'threading/sequenced_worker_pool_unittest.cc',
+        'threading/post_task_and_reply_impl_unittest.cc',
         'threading/sequenced_task_runner_handle_unittest.cc',
+        'threading/sequenced_worker_pool_unittest.cc',
         'threading/simple_thread_unittest.cc',
         'threading/thread_checker_unittest.cc',
         'threading/thread_collision_warner_unittest.cc',
@@ -622,6 +626,7 @@
         '<@(trace_event_test_sources)',
       ],
       'dependencies': [
+        'allocator/allocator.gyp:allocator_features#target',
         'base',
         'base_i18n',
         'base_message_loop_tests',
@@ -631,6 +636,7 @@
         'third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
         '../testing/gmock.gyp:gmock',
         '../testing/gtest.gyp:gtest',
+        '../third_party/ced/ced.gyp:ced',
         '../third_party/icu/icu.gyp:icui18n',
         '../third_party/icu/icu.gyp:icuuc',
       ],
@@ -640,6 +646,12 @@
         'module_dir': 'base'
       },
       'conditions': [
+        ['cfi_vptr==1 and cfi_cast==1', {
+          'defines': [
+             # TODO(krasin): remove CFI_CAST_CHECK, see https://crbug.com/626794.
+            'CFI_CAST_CHECK',
+          ],
+        }],
         ['OS == "ios" or OS == "mac"', {
           'dependencies': [
             'base_unittests_arc',
@@ -683,9 +695,6 @@
         ['desktop_linux == 1 or chromeos == 1', {
           'defines': [
             'USE_SYMBOLIZE',
-          ],
-          'sources!': [
-            'file_version_info_unittest.cc',
           ],
           'conditions': [
             [ 'desktop_linux==1', {
@@ -876,6 +885,8 @@
         'test/ios/wait_util.mm',
         'test/launcher/test_launcher.cc',
         'test/launcher/test_launcher.h',
+        'test/launcher/test_launcher_tracer.cc',
+        'test/launcher/test_launcher_tracer.h',
         'test/launcher/test_result.cc',
         'test/launcher/test_result.h',
         'test/launcher/test_results_tracker.cc',
@@ -1418,6 +1429,7 @@
             'android/java/src/org/chromium/base/ContentUriUtils.java',
             'android/java/src/org/chromium/base/ContextUtils.java',
             'android/java/src/org/chromium/base/CpuFeatures.java',
+            'android/java/src/org/chromium/base/EarlyTraceEvent.java',
             'android/java/src/org/chromium/base/EventLog.java',
             'android/java/src/org/chromium/base/FieldTrialList.java',
             'android/java/src/org/chromium/base/ImportantFileWriterAndroid.java',
@@ -1520,6 +1532,7 @@
             'base_java_memory_pressure_level',
             'base_build_config_gen',
             'base_native_libraries_gen',
+            '../third_party/android_tools/android_tools.gyp:android_support_annotations_javalib',
             '../third_party/android_tools/android_tools.gyp:android_support_multidex_javalib',
             '../third_party/jsr-305/jsr-305.gyp:jsr_305_javalib',
           ],

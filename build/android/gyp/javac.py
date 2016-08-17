@@ -83,7 +83,7 @@ def _ExtractClassFiles(jar_path, dest_dir, java_files):
   def extract_predicate(path):
     if not path.endswith('.class'):
       return False
-    path_without_suffix = re.sub(r'(?:\$|\.)[^/]+class$', '', path)
+    path_without_suffix = re.sub(r'(?:\$|\.)[^/]*class$', '', path)
     partial_java_path = path_without_suffix + '.java'
     return not any(p.endswith(partial_java_path) for p in java_files)
 
@@ -229,11 +229,13 @@ def _OnStaleMd5(changes, options, javac_cmd, java_files, classpath_inputs):
     jar.JarDirectory(classes_dir,
                      options.jar_path,
                      predicate=inclusion_predicate,
-                     provider_configurations=options.provider_configurations)
+                     provider_configurations=options.provider_configurations,
+                     additional_files=options.additional_jar_files)
     jar.JarDirectory(classes_dir,
                      excluded_jar_path,
                      predicate=exclusion_predicate,
-                     provider_configurations=options.provider_configurations)
+                     provider_configurations=options.provider_configurations,
+                     additional_files=options.additional_jar_files)
 
 
 def _ParseOptions(argv):
@@ -290,6 +292,13 @@ def _ParseOptions(argv):
       help='File to specify a service provider. Will be included '
            'in the jar under META-INF/services.')
   parser.add_option(
+      '--additional-jar-file',
+      dest='additional_jar_files',
+      action='append',
+      help='Additional files to package into jar. By default, only Java .class '
+           'files are packaged into the jar. Files should be specified in '
+           'format <filename>:<path to be placed in jar>.')
+  parser.add_option(
       '--chromium-code',
       type='int',
       help='Whether code being compiled should be built with stricter '
@@ -318,13 +327,28 @@ def _ParseOptions(argv):
     java_srcjars += build_utils.ParseGypList(arg)
   options.java_srcjars = java_srcjars
 
+  additional_jar_files = []
+  for arg in options.additional_jar_files or []:
+    filepath, jar_filepath = arg.split(':')
+    additional_jar_files.append((filepath, jar_filepath))
+  options.additional_jar_files = additional_jar_files
+
   if options.src_gendirs:
     options.src_gendirs = build_utils.ParseGypList(options.src_gendirs)
 
   options.javac_includes = build_utils.ParseGypList(options.javac_includes)
   options.jar_excluded_classes = (
       build_utils.ParseGypList(options.jar_excluded_classes))
-  return options, args
+
+  java_files = []
+  for arg in args:
+    # Interpret a path prefixed with @ as a file containing a list of sources.
+    if arg.startswith('@'):
+      java_files.extend(build_utils.ReadSourcesList(arg[1:]))
+    else:
+      java_files.append(arg)
+
+  return options, java_files
 
 
 def main(argv):

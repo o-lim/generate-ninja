@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/clang/clang.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/win/visual_studio_version.gni")
@@ -15,6 +16,9 @@ declare_args() {
   # warnings, so normally this is done on a build machine and only the new
   # warnings are examined.
   use_vs_code_analysis = false
+
+  # Turn this on to have the linker output extra timing information.
+  win_linker_timing = false
 }
 
 # This is included by reference in the //build/config/compiler config that
@@ -36,10 +40,6 @@ config("compiler") {
     "/Gy",  # Enable function-level linking.
     "/FS",  # Preserve previous PDB behavior.
     "/bigobj",  # Some of our files are bigger than the regular limits.
-
-    # Tell the compiler to crash on failures. This is undocumented
-    # and unsupported but very handy.
-    "/d2FastFail",
   ]
 
   # Force C/C++ mode for the given GN detected file type. This is necessary
@@ -47,6 +47,15 @@ config("compiler") {
   # modes.
   cflags_c = [ "/TC" ]
   cflags_cc = [ "/TP" ]
+
+  # Flags not supported in version 2013.
+  if (visual_studio_version != "2013" && visual_studio_version != "2013e") {
+    cflags += [
+      # Tell the compiler to crash on failures. This is undocumented
+      # and unsupported but very handy.
+      "/d2FastFail",
+    ]
+  }
 
   if (visual_studio_version == "2015") {
     cflags += [
@@ -64,13 +73,6 @@ config("compiler") {
   # experimental. See crbug.com/82385.
   # Keep this in sync with the similar block in build/common.gypi
   if (is_clang) {
-    cflags += [
-      # Many files use intrinsics without including this header.
-      # TODO(hans): Fix those files, or move this to sub-GYPs,
-      # https://crbug.com/592745
-      "/FIintrin.h",
-    ]
-
     if (visual_studio_version == "2013") {
       cflags += [ "-fmsc-version=1800" ]
     } else if (visual_studio_version == "2015") {
@@ -93,12 +95,14 @@ config("compiler") {
     }
 
     # Clang runtime libraries, such as the sanitizer runtimes, live here.
-    lib_dirs = [ "//third_party/llvm-build/Release+Asserts/lib/clang/$clang_version/lib/windows" ]
+    lib_dirs = [ "$clang_base_path/lib/clang/$clang_version/lib/windows" ]
   }
 
-  if (is_syzyasan) {
-    # SyzyAsan needs /PROFILE turned on to produce appropriate pdbs.
-    assert(!is_win_fastlink, "/PROFILE and /DEBUG:FASTLINK are incompatible")
+  # Ensures that the PDB file contains FIXUP information (growing the PDB file
+  # by about 5%) but does not otherwise alter the output binary. This
+  # information is used by the Syzygy optimization tool when decomposing the
+  # release image.
+  if (!is_debug && !is_win_fastlink && !is_clang) {
     ldflags = [ "/PROFILE" ]
   }
 
@@ -264,7 +268,9 @@ config("common_linker_setup") {
     # which started happening more regularly after VS2013 Update 4.
     # Needs to be a bit lower for VS2015, or else errors out.
     "/maxilksize:0x7ff00000",
+  ]
 
+  ldflags += [
     # Tell the linker to crash on failures.
     "/fastfail",
   ]
@@ -279,6 +285,13 @@ config("common_linker_setup") {
     ldflags += [ "/DYNAMICBASE:NO" ]
   } else {
     ldflags += [ "/DYNAMICBASE" ]
+  }
+
+  if (win_linker_timing) {
+    ldflags += [
+      "/time",
+      "/verbose:incr",
+    ]
   }
 }
 

@@ -18,6 +18,9 @@ if (current_cpu == "mipsel" || current_cpu == "mips64el") {
 if (is_win) {
   import("//build/config/win/visual_studio_version.gni")
 }
+if (is_mac) {
+  import("//build/config/mac/symbols.gni")
+}
 
 declare_args() {
   # Default to warnings as errors for default workflow, where we catch
@@ -50,18 +53,6 @@ declare_args() {
   # This is initialized below, after use_gold might have been overridden.
   gold_path = false
 
-  # use_debug_fission: whether to use split DWARF debug info
-  # files. This can reduce link time significantly, but is incompatible
-  # with some utilities such as icecc and ccache. Requires gold and
-  # gcc >= 4.8 or clang.
-  # http://gcc.gnu.org/wiki/DebugFission
-  #
-  # This is a placeholder value indicating that the code below should set
-  # the default.  This is necessary to delay the evaluation of the default
-  # value expression until after its input values such as use_gold have
-  # been set, e.g. by a toolchain_args() block.
-  use_debug_fission = "default"
-
   if (is_win) {
     # Whether the VS xtree header has been patched to disable warning 4702. If
     # it has, then we don't need to disable 4702 (unreachable code warning).
@@ -83,13 +74,10 @@ declare_args() {
   # explore favoring size over speed in this case as well.
   optimize_for_size = is_android || is_ios
 
-  # If this is set to true, or if LLVM_FORCE_HEAD_REVISION is set to 1
-  # in the environment, we use the revision in the llvm repo to determine
-  # the CLANG_REVISION to use, instead of the version hard-coded into
-  # //tools/clang/scripts/update.py. This should only be used in
-  # conjunction with setting LLVM_FORCE_HEAD_REVISION in the
-  # environment when `gclient runhooks` is run as well.
-  llvm_force_head_revision = false
+  # Enable fatal linker warnings. Building Chromium with certain versions
+  # of binutils can cause linker warning.
+  # See: https://bugs.chromium.org/p/chromium/issues/detail?id=457359
+  fatal_linker_warnings = true
 }
 
 if (is_clang && !is_nacl) {
@@ -212,7 +200,7 @@ config("compiler") {
     }
 
     # Linker warnings.
-    if (!(is_chromeos && current_cpu == "arm") &&
+    if (fatal_linker_warnings && !(is_chromeos && current_cpu == "arm") &&
         !(is_android && use_order_profiling) && !is_mac && !is_ios) {
       # TODO(jochen): Enable this on chromeos on arm. http://crbug.com/356580
       # TODO(lizeb,pasko): Fix link errors when linking with order_profiling=1
@@ -321,18 +309,19 @@ config("compiler") {
         cflags += [ "-mstackrealign" ]
       }
     } else {
-      ldflags += [
-        "-B$gold_path",
-        # Experimentation found that using four linking threads
-        # saved ~20% of link time.
-        # https://groups.google.com/a/chromium.org/group/chromium-dev/browse_thread/thread/281527606915bb36
-        # Only apply this to the target linker, since the host
-        # linker might not be gold, but isn't used much anyway.
-        # TODO(raymes): Disable threading because gold is frequently
-        # crashing on the bots: crbug.com/161942.
-        #"-Wl,--threads",
-        #"-Wl,--thread-count=4",
-      ]
+      ldflags += [ "-B$gold_path" ]
+
+      if (linux_use_bundled_binutils) {
+        ldflags += [
+          # Experimentation found that using four linking threads
+          # saved ~20% of link time.
+          # https://groups.google.com/a/chromium.org/group/chromium-dev/browse_thread/thread/281527606915bb36
+          # Only apply this to the target linker, since the host
+          # linker might not be gold, but isn't used much anyway.
+          "-Wl,--threads",
+          "-Wl,--thread-count=4",
+        ]
+      }
     }
 
     if (gdb_index) {
@@ -360,12 +349,13 @@ config("compiler") {
   if (is_posix && (use_gold || (use_lld && !is_nacl)) && !using_sanitizer &&
       !(is_android && use_order_profiling)) {
     # TODO(crbug.com/576197) - gcc on x86 platforms + gold + icf=all
-    # doesn't currently work. Once it does, use icf=all everywhere.
+    # doesn't currently work on non-chromeos platforms.
     # Additionally, on Android x86 --icf=safe seems to cause issues as well.
     # Additionally, on cast Android x86, --icf=all causes issues.
     if (is_android && current_cpu == "x86") {
       ldflags += [ "-Wl,--icf=none" ]
-    } else if (is_clang || (current_cpu != "x86" && current_cpu != "x64")) {
+    } else if (is_clang || is_chromeos ||
+               (current_cpu != "x86" && current_cpu != "x64")) {
       ldflags += [ "-Wl,--icf=all" ]
     } else if (!is_android) {
       ldflags += [ "-Wl,--icf=safe" ]
@@ -474,11 +464,8 @@ config("compiler") {
       ldflags += [ "-Wl,-plugin-opt,-function-sections" ]
     }
 
-    # TODO(pcc): Make these flags work correctly with CFI.
-    if (!is_cfi) {
-      cflags += [ "-fwhole-program-vtables" ]
-      ldflags += [ "-fwhole-program-vtables" ]
-    }
+    cflags += [ "-fwhole-program-vtables" ]
+    ldflags += [ "-fwhole-program-vtables" ]
   }
 
   # Pass the same C/C++ flags to the objective C/C++ compiler.
@@ -674,6 +661,7 @@ config("compiler_cpu_abi") {
         cflags += [
           "-arch",
           "arm-nonsfi",
+          "-mfloat-abi=hard",
           "--pnacl-bias=arm-nonsfi",
           "--target=armv7-unknown-nacl-gnueabihf",
         ]
@@ -1007,23 +995,30 @@ config("default_warnings") {
       "-Wno-inconsistent-missing-override",
     ]
 
-    # NaCl's Clang compiler and Chrome's hermetic Clang compiler will almost
-    # always have different versions. Certain flags may not be recognized by
-    # one version or the other.
+    # Chrome's hermetic Clang compiler, NaCl's Clang compiler and Xcode's Clang
+    # compiler will almost always have different versions. Certain flags may not
+    # be recognized by one version or the other.
     if (!is_nacl) {
       # Flags NaCl (Clang 3.7) does not recognize.
       cflags += [
         # TODO(thakis): Enable this, crbug.com/507717
         "-Wno-shift-negative-value",
-
+      ]
+    }
+    if (!is_nacl && !use_xcode_clang) {
+      # Flags NaCl (Clang 3.7) and Xcode 7.3 (Clang clang-703.0.31) do not
+      # recognize.
+      cflags += [
         # TODO(thakis): https://crbug.com/604888
         "-Wno-undefined-var-template",
-      ]
 
+        # TODO(thakis): https://crbug.com/617318
+        "-Wno-nonportable-include-path",
+      ]
       if (llvm_force_head_revision) {
         cflags += [
-          # TODO(thakis): https://crbug.com/617318
-          "-Wno-nonportable-include-path",
+          # TODO(hans): https://crbug.com/637306
+          "-Wno-address-of-packed-member",
         ]
       }
     }
@@ -1066,6 +1061,13 @@ config("chromium_code") {
       # _FORTIFY_SOURCE. Also, fortified build may fail when optimizations are
       # disabled, so only do that for Release build.
       defines += [ "_FORTIFY_SOURCE=2" ]
+    }
+
+    if (is_mac) {
+      # Warn if automatic synthesis is triggered. This triggers numerous
+      # warnings for internal iOS directories.
+      cflags_objc = [ "-Wobjc-missing-property-synthesis" ]
+      cflags_objcc = [ "-Wobjc-missing-property-synthesis" ]
     }
   }
 
@@ -1232,16 +1234,7 @@ if (is_win) {
     }
   }
 } else {
-  common_optimize_on_cflags = [
-    # Don't emit the GCC version ident directives, they just end up in the
-    # .comment section taking up binary size.
-    "-fno-ident",
-
-    # Put data and code in their own sections, so that unused symbols
-    # can be removed at link time with --gc-sections.
-    "-fdata-sections",
-    "-ffunction-sections",
-  ]
+  common_optimize_on_cflags = []
   common_optimize_on_ldflags = []
 
   if (is_android) {
@@ -1268,7 +1261,19 @@ if (is_win) {
       common_optimize_on_ldflags += [ "-Wl,-dead_strip" ]
     }
   } else {
-    # Non-Mac Posix linker flags.
+    # Non-Mac Posix flags.
+
+    common_optimize_on_cflags += [
+      # Don't emit the GCC version ident directives, they just end up in the
+      # .comment section taking up binary size.
+      "-fno-ident",
+
+      # Put data and code in their own sections, so that unused symbols
+      # can be removed at link time with --gc-sections.
+      "-fdata-sections",
+      "-ffunction-sections",
+    ]
+
     common_optimize_on_ldflags += [
       # Specifically tell the linker to perform optimizations.
       # See http://lwn.net/Articles/192624/ .
@@ -1280,6 +1285,14 @@ if (is_win) {
       # Functions interposed by the sanitizers can make ld think
       # that some libraries aren't needed when they actually are,
       # http://crbug.com/234010. As workaround, disable --as-needed.
+      if (!is_nacl && !is_android) {
+        # TODO(pcc): Fix linker bug which requires us to link pthread
+        # unconditionally here (crbug.com/623236).
+        common_optimize_on_ldflags += [
+          "-Wl,--no-as-needed",
+          "-lpthread",
+        ]
+      }
       common_optimize_on_ldflags += [ "-Wl,--as-needed" ]
     }
   }
@@ -1472,7 +1485,10 @@ config("symbols") {
   if (is_win) {
     import("//build/toolchain/goma.gni")
     if (use_goma) {
-      cflags = [ "/Z7" ]  # No PDB file
+      # Disable symbols during goma compilation because otherwise the redundant
+      # debug information (repeated in every .obj file) makes linker memory
+      # consumption and link times unsustainable (crbug.com/630074).
+      cflags = []
     } else {
       cflags = [ "/Zi" ]  # Produce PDB file, no edit and continue.
     }
@@ -1485,8 +1501,16 @@ config("symbols") {
       ldflags = [ "/DEBUG" ]
     }
   } else {
-    if (is_ios) {
+    if (is_mac || is_ios) {
       cflags = [ "-gdwarf-2" ]
+      if (is_mac && enable_dsyms) {
+        # If generating dSYMs, specify -fno-standalone-debug. This was
+        # originally specified for https://crbug.com/479841 because dsymutil
+        # could not handle a 4GB dSYM file. But dsymutil from Xcodes prior to
+        # version 7 also produces debug data that is incompatible with Breakpad
+        # dump_syms, so this is still required (https://crbug.com/622406).
+        cflags += [ "-fno-standalone-debug" ]
+      }
     } else {
       cflags = [ "-g2" ]
     }

@@ -13,14 +13,16 @@
 # unpredictably for the various build types, we prefer a slightly different
 # style. Instead, there are big per-platform blocks of inclusions and
 # exclusions. If a given file has an inclusion or exclusion rule that applies
-# for multiple conditions, perfer to duplicate it in both lists. This makes it
+# for multiple conditions, prefer to duplicate it in both lists. This makes it
 # a bit easier to see which files apply in which cases rather than having a
 # huge sequence of random-looking conditionals.
 
 import("//build/buildflag_header.gni")
 import("//build/config/allocator.gni")
 import("//build/config/chromecast_build.gni")
+import("//build/config/clang/clang.gni")
 import("//build/config/compiler/compiler.gni")
+import("//build/config/dcheck_always_on.gni")
 import("//build/config/nacl/config.gni")
 import("//build/config/sysroot.gni")
 import("//build/config/ui.gni")
@@ -54,6 +56,7 @@ config("base_flags") {
 
 config("base_implementation") {
   defines = [ "BASE_IMPLEMENTATION" ]
+  configs = [ "//build/config/compiler:wexit_time_destructors" ]
 }
 
 if (is_win) {
@@ -107,8 +110,10 @@ if (is_nacl) {
   }
 }
 
-config("android_system_libs") {
-  libs = [ "log" ]  # Used by logging.cc.
+if (is_android) {
+  config("android_system_libs") {
+    libs = [ "log" ]  # Used by logging.cc.
+  }
 }
 
 # Base and everything it depends on should be a static library rather than
@@ -160,6 +165,8 @@ component("base") {
     "android/context_utils.h",
     "android/cpu_features.cc",
     "android/cxa_demangle_stub.cc",
+    "android/early_trace_event_binding.cc",
+    "android/early_trace_event_binding.h",
     "android/event_log.cc",
     "android/event_log.h",
     "android/field_trial_list.cc",
@@ -205,7 +212,6 @@ component("base") {
     "android/scoped_java_ref.h",
     "android/sys_utils.cc",
     "android/sys_utils.h",
-    "android/thread_utils.h",
     "android/trace_event_binding.cc",
     "android/trace_event_binding.h",
     "at_exit.cc",
@@ -230,7 +236,6 @@ component("base") {
     "bind_helpers.cc",
     "bind_helpers.h",
     "bind_internal.h",
-    "bind_internal_win.h",
     "bit_cast.h",
     "bits.h",
     "build_time.cc",
@@ -275,6 +280,10 @@ component("base") {
     # This file depends on files from the "debug/allocator" target,
     # but this target does not depend on "debug/allocator" (see
     # allocator.gyp for details).
+    "debug/activity_analyzer.cc",
+    "debug/activity_analyzer.h",
+    "debug/activity_tracker.cc",
+    "debug/activity_tracker.h",
     "debug/leak_annotations.h",
     "debug/leak_tracker.h",
     "debug/proc_maps_linux.cc",
@@ -396,6 +405,7 @@ component("base") {
     "mac/call_with_eh_frame.cc",
     "mac/call_with_eh_frame.h",
     "mac/call_with_eh_frame_asm.S",
+    "mac/close_nocancel.cc",
     "mac/cocoa_protocols.h",
     "mac/dispatch_source_mach.cc",
     "mac/dispatch_source_mach.h",
@@ -405,8 +415,6 @@ component("base") {
     "mac/launch_services_util.h",
     "mac/launchd.cc",
     "mac/launchd.h",
-    "mac/libdispatch_task_runner.cc",
-    "mac/libdispatch_task_runner.h",
     "mac/mac_logging.h",
     "mac/mac_logging.mm",
     "mac/mac_util.h",
@@ -425,6 +433,7 @@ component("base") {
     "mac/scoped_authorizationref.h",
     "mac/scoped_block.h",
     "mac/scoped_cftyperef.h",
+    "mac/scoped_dispatch_object.h",
     "mac/scoped_ioobject.h",
     "mac/scoped_ioplugininterface.h",
     "mac/scoped_launch_data.h",
@@ -676,6 +685,8 @@ component("base") {
     "sequence_checker.h",
     "sequence_checker_impl.cc",
     "sequence_checker_impl.h",
+    "sequence_token.cc",
+    "sequence_token.h",
     "sequenced_task_runner.cc",
     "sequenced_task_runner.h",
     "sequenced_task_runner_helpers.h",
@@ -723,7 +734,8 @@ component("base") {
     "sync_socket.h",
     "sync_socket_posix.cc",
     "sync_socket_win.cc",
-    "synchronization/cancellation_flag.cc",
+    "synchronization/atomic_flag.cc",
+    "synchronization/atomic_flag.h",
     "synchronization/cancellation_flag.h",
     "synchronization/condition_variable.h",
     "synchronization/condition_variable_posix.cc",
@@ -767,6 +779,8 @@ component("base") {
     "task_runner_util.h",
     "task_scheduler/delayed_task_manager.cc",
     "task_scheduler/delayed_task_manager.h",
+    "task_scheduler/post_task.cc",
+    "task_scheduler/post_task.h",
     "task_scheduler/priority_queue.cc",
     "task_scheduler/priority_queue.h",
     "task_scheduler/scheduler_lock.h",
@@ -774,13 +788,15 @@ component("base") {
     "task_scheduler/scheduler_lock_impl.h",
     "task_scheduler/scheduler_service_thread.cc",
     "task_scheduler/scheduler_service_thread.h",
-    "task_scheduler/scheduler_thread_pool.h",
-    "task_scheduler/scheduler_thread_pool_impl.cc",
-    "task_scheduler/scheduler_thread_pool_impl.h",
-    "task_scheduler/scheduler_worker_thread.cc",
-    "task_scheduler/scheduler_worker_thread.h",
-    "task_scheduler/scheduler_worker_thread_stack.cc",
-    "task_scheduler/scheduler_worker_thread_stack.h",
+    "task_scheduler/scheduler_worker.cc",
+    "task_scheduler/scheduler_worker.h",
+    "task_scheduler/scheduler_worker_pool.h",
+    "task_scheduler/scheduler_worker_pool_impl.cc",
+    "task_scheduler/scheduler_worker_pool_impl.h",
+    "task_scheduler/scheduler_worker_pool_params.cc",
+    "task_scheduler/scheduler_worker_pool_params.h",
+    "task_scheduler/scheduler_worker_stack.cc",
+    "task_scheduler/scheduler_worker_stack.h",
     "task_scheduler/sequence.cc",
     "task_scheduler/sequence.h",
     "task_scheduler/sequence_sort_key.cc",
@@ -1255,7 +1271,11 @@ component("base") {
         ]
       }
       if (is_asan) {
-        data += [ "//third_party/llvm-build/Release+Asserts/lib/clang/$clang_version/lib/windows/clang_rt.asan_dynamic-i386.dll" ]
+        if (current_cpu == "x64") {
+          data += [ "$clang_base_path/lib/clang/$clang_version/lib/windows/clang_rt.asan_dynamic-x86_64.dll" ]
+        } else {
+          data += [ "$clang_base_path/lib/clang/$clang_version/lib/windows/clang_rt.asan_dynamic-i386.dll" ]
+        }
       }
     }
 
@@ -1467,9 +1487,19 @@ static_library("base_static") {
   sources = [
     "base_switches.cc",
     "base_switches.h",
+    "task_scheduler/switches.cc",
+    "task_scheduler/switches.h",
     "win/pe_image.cc",
     "win/pe_image.h",
   ]
+
+  if (is_win) {
+    # Disable sanitizer coverage in win/pe_image.cc. It is called by the sandbox
+    # before sanitizer coverage can initialize. http://crbug.com/484711
+    configs -= [ "//build/config/sanitizers:default_sanitizer_flags" ]
+    configs +=
+        [ "//build/config/sanitizers:default_sanitizer_flags_but_coverage" ]
+  }
 
   if (!is_debug) {
     configs -= [ "//build/config/compiler:default_optimization" ]
@@ -1491,12 +1521,12 @@ component("i18n") {
     "i18n/case_conversion.h",
     "i18n/char_iterator.cc",
     "i18n/char_iterator.h",
+    "i18n/encoding_detection.cc",
+    "i18n/encoding_detection.h",
     "i18n/file_util_icu.cc",
     "i18n/file_util_icu.h",
     "i18n/i18n_constants.cc",
     "i18n/i18n_constants.h",
-    "i18n/icu_encoding_detection.cc",
-    "i18n/icu_encoding_detection.h",
     "i18n/icu_string_conversions.cc",
     "i18n/icu_string_conversions.h",
     "i18n/icu_util.cc",
@@ -1523,6 +1553,7 @@ component("i18n") {
   defines = [ "BASE_I18N_IMPLEMENTATION" ]
   configs += [ "//build/config/compiler:wexit_time_destructors" ]
   public_deps = [
+    "//third_party/ced",
     "//third_party/icu",
   ]
   deps = [
@@ -1741,6 +1772,8 @@ test("base_unittests") {
     "containers/small_map_unittest.cc",
     "containers/stack_container_unittest.cc",
     "cpu_unittest.cc",
+    "debug/activity_analyzer_unittest.cc",
+    "debug/activity_tracker_unittest.cc",
     "debug/crash_logging_unittest.cc",
     "debug/debugger_unittest.cc",
     "debug/leak_tracker_unittest.cc",
@@ -1750,7 +1783,7 @@ test("base_unittests") {
     "deferred_sequenced_task_runner_unittest.cc",
     "environment_unittest.cc",
     "feature_list_unittest.cc",
-    "file_version_info_unittest.cc",
+    "file_version_info_win_unittest.cc",
     "files/dir_reader_posix_unittest.cc",
     "files/file_locking_unittest.cc",
     "files/file_path_unittest.cc",
@@ -1792,7 +1825,6 @@ test("base_unittests") {
     "mac/call_with_eh_frame_unittest.mm",
     "mac/dispatch_source_mach_unittest.cc",
     "mac/foundation_util_unittest.mm",
-    "mac/libdispatch_task_runner_unittest.cc",
     "mac/mac_util_unittest.mm",
     "mac/mach_port_broker_unittest.cc",
     "mac/objc_property_releaser_unittest.mm",
@@ -1861,6 +1893,8 @@ test("base_unittests") {
     "scoped_native_library_unittest.cc",
     "security_unittest.cc",
     "sequence_checker_unittest.cc",
+    "sequence_token_unittest.cc",
+    "sequenced_task_runner_unittest.cc",
     "sha1_unittest.cc",
     "stl_util_unittest.cc",
     "strings/nullable_string16_unittest.cc",
@@ -1880,7 +1914,7 @@ test("base_unittests") {
     "strings/utf_string_conversions_unittest.cc",
     "supports_user_data_unittest.cc",
     "sync_socket_unittest.cc",
-    "synchronization/cancellation_flag_unittest.cc",
+    "synchronization/atomic_flag_unittest.cc",
     "synchronization/condition_variable_unittest.cc",
     "synchronization/lock_unittest.cc",
     "synchronization/read_write_lock_unittest.cc",
@@ -1895,16 +1929,15 @@ test("base_unittests") {
     "task_scheduler/priority_queue_unittest.cc",
     "task_scheduler/scheduler_lock_unittest.cc",
     "task_scheduler/scheduler_service_thread_unittest.cc",
-    "task_scheduler/scheduler_thread_pool_impl_unittest.cc",
-    "task_scheduler/scheduler_worker_thread_stack_unittest.cc",
-    "task_scheduler/scheduler_worker_thread_unittest.cc",
+    "task_scheduler/scheduler_worker_pool_impl_unittest.cc",
+    "task_scheduler/scheduler_worker_stack_unittest.cc",
+    "task_scheduler/scheduler_worker_unittest.cc",
     "task_scheduler/sequence_sort_key_unittest.cc",
     "task_scheduler/sequence_unittest.cc",
     "task_scheduler/task_scheduler_impl_unittest.cc",
     "task_scheduler/task_tracker_unittest.cc",
     "task_scheduler/test_task_factory.cc",
     "task_scheduler/test_task_factory.h",
-    "task_scheduler/test_utils.h",
     "template_util_unittest.cc",
     "test/histogram_tester_unittest.cc",
     "test/icu_test_util.cc",
@@ -1915,6 +1948,7 @@ test("base_unittests") {
     "test/user_action_tester_unittest.cc",
     "threading/non_thread_safe_unittest.cc",
     "threading/platform_thread_unittest.cc",
+    "threading/post_task_and_reply_impl_unittest.cc",
     "threading/sequenced_task_runner_handle_unittest.cc",
     "threading/sequenced_worker_pool_unittest.cc",
     "threading/simple_thread_unittest.cc",
@@ -1944,7 +1978,6 @@ test("base_unittests") {
     "trace_event/memory_allocator_dump_unittest.cc",
     "trace_event/memory_dump_manager_unittest.cc",
     "trace_event/process_memory_dump_unittest.cc",
-    "trace_event/trace_config_memory_test_util.h",
     "trace_event/trace_config_unittest.cc",
     "trace_event/trace_event_argument_unittest.cc",
     "trace_event/trace_event_synthetic_delay_unittest.cc",
@@ -1980,10 +2013,13 @@ test("base_unittests") {
     "win/wrapped_window_proc_unittest.cc",
   ]
 
+  defines = []
+
   deps = [
     ":base",
     ":i18n",
     ":message_loop_tests",
+    "//base/allocator:features",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
     "//base/third_party/dynamic_annotations",
@@ -2010,7 +2046,7 @@ test("base_unittests") {
   # Allow more direct string conversions on platforms with native utf8
   # strings
   if (is_mac || is_ios || is_chromeos || is_chromecast) {
-    defines = [ "SYSTEM_NATIVE_UTF8" ]
+    defines += [ "SYSTEM_NATIVE_UTF8" ]
   }
 
   if (is_android) {
@@ -2056,17 +2092,11 @@ test("base_unittests") {
   }
 
   if (is_linux) {
-    sources -= [ "file_version_info_unittest.cc" ]
-
     if (is_desktop_linux) {
       sources += [ "nix/xdg_util_unittest.cc" ]
     }
 
     deps += [ "//base/test:malloc_wrapper" ]
-
-    if (use_glib) {
-      configs += [ "//build/config/linux:glib" ]
-    }
 
     if (!is_component_build) {
       # Set rpath to find libmalloc_wrapper.so even in a non-component build.
@@ -2116,6 +2146,11 @@ test("base_unittests") {
       # TODO(crbug.com/330301): make this conditional on mac_strip_release.
       # data += [ "$root_out_dir/base_unittests.dSYM/" ]
     }
+  }
+
+  if (use_cfi_cast) {
+    # TODO(krasin): remove CFI_CAST_CHECK, see https://crbug.com/626794.
+    defines += [ "CFI_CAST_CHECK" ]
   }
 }
 
@@ -2174,6 +2209,7 @@ if (is_android) {
       "android/java/src/org/chromium/base/ContentUriUtils.java",
       "android/java/src/org/chromium/base/ContextUtils.java",
       "android/java/src/org/chromium/base/CpuFeatures.java",
+      "android/java/src/org/chromium/base/EarlyTraceEvent.java",
       "android/java/src/org/chromium/base/EventLog.java",
       "android/java/src/org/chromium/base/FieldTrialList.java",
       "android/java/src/org/chromium/base/ImportantFileWriterAndroid.java",
@@ -2215,6 +2251,7 @@ if (is_android) {
     ]
 
     deps = [
+      "//third_party/android_tools:android_support_annotations_java",
       "//third_party/android_tools:android_support_multidex_java",
       "//third_party/jsr-305:jsr_305_javalib",
     ]
@@ -2235,6 +2272,7 @@ if (is_android) {
       "android/java/src/org/chromium/base/ContentUriUtils.java",
       "android/java/src/org/chromium/base/ContextUtils.java",
       "android/java/src/org/chromium/base/CpuFeatures.java",
+      "android/java/src/org/chromium/base/EarlyTraceEvent.java",
       "android/java/src/org/chromium/base/EventLog.java",
       "android/java/src/org/chromium/base/FieldTrialList.java",
       "android/java/src/org/chromium/base/FileUtils.java",
@@ -2251,6 +2289,7 @@ if (is_android) {
       "android/java/src/org/chromium/base/PerfTraceEvent.java",
       "android/java/src/org/chromium/base/PowerMonitor.java",
       "android/java/src/org/chromium/base/PowerStatusReceiver.java",
+      "android/java/src/org/chromium/base/Promise.java",
       "android/java/src/org/chromium/base/ResourceExtractor.java",
       "android/java/src/org/chromium/base/SecureRandomInitializer.java",
       "android/java/src/org/chromium/base/StreamUtil.java",
@@ -2336,6 +2375,7 @@ if (is_android) {
       "test/android/javatests/src/org/chromium/base/test/util/PerfTest.java",
       "test/android/javatests/src/org/chromium/base/test/util/Restriction.java",
       "test/android/javatests/src/org/chromium/base/test/util/RestrictionSkipCheck.java",
+      "test/android/javatests/src/org/chromium/base/test/util/RetryOnFailure.java",
       "test/android/javatests/src/org/chromium/base/test/util/ScalableTimeout.java",
       "test/android/javatests/src/org/chromium/base/test/util/SkipCheck.java",
       "test/android/javatests/src/org/chromium/base/test/util/TestFileUtil.java",
@@ -2369,6 +2409,7 @@ if (is_android) {
     java_files = [
       "android/junit/src/org/chromium/base/BaseChromiumApplicationTest.java",
       "android/junit/src/org/chromium/base/LogTest.java",
+      "android/junit/src/org/chromium/base/PromiseTest.java",
       "test/android/junit/src/org/chromium/base/test/util/DisableIfTest.java",
       "test/android/junit/src/org/chromium/base/test/util/MinAndroidSdkLevelSkipCheckTest.java",
       "test/android/junit/src/org/chromium/base/test/util/RestrictionSkipCheckTest.java",
@@ -2402,8 +2443,8 @@ if (is_android) {
     package_name = "org/chromium/base"
 
     defines = []
-    if (!is_java_debug) {
-      defines += [ "NDEBUG" ]
+    if (is_java_debug || dcheck_always_on) {
+      defines += [ "_DCHECK_IS_ON" ]
     }
   }
 

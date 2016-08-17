@@ -165,8 +165,16 @@ class BASE_EXPORT FeatureList {
   // process. This should only be called once and |instance| must not be null.
   static void SetInstance(std::unique_ptr<FeatureList> instance);
 
-  // Clears the previously-registered singleton instance for tests.
-  static void ClearInstanceForTesting();
+  // Clears the previously-registered singleton instance for tests and returns
+  // the old instance.
+  // Note: Most tests should never call this directly. Instead consider using
+  // base::test::ScopedFeatureList.
+  static std::unique_ptr<FeatureList> ClearInstanceForTesting();
+
+  // Sets a given (initialized) |instance| to be the singleton feature list,
+  // for testing. Existing instance must be null. This is primarily intended
+  // to support base::test::ScopedFeatureList helper class.
+  static void RestoreInstanceForTesting(std::unique_ptr<FeatureList> instance);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(FeatureListTest, CheckFeatureIdentity);
@@ -247,10 +255,10 @@ class BASE_EXPORT FeatureList {
 
   // Whether this object has been fully initialized. This gets set to true as a
   // result of FinalizeInitialization().
-  bool initialized_;
+  bool initialized_ = false;
 
   // Whether this object has been initialized from command line.
-  bool initialized_from_command_line_;
+  bool initialized_from_command_line_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(FeatureList);
 };

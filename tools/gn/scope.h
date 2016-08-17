@@ -45,6 +45,13 @@ class Scope {
   // Holds an owning list of Items.
   typedef ScopedVector<Item> ItemVector;
 
+  // A flag to indicate whether a function should recurse into nested scopes,
+  // or only operate on the current scope.
+  enum SearchNested {
+    SEARCH_NESTED,
+    SEARCH_CURRENT
+  };
+
   // Allows code to provide values for built-in variables. This class will
   // automatically register itself on construction and deregister itself on
   // destruction.
@@ -114,6 +121,18 @@ class Scope {
     return mutable_containing_ ? mutable_containing_ : const_containing_;
   }
 
+  // Clears any references to containing scopes. This scope will now be
+  // self-sufficient.
+  void DetachFromContaining();
+
+  // Returns true if the scope has any values set. This does not check other
+  // things that may be set like templates or defaults.
+  //
+  // Currently this does not search nested scopes and this will assert if you
+  // want to search nested scopes. The enum is passed so the callers are
+  // unambiguous about nested scope handling. This can be added if needed.
+  bool HasValues(SearchNested search_nested) const;
+
   // Returns NULL if there's no such value.
   //
   // counts_as_used should be set if the variable is being read in a way that
@@ -144,17 +163,9 @@ class Scope {
   //    }
   // The 6 should get set on the nested scope rather than modify the value
   // in the outer one.
-  Value* GetMutableValue(const base::StringPiece& ident, bool counts_as_used);
-
-  // Same as GetValue, but if the value exists in a parent scope, we'll copy
-  // it to the current scope. If the return value is non-null, the value is
-  // guaranteed to be set in the current scope. Generatlly this will be used
-  // if the calling code is planning on modifying the value in-place.
-  //
-  // Since this is used when doing read-modifies, we never count this access
-  // as reading the variable, since we assume it will be written to.
-  Value* GetValueForcedToCurrentScope(const base::StringPiece& ident,
-                                      const ParseNode* set_node);
+  Value* GetMutableValue(const base::StringPiece& ident,
+                         SearchNested search_mode,
+                         bool counts_as_used);
 
   // Returns the StringPiece used to identify the value. This string piece
   // will have the same contents as "ident" passed in, but may point to a
@@ -168,7 +179,7 @@ class Scope {
   // errors later. Returns a pointer to the value in the current scope (a copy
   // is made for storage).
   Value* SetValue(const base::StringPiece& ident,
-                  const Value& v,
+                  Value v,
                   const ParseNode* set_node);
 
   // Removes the value with the given identifier if it exists on the current
@@ -229,8 +240,7 @@ class Scope {
   // change, we don't have to copy its values).
   std::unique_ptr<Scope> MakeClosure() const;
 
-  // Makes an empty scope with the given name. Returns NULL if the name is
-  // already set.
+  // Makes an empty scope with the given name. Overwrites any existing one.
   Scope* MakeTargetDefaults(const std::string& target_type);
 
   // Gets the scope associated with the given target name, or null if it hasn't
@@ -311,8 +321,15 @@ class Scope {
     Value value;
   };
 
+  typedef base::hash_map<base::StringPiece, Record, base::StringPieceHash>
+      RecordMap;
+
   void AddProvider(ProgrammaticProvider* p);
   void RemoveProvider(ProgrammaticProvider* p);
+
+  // Returns true if the two RecordMaps contain the same values (the origins
+  // of the values may be different).
+  static bool RecordMapValuesEqual(const RecordMap& a, const RecordMap& b);
 
   // Scopes can have no containing scope (both null), a mutable containing
   // scope, or a const containing scope. The reason is that when we're doing
@@ -329,8 +346,6 @@ class Scope {
   // for more.
   unsigned mode_flags_;
 
-  typedef base::hash_map<base::StringPiece, Record, base::StringPieceHash>
-      RecordMap;
   RecordMap values_;
 
   // Note that this can't use string pieces since the names are constructed from
