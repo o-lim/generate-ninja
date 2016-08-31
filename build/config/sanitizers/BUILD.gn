@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build_overrides/build.gni")
 import("//build/config/chrome_build.gni")
 import("//build/config/chromecast_build.gni")
 import("//build/config/clang/clang.gni")
@@ -132,15 +133,15 @@ static_library("options_sources") {
   configs -= [ "//build/config/sanitizers:default_sanitizer_flags" ]
 
   if (is_asan) {
-    sources += [ "//build/sanitizers/asan_suppressions.cc" ]
+    sources += [ asan_suppressions_file ]
   }
 
   if (is_lsan) {
-    sources += [ "//build/sanitizers/lsan_suppressions.cc" ]
+    sources += [ lsan_suppressions_file ]
   }
 
   if (is_tsan) {
-    sources += [ "//build/sanitizers/tsan_suppressions.cc" ]
+    sources += [ tsan_suppressions_file ]
   }
 }
 
@@ -230,13 +231,14 @@ config("common_sanitizer_flags") {
   # or variable info, so we can leave that out to speed up the build.
   if (using_sanitizer) {
     assert(is_clang, "sanitizers only supported with clang")
-    cflags += [ "-gline-tables-only" ]
-    if (is_win) {
-      # Just -gline-tables-only currently causes clang-cl to emit debug info
-      # in DWARF format.
-      # TODO(thakis): Remove this once we have a clang at LLVM r278139+
-      cflags += [ "/Z7" ]
-    }
+    cflags += [
+      "-gline-tables-only",
+
+      # Column info in debug data confuses Visual Studio's debugger, so don't
+      # use this by default.  However, clusterfuzz needs it for good attribution
+      # of reports to CLs, so turn it on there.
+      "-gcolumn-info",
+    ]
   }
 
   # Common options for AddressSanitizer, LeakSanitizer, ThreadSanitizer,

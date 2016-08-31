@@ -34,6 +34,9 @@ declare_args() {
   enable_nacl = !is_ios && !is_android && !is_chromecast &&
                 current_cpu != "mipsel" && !(is_linux && target_cpu == "arm64")
 
+  # Non-SFI is not yet supported on mipsel
+  enable_nacl_nonsfi = current_cpu != "mipsel"
+
   # If debug_devtools is set to true, JavaScript files for DevTools are stored
   # as is and loaded from disk. Otherwise, a concatenated file is stored in
   # resources.pak. It is still possible to load JS files from disk by passing
@@ -121,7 +124,9 @@ declare_args() {
 
   # Enable WebVR support by default on Android
   # Still requires command line flag to access API
-  enable_webvr = is_android
+  enable_webvr = is_android && is_component_build &&
+                 (current_cpu == "x86" || current_cpu == "x64" ||
+                  current_cpu == "arm" || current_cpu == "arm64")
 }
 
 # Additional dependent variables -----------------------------------------------

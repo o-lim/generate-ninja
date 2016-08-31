@@ -177,6 +177,7 @@ component("base") {
     "android/important_file_writer_android.h",
     "android/java_handler_thread.cc",
     "android/java_handler_thread.h",
+    "android/java_message_handler_factory.h",
     "android/java_runtime.cc",
     "android/java_runtime.h",
     "android/jni_android.cc",
@@ -554,6 +555,7 @@ component("base") {
     "metrics/user_metrics.cc",
     "metrics/user_metrics.h",
     "metrics/user_metrics_action.h",
+    "native_library.cc",
     "native_library.h",
     "native_library_ios.mm",
     "native_library_mac.mm",
@@ -909,6 +911,8 @@ component("base") {
     "trace_event/heap_profiler_type_name_deduplicator.h",
     "trace_event/java_heap_dump_provider_android.cc",
     "trace_event/java_heap_dump_provider_android.h",
+    "trace_event/malloc_dump_provider.cc",
+    "trace_event/malloc_dump_provider.h",
     "trace_event/memory_allocator_dump.cc",
     "trace_event/memory_allocator_dump.h",
     "trace_event/memory_allocator_dump_guid.cc",
@@ -953,8 +957,6 @@ component("base") {
     "trace_event/trace_sampling_thread.h",
     "trace_event/tracing_agent.cc",
     "trace_event/tracing_agent.h",
-    "trace_event/winheap_dump_provider_win.cc",
-    "trace_event/winheap_dump_provider_win.h",
     "tracked_objects.cc",
     "tracked_objects.h",
     "tracking_info.cc",
@@ -1081,8 +1083,6 @@ component("base") {
       "process/process_iterator_linux.cc",
       "process/process_metrics_linux.cc",
       "sys_info_linux.cc",
-      "trace_event/malloc_dump_provider.cc",
-      "trace_event/malloc_dump_provider.h",
     ]
     set_sources_assignment_filter(sources_assignment_filter)
 
@@ -1134,6 +1134,7 @@ component("base") {
       "memory/discardable_shared_memory.cc",
       "memory/discardable_shared_memory.h",
       "memory/shared_memory_posix.cc",
+      "native_library.cc",
       "native_library_posix.cc",
       "path_service.cc",
       "process/kill.cc",
@@ -1297,10 +1298,6 @@ component("base") {
 
   # Desktop Mac.
   if (is_mac) {
-    sources += [
-      "trace_event/malloc_dump_provider.cc",
-      "trace_event/malloc_dump_provider.h",
-    ]
     libs = [
       "ApplicationServices.framework",
       "AppKit.framework",
@@ -1331,11 +1328,6 @@ component("base") {
 
   # Linux.
   if (is_linux) {
-    sources += [
-      "trace_event/malloc_dump_provider.cc",
-      "trace_event/malloc_dump_provider.h",
-    ]
-
     if (is_asan || is_lsan || is_msan || is_tsan) {
       # For llvm-sanitizer.
       data += [ "//third_party/llvm-build/Release+Asserts/lib/libstdc++.so.6" ]
@@ -1755,6 +1747,7 @@ test("base_unittests") {
     "base64_unittest.cc",
     "base64url_unittest.cc",
     "big_endian_unittest.cc",
+    "bind_helpers_unittest.cc",
     "bind_unittest.cc",
     "bit_cast_unittest.cc",
     "bits_unittest.cc",
@@ -1940,8 +1933,6 @@ test("base_unittests") {
     "task_scheduler/test_task_factory.h",
     "template_util_unittest.cc",
     "test/histogram_tester_unittest.cc",
-    "test/icu_test_util.cc",
-    "test/icu_test_util.h",
     "test/test_pending_task_unittest.cc",
     "test/test_reg_util_win_unittest.cc",
     "test/trace_event_analyzer_unittest.cc",
@@ -1983,7 +1974,6 @@ test("base_unittests") {
     "trace_event/trace_event_synthetic_delay_unittest.cc",
     "trace_event/trace_event_system_stats_monitor_unittest.cc",
     "trace_event/trace_event_unittest.cc",
-    "trace_event/winheap_dump_provider_win_unittest.cc",
     "tracked_objects_unittest.cc",
     "tuple_unittest.cc",
     "values_unittest.cc",
@@ -2020,12 +2010,17 @@ test("base_unittests") {
     ":i18n",
     ":message_loop_tests",
     "//base/allocator:features",
-    "//base/test:run_all_unittests",
+    "//base/test:native_library_test_utils",
+    "//base/test:run_all_base_unittests",
     "//base/test:test_support",
     "//base/third_party/dynamic_annotations",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/icu",
+  ]
+
+  data_deps = [
+    "//base/test:test_shared_library",
   ]
 
   if (is_ios || is_mac) {
@@ -2390,20 +2385,6 @@ if (is_android) {
     ]
   }
 
-  # TODO(jbudorick): Remove this once we roll to robolectric 3.0 and pull
-  # in the multidex shadow library. crbug.com/522043
-  # GYP: //base.gyp:base_junit_test_support
-  java_library("base_junit_test_support") {
-    testonly = true
-    java_files = [ "test/android/junit/src/org/chromium/base/test/shadows/ShadowMultiDex.java" ]
-    deps = [
-      "//third_party/android_tools:android_support_multidex_java",
-      "//third_party/robolectric:android-all-4.3_r2-robolectric-0",
-      "//third_party/robolectric:robolectric_java",
-    ]
-    srcjar_deps = [ ":base_build_config_gen" ]
-  }
-
   # GYP: //base.gyp:base_junit_tests
   junit_binary("base_junit_tests") {
     java_files = [
@@ -2418,8 +2399,8 @@ if (is_android) {
     deps = [
       ":base_java",
       ":base_java_test_support",
-      ":base_junit_test_support",
     ]
+    srcjar_deps = [ ":base_build_config_gen" ]
   }
 
   # GYP: //base.gyp:base_java_application_state
@@ -2461,7 +2442,9 @@ if (is_android) {
     deps = [
       ":base_java",
     ]
-    java_files =
-        [ "test/android/java/src/org/chromium/base/ContentUriTestUtils.java" ]
+    java_files = [
+      "test/android/java/src/org/chromium/base/ContentUriTestUtils.java",
+      "test/android/java/src/org/chromium/base/TestSystemMessageHandler.java",
+    ]
   }
 }

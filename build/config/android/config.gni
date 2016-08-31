@@ -32,9 +32,17 @@ if (is_android) {
     assert(defined(default_android_ndk_version))
   }
 
+  # The same version of lint should be used for building all targets,
+  # and these args ensure that the upstream version of lint is used for
+  # both upstream and downstream targets.
+  lint_android_sdk_root = "//third_party/android_tools/sdk"
+  lint_android_sdk_version = "23"
+
   if (!defined(default_android_sdk_root)) {
-    default_android_sdk_root = "//third_party/android_tools/sdk"
-    default_android_sdk_version = "23"
+    # Reuse the lint variables to ensure that the lint version gets updated
+    # when the upstream SDK version is updated.
+    default_android_sdk_root = lint_android_sdk_root
+    default_android_sdk_version = lint_android_sdk_version
     default_android_sdk_build_tools_version = "23.0.1"
   }
 
@@ -121,12 +129,16 @@ if (is_android) {
     # Speed up incremental compiles by compiling only changed files.
     enable_incremental_javac = false
 
-    # Speed up dexing using dx --incremental.
-    enable_incremental_dx = is_java_debug
-
     # Adds intrumentation to each function. Writes a file with the order that
     # functions are called at startup.
     use_order_profiling = false
+  }
+
+  # We need a second declare_args block to make sure we are using the overridden
+  # value of the arguments set above.
+  declare_args() {
+    # Speed up dexing using dx --incremental.
+    enable_incremental_dx = is_java_debug
   }
 
   # Neither of these should ever be used for release builds since they are
@@ -310,4 +322,10 @@ if (is_android) {
           "//build/toolchain/android:${android_secondary_abi_cpu}"
     }
   }
+}
+
+declare_args() {
+  # Enables used resource whitelist generation. Set for official builds only
+  # as a large amount of build output is generated.
+  enable_resource_whitelist_generation = is_android && is_official_build
 }

@@ -111,6 +111,7 @@ if (is_win) {
     ]
 
     if (target_cpu == "x86") {
+      deps += [ "//chrome/tools/disable_outdated_build_detector" ]
       if (is_clang) {
         deps += [ "//courgette(//build/toolchain/win:clang_x64)" ]
       } else {
@@ -357,7 +358,6 @@ group("both_gn_and_gyp") {
     deps += [
       "//chrome/installer/gcapi",
       "//chrome/tools/build/win/syzygy:chrome_dll_syzygy",
-      "//chrome/tools/disable_outdated_build_detector",
     ]
   }
 
@@ -557,11 +557,14 @@ group("both_gn_and_gyp") {
 
       if (is_linux) {
         # TODO(dpranke): Figure out what platforms should actually have this.
-        deps += [
-          "//components/nacl/loader:helper_nonsfi",
-          "//components/nacl/loader:nacl_helper",
-          "//components/nacl/loader:nacl_helper_nonsfi_unittests",
-        ]
+        deps += [ "//components/nacl/loader:nacl_helper" ]
+
+        if (enable_nacl_nonsfi) {
+          deps += [
+            "//components/nacl/loader:helper_nonsfi",
+            "//components/nacl/loader:nacl_helper_nonsfi_unittests",
+          ]
+        }
       }
     }
 
@@ -694,6 +697,7 @@ group("gn_only") {
     deps += [
       "//media/mojo:media_mojo_unittests",
       "//mojo/common:mojo_common_perftests",
+      "//services/video_capture:video_capture_unittests",
     ]
   }
 
@@ -703,6 +707,10 @@ group("gn_only") {
 
   if (!is_android && !is_ios && !is_chromeos) {
     deps += [ "//components/proximity_auth:proximity_auth_unittests" ]
+  }
+
+  if (is_win && target_cpu == "x86") {
+    deps += [ "//chrome/tools/disable_outdated_build_detector" ]
   }
 
   if (is_win || is_linux) {
@@ -1074,7 +1082,9 @@ if (is_win) {
       "//chrome/installer/setup:setup_unittests",
       "//chrome/installer/util:installer_util_unittests",
       "//chrome/test:browser_tests",
-      "//chrome/test:chrome_app_unittests",
+
+      # https://crbug.com/640185
+      # "//chrome/test:chrome_app_unittests",
       "//chrome/test:unit_tests",
       "//chrome/test/chromedriver:chromedriver_unittests",
       "//chrome_elf:chrome_elf_unittests",

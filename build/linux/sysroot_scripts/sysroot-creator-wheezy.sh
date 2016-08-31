@@ -8,7 +8,6 @@ SCRIPT_DIR=$(cd $(dirname $0) && pwd)
 DISTRO=debian
 DIST=wheezy
 APT_REPO=http://http.us.debian.org/debian
-REPO_BASEDIR="${APT_REPO}/dists/${DIST}"
 KEYRING_FILE=${SCRIPT_DIR}/debian-archive-wheezy-stable.gpg
 
 HAS_ARCH_AMD64=1
@@ -30,6 +29,8 @@ DEBIAN_PACKAGES="\
   libattr1
   libavahi-client3
   libavahi-common3
+  libbluetooth3
+  libbluetooth-dev
   libbrlapi0.5
   libbrlapi-dev
   libc6

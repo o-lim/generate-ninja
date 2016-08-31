@@ -7,13 +7,12 @@ SCRIPT_DIR=$(dirname $0)
 
 DISTRO=ubuntu
 DIST=trusty
+DIST_UPDATES=trusty-updates
 
 # This is where we get all the debian packages from.
 APT_REPO=http://archive.ubuntu.com/ubuntu
 APT_REPO_ARM=http://ports.ubuntu.com
-REPO_BASEDIR="${APT_REPO}/dists/${DIST}"
-REPO_BASEDIR_ARM="${APT_REPO_ARM}/dists/${DIST}"
-REPO_BASEDIR_ARM64="${APT_REPO_ARM}/dists/${DIST}"
+APT_REPO_ARM64=http://ports.ubuntu.com
 KEYRING_FILE=/usr/share/keyrings/ubuntu-archive-keyring.gpg
 
 HAS_ARCH_AMD64=1
@@ -34,6 +33,8 @@ DEBIAN_PACKAGES="\
   libatk1.0-dev
   libavahi-client3
   libavahi-common3
+  libbluetooth3
+  libbluetooth-dev
   libc6
   libc6-dev
   libcairo2
