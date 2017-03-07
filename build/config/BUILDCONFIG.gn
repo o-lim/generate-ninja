@@ -51,9 +51,14 @@ if (target_os == "") {
 }
 
 system = getenv("system")
-if (system == "i686-linux") {
+if (system == "i686-linux" ||
+    system == "i686-darwin" ||
+    system == "i686-cygwin" ||
+    system == "i686-freebsd") {
   host_cpu = "x86"
-} else if (system == "x86_64-linux") {
+} else if (system == "x86_64-linux" ||
+           system == "x86_64-darwin" ||
+           system == "x86_64-cygwin") {
   host_cpu = "x64"
 }
 
