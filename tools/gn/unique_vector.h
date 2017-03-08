@@ -110,6 +110,8 @@ class UniqueVector {
   typedef std::vector<T> Vector;
   typedef typename Vector::iterator iterator;
   typedef typename Vector::const_iterator const_iterator;
+  typedef typename Vector::reverse_iterator reverse_iterator;
+  typedef typename Vector::const_reverse_iterator const_reverse_iterator;
 
   const Vector& vector() const { return vector_; }
   size_t size() const { return vector_.size(); }
@@ -123,6 +125,11 @@ class UniqueVector {
   iterator begin() { return vector_.begin(); }
   const_iterator end() const { return vector_.end(); }
   iterator end() { return vector_.end(); }
+
+  const_reverse_iterator rbegin() const { return vector_.rbegin(); }
+  reverse_iterator rbegin() { return vector_.rbegin(); }
+  const_reverse_iterator rend() const { return vector_.rend(); }
+  reverse_iterator rend() { return vector_.rend(); }
 
   // Returns true if the item was appended, false if it already existed (and
   // thus the vector was not modified).

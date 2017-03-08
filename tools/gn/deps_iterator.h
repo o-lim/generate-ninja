@@ -54,6 +54,44 @@ class DepsIterator {
   const LabelTargetVector* vect_stack_[3];
 
   size_t current_index_;
+
+  friend class DepsReverseIterator;
+};
+
+class DepsReverseIterator {
+ public:
+  // Creates an empty iterator.
+  DepsReverseIterator();
+
+  // Creates a reverse iterator from a forward iterator
+  explicit DepsReverseIterator(DepsIterator const & other);
+
+  // Prefix increment operator. This assumes there are more items (i.e.
+  // *this != DepsReverseIterator()).
+  //
+  // For internal use, this function tolerates an initial index equal to the
+  // length of the current vector. In this case, it will advance to the next
+  // one.
+  DepsReverseIterator& operator++();
+
+  // Comparison for STL-based loops.
+  bool operator!=(const DepsReverseIterator& other) {
+    return current_index_ != other.current_index_ ||
+        vect_stack_[0] != other.vect_stack_[0] ||
+        vect_stack_[1] != other.vect_stack_[1] ||
+        vect_stack_[2] != other.vect_stack_[2];
+  }
+
+  // Dereference operator for STL-compatible iterators.
+  const LabelTargetPair& operator*() const {
+    DCHECK_LT(current_index_, vect_stack_[0]->size());
+    return (*vect_stack_[0])[current_index_];
+  }
+
+ private:
+  const LabelTargetVector* vect_stack_[3];
+
+  size_t current_index_;
 };
 
 // Provides a virtual container implementing begin() and end() for a
@@ -66,9 +104,14 @@ class DepsIteratorRange {
   const DepsIterator& begin() const { return begin_; }
   const DepsIterator& end() const { return end_; }
 
+  const DepsReverseIterator& rbegin() const { return rbegin_; }
+  const DepsReverseIterator& rend() const { return rend_; }
+
  private:
   DepsIterator begin_;
   DepsIterator end_;
+  DepsReverseIterator rbegin_;
+  DepsReverseIterator rend_;
 };
 
 #endif  // TOOLS_GN_DEPS_ITERATOR_H_

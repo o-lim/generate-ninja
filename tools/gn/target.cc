@@ -25,22 +25,18 @@
 
 namespace {
 
-typedef std::set<const Config*> ConfigSet;
-
-// Merges the public configs from the given target to the given config list.
-void MergePublicConfigsFrom(const Target* from_target,
-                            UniqueVector<LabelConfigPair>* dest) {
-  const UniqueVector<LabelConfigPair>& pub = from_target->public_configs();
-  dest->Append(pub.begin(), pub.end());
+// Merges the given configs to the given config list.
+void MergeConfigs(const UniqueVector<LabelConfigPair>& src,
+                  UniqueVector<LabelConfigPair>* dest) {
+  dest->Append(src.begin(), src.end());
 }
 
-// Like MergePublicConfigsFrom above except does the "all dependent" ones. This
-// additionally adds all configs to the all_dependent_configs_ of the dest
-// target given in *all_dest.
-void MergeAllDependentConfigsFrom(const Target* from_target,
-                                  UniqueVector<LabelConfigPair>* dest,
-                                  UniqueVector<LabelConfigPair>* all_dest) {
-  for (const auto& pair : from_target->all_dependent_configs()) {
+// Like MergeConfigs above except this additionally adds all configs to the
+// all_dependent_configs_ of the dest target given in *all_dest.
+void MergeConfigs(const UniqueVector<LabelConfigPair>& src,
+                  UniqueVector<LabelConfigPair>* dest,
+                  UniqueVector<LabelConfigPair>* all_dest) {
+  for (const auto& pair : src) {
     all_dest->push_back(pair);
     dest->push_back(pair);
   }
@@ -260,10 +256,24 @@ bool Target::OnResolved(Err* err) {
   ScopedTrace trace(TraceItem::TRACE_ON_RESOLVED, label());
   trace.SetToolchain(settings()->toolchain_label());
 
+  // Make a reverse copy this target's configs, public configs, and all
+  // dependent configs
+  reverse_configs_.Append(configs_.rbegin(), configs_.rend());
+  public_reverse_configs_.Append(public_configs_.rbegin(),
+                                 public_configs_.rend());
+  all_dependent_reverse_configs_.Append(all_dependent_configs_.rbegin(),
+                                        all_dependent_configs_.rend());
+
+
   // Copy this target's own dependent and public configs to the list of configs
   // applying to it.
-  configs_.Append(all_dependent_configs_.begin(), all_dependent_configs_.end());
-  MergePublicConfigsFrom(this, &configs_);
+  MergeConfigs(all_dependent_configs_, &configs_);
+  MergeConfigs(public_configs_, &configs_);
+
+  // Copy this target's own dependent and public reverse configs to the list of
+  // reverse configs applying to it.
+  MergeConfigs(all_dependent_reverse_configs_, &reverse_configs_);
+  MergeConfigs(public_reverse_configs_, &reverse_configs_);
 
   // Copy public configs from all dependencies into the list of configs
   // applying to this target (configs_).
@@ -275,8 +285,10 @@ bool Target::OnResolved(Err* err) {
   // private deps. This step re-exports them as public configs for targets that
   // depend on this one.
   for (const auto& dep : public_deps_) {
-    public_configs_.Append(dep.ptr->public_configs().begin(),
-                           dep.ptr->public_configs().end());
+    MergeConfigs(dep.ptr->public_configs(), &public_configs_);
+  }
+  for (const auto& dep : base::Reversed(public_deps_)) {
+    MergeConfigs(dep.ptr->public_reverse_configs(), &public_reverse_configs_);
   }
 
   // Copy our own lib_dirs to the final set. This will be from our target and
@@ -446,10 +458,18 @@ bool Target::GetOutputFilesForSource(const SourceFile& source,
 }
 
 void Target::PullDependentTargetConfigs() {
-  for (const auto& pair : GetDeps(DEPS_LINKED))
-    MergeAllDependentConfigsFrom(pair.ptr, &configs_, &all_dependent_configs_);
-  for (const auto& pair : GetDeps(DEPS_LINKED))
-    MergePublicConfigsFrom(pair.ptr, &configs_);
+  const DepsIteratorRange deps_linked = GetDeps(DEPS_LINKED);
+  for (const auto& pair : deps_linked)
+    MergeConfigs(pair.ptr->all_dependent_configs(),
+                 &configs_, &all_dependent_configs_);
+  for (const auto& pair : deps_linked)
+    MergeConfigs(pair.ptr->public_configs(), &configs_);
+
+  for (const auto& pair : base::Reversed(deps_linked))
+    MergeConfigs(pair.ptr->all_dependent_reverse_configs(),
+                 &reverse_configs_, &all_dependent_reverse_configs_);
+  for (const auto& pair : base::Reversed(deps_linked))
+    MergeConfigs(pair.ptr->public_reverse_configs(), &reverse_configs_);
 }
 
 void Target::PullDependentTargetLibsFrom(const Target* dep, bool is_public) {

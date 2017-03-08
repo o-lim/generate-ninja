@@ -320,7 +320,7 @@ const char kDesc_Help[] =
     "  label pattern (see \"gn help label_pattern\"). A label pattern will\n"
     "  only match targets.\n"
     "\n"
-    "Possibilities for <what to show>\n"
+    "Possibilities for \\<what to show>\n"
     "\n"
     "  (If unspecified an overall summary will be displayed.)\n"
     "\n"

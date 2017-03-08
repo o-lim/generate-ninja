@@ -413,12 +413,12 @@ const char kTargetOutDir_Help[] =
     "\n" \
     "Ordering of flags and defines\n" \
     "\n" \
-    "  1. public_configs pulled from dependencies, in the order of the\n" \
-    "     \"deps\" list. If a dependency is public, they will be applied\n" \
+    "  1. public_configs pulled from dependencies, in the reverse order of\n" \
+    "     the \"deps\" list. If a dependency is public, they will be applied\n"\
     "     recursively.\n" \
-    "  2. all_dependent_configs pulled from dependencies, in the order of\n" \
-    "     the \"deps\" list. This is done recursively. If a config appears\n" \
-    "     more than once, only the first occurance will be used.\n" \
+    "  2. all_dependent_configs pulled from dependencies, in the reverse\n" \
+    "     order of the \"deps\" list. This is done recursively. If a config\n" \
+    "     appears more than once, only the last occurance will be used.\n" \
     "  3. Those set on the \"public_configs\" on the target in order that\n" \
     "     those configs appear in the list.\n" \
     "  4. Those set on the \"all_dependent_configs\" on the target in order\n" \

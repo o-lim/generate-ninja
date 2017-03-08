@@ -568,7 +568,7 @@
 
 ```
 
-### **Possibilities for <what to show>**
+### **Possibilities for \<what to show>**
 
 ```
   (If unspecified an overall summary will be displayed.)
@@ -3522,11 +3522,17 @@
   are available:
 
     {{asmflags}}
+    {{asmppflags}}
     {{cflags}}
     {{cflags_c}}
     {{cflags_cc}}
     {{cflags_objc}}
     {{cflags_objcc}}
+    {{cppflags}}
+    {{cppflags_c}}
+    {{cppflags_cc}}
+    {{cppflags_objc}}
+    {{cppflags_objcc}}
     {{defines}}
     {{include_dirs}}
     {{sys_include_dirs}}

@@ -77,7 +77,7 @@ class ConfigValuesReverseIterator {
  public:
   explicit ConfigValuesReverseIterator(const Target* target)
       : target_(target),
-        cur_index_(static_cast<int>(target_->configs().size()) - 1) {
+        cur_index_(static_cast<int>(target_->reverse_configs().size()) - 1) {
   }
 
   bool done() const {
@@ -87,7 +87,7 @@ class ConfigValuesReverseIterator {
   const ConfigValues& cur() const {
     if (cur_index_ == -1)
       return target_->config_values();
-    return target_->configs()[cur_index_].ptr->resolved_values();
+    return target_->reverse_configs()[cur_index_].ptr->resolved_values();
   }
 
   // Returns the origin of who added this config, if any. This will always be
@@ -95,7 +95,7 @@ class ConfigValuesReverseIterator {
   const ParseNode* origin() const {
     if (cur_index_ == -1)
       return nullptr;
-    return target_->configs()[cur_index_].origin;
+    return target_->reverse_configs()[cur_index_].origin;
   }
 
   void Next() {
@@ -107,13 +107,13 @@ class ConfigValuesReverseIterator {
   const Config* GetCurrentConfig() const {
     if (cur_index_ == -1)
       return nullptr;
-    return target_->configs()[cur_index_].ptr;
+    return target_->reverse_configs()[cur_index_].ptr;
   }
 
  private:
   const Target* target_;
 
-  // Represents an index into the target_'s configs() or, when -1, the config
+  // Represents an index into the target_'s reverse_configs() or, when -1, the config
   // values on the target itself.
   int cur_index_;
 };

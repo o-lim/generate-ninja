@@ -222,6 +222,22 @@ class Target : public Item {
     return public_configs_;
   }
 
+  // List of reverse configs that this class inherits settings from.
+  const UniqueVector<LabelConfigPair>& reverse_configs() const {
+    return reverse_configs_;
+  }
+
+  // List of reverse configs for all dependencies (direct and indirect) of this
+  // target get.
+  const UniqueVector<LabelConfigPair>& all_dependent_reverse_configs() const {
+    return all_dependent_reverse_configs_;
+  }
+
+  // List of reverse configs that targets depending directly on this one get.
+  const UniqueVector<LabelConfigPair>& public_reverse_configs() const {
+    return public_reverse_configs_;
+  }
+
   // Dependencies that can include files from this target.
   const std::set<Label>& allow_circular_includes_from() const {
     return allow_circular_includes_from_;
@@ -364,6 +380,10 @@ class Target : public Item {
   UniqueVector<LabelConfigPair> configs_;
   UniqueVector<LabelConfigPair> all_dependent_configs_;
   UniqueVector<LabelConfigPair> public_configs_;
+
+  UniqueVector<LabelConfigPair> reverse_configs_;
+  UniqueVector<LabelConfigPair> all_dependent_reverse_configs_;
+  UniqueVector<LabelConfigPair> public_reverse_configs_;
 
   std::set<Label> allow_circular_includes_from_;
 
