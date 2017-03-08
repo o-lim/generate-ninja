@@ -1,0 +1,24 @@
+language: cpp
+
+sudo: required
+
+os:
+  - linux
+  - osx
+
+env:
+  matrix:
+    - system="i686"
+    - system="x86_64"
+
+before_install:
+  - source .travis/setenv.sh
+
+script: make
+
+branches:
+  only:
+    - master
+
+notifications:
+  email: false

@@ -1,5 +1,7 @@
 # Generate-Ninja
 
+[![travis-ci status](https://travis-ci.org/o-lim/generate-ninja.svg?branch=master)](https://travis-ci.org/o-lim/generate-ninja/builds)
+
 Generate-Ninja, or GN, is a meta-build system that generates [Ninja](https://ninja-build.org)
 build files so that you can build your project with Ninja.
 
