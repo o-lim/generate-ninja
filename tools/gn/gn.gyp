@@ -175,7 +175,6 @@
         'source_dir.h',
         'source_file.cc',
         'source_file.h',
-        'source_file_type.cc',
         'source_file_type.h',
         'standard_out.cc',
         'standard_out.h',
