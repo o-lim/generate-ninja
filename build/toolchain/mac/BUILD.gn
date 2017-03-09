@@ -103,7 +103,7 @@ template("mac_toolchain") {
       compiler_prefix = ""
     }
 
-    if (toolchain_args.current_os != "ios" || !use_xcode_clang) {
+    if (!use_xcode_clang) {
       compiler_prefix += rebase_path("$clang_base_path/bin/", root_build_dir)
     }
 

@@ -82,15 +82,6 @@ declare_args() {
   fatal_linker_warnings = true
 }
 
-if (is_clang && !is_nacl) {
-  update_args = [ "--print-revision" ]
-  if (llvm_force_head_revision) {
-    update_args += [ "--llvm-force-head-revision" ]
-  }
-  clang_revision =
-      exec_script("//tools/clang/scripts/update.py", update_args, "trim string")
-}
-
 # Apply the default logic for these values if they were not set explicitly.
 if (gold_path == false) {
   if (use_gold) {
@@ -220,14 +211,6 @@ config("compiler") {
       "-Wno-undefined-bool-conversion",
       "-Wno-tautological-undefined-compare",
     ]
-  }
-
-  if (is_clang && !is_nacl) {
-    # This is here so that all files get recompiled after a clang roll and
-    # when turning clang on or off. (defines are passed via the command line,
-    # and build system rebuild things when their commandline changes). Nothing
-    # should ever read this define.
-    defines += [ "CR_CLANG_REVISION=$clang_revision" ]
   }
 
   # Non-Mac Posix compiler flags setup.
@@ -426,12 +409,13 @@ config("compiler") {
     # things like which functions are considered deprecated.)
     cflags_cc += [ "-stdlib=libc++" ]
     ldflags += [ "-stdlib=libc++" ]
-    if (!is_component_build && !is_asan) {
-      ldflags += [
-        "-L",
-        rebase_path("//third_party/libc++-static", root_build_dir),
-      ]
-    }
+    # Disable this this since we don't have //third_party/libc++-static
+    #if (!is_component_build && !is_asan) {
+    #  ldflags += [
+    #    "-L",
+    #    rebase_path("//third_party/libc++-static", root_build_dir),
+    #  ]
+    #}
   }
 
   # Add flags for link-time optimization. These flags enable

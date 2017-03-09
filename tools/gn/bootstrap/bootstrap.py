@@ -314,7 +314,7 @@ def write_gn_ninja(path, root_gen_dir, options):
         '-pipe',
         '-fno-exceptions'
     ])
-    cflags_cc.extend(['-std=c++11', '-Wno-c++11-narrowing'])
+    cflags_cc.extend(['-std=c++11', '-Wno-c++11-narrowing', '-Wno-deprecated-register'])
   elif is_win:
     if not options.debug:
       cflags.extend(['/Ox', '/DNDEBUG', '/GL'])
