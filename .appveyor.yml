@@ -1,0 +1,31 @@
+version: 0.0.0.{build}
+clone_depth: 50
+image: Visual Studio 2015
+
+environment:
+  VISUAL_STUDIO_PATH: "%ProgramFiles(x86)%\\Microsoft Visual Studio 14.0"
+  VISUAL_STUDIO_VERSION: "2015"
+  NINJA_VERSION: "1.7.2"
+  NINJA_ZIP: "ninja-win.zip"
+  NINJA_DOWNLOAD_URL: "https://github.com/ninja-build/ninja/releases/download"
+  PATH: "%UserProfile%\\bin;C:\\MinGW\bin;C:\\MinGW\\msys\\1.0\\bin;%PATH%"
+
+  matrix:
+    - platform: x86
+      system: "i686-windows"
+    - platform: x64
+      system: "x86_64-windows"
+
+init:
+  # Make Visual Studio command line tools available
+  - call "%VISUAL_STUDIO_PATH%\VC\vcvarsall.bat" %platform%
+
+install:
+  - mkdir "%UserProfile%\bin"
+  - curl -fsSL -o "%NINJA_ZIP%" "%NINJA_DOWNLOAD_URL%/v%NINJA_VERSION%/%NINJA_ZIP%"
+  - unzip "%NINJA_ZIP%"
+  - move ninja.exe "%UserProfile%\bin"
+  - del "%NINJA_ZIP%"
+
+build_script:
+  - make
