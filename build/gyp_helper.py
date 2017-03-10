@@ -38,7 +38,7 @@ def apply_gyp_environment_from_file(file_path):
       'GYP_GENERATORS',
       'GYP_INCLUDE_FIRST',
       'GYP_INCLUDE_LAST',
-      'GYP_MSVS_VERSION',
+      'VISUAL_STUDIO_VERSION',
   )
   for var in supported_vars:
     file_val = file_data.get(var)

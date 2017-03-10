@@ -55,7 +55,7 @@ def ConfigureBuild(gyp_args=[], gn_args=[]):
   os.environ.pop('GYP_DEFINES', None)
   # Remove environment variables required by gn but conflicting with GYP.
   # Relevant if Windows toolchain isn't provided by depot_tools.
-  os.environ.pop('GYP_MSVS_OVERRIDE_PATH', None)
+  os.environ.pop('VISUAL_STUDIO_PATH', None)
   os.environ.pop('WINDOWSSDKDIR', None)
 
   gyp_defines = ''

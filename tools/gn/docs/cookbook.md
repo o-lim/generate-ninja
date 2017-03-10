@@ -216,8 +216,8 @@ places are noted in the table below.
 | `fastbuild` (0/1/2)                             | `symbol_level` (2/1/0 — values inverted)   | `//build/config/compiler/compiler.gni`         |
 | `gomadir`                                       | `goma_dir`                                 | `//build/toolchain/goma.gni`                   |
 | `ios_deployment_target` (string)                | `ios_deployment_target`                    | `//build/config/ios/ios_sdk.gni`               |
-| `GYP_MSVS_OVERRIDE_PATH` environment variable   | `visual_studio_path`                       | `//build/config/win/visual_studio_version.gni` |
-| `GYP_MSVS_VERSION` environment variable         | (none)                                     |                                                |
+| `VISUAL_STUDIO_PATH` environment variable       | `visual_studio_path`                       | `//build/config/win/visual_studio_version.gni` |
+| `VISUAL_STUDIO_VERSION` environment variable    | (none)                                     |                                                |
 | `ios_sdk_path`                                  | `ios_sdk_path` and `use_ios_simulator`     | `//build/config/ios/ios_sdk.gni`               |
 | `lsan` (0/1)                                    | `is_lsan` (true/false)                     | `//build/config/sanitizers/sanitizers.gni`     |
 | `mac_sdk_min`                                   | `mac_sdk_min`                              | `//build/config/mac/mac_sdk.gni`               |

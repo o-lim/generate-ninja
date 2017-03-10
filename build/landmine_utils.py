@@ -57,7 +57,7 @@ def gyp_generator_flags():
 
 @memoize()
 def gyp_msvs_version():
-  return os.environ.get('GYP_MSVS_VERSION', '')
+  return os.environ.get('VISUAL_STUDIO_VERSION', '')
 
 
 @memoize()
