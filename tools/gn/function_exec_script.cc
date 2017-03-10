@@ -183,7 +183,12 @@ Value RunExecScript(Scope* scope,
     const Value& interpreter = args[4];
     if (!interpreter.VerifyTypeIs(Value::STRING, err))
       return Value();
+#if defined(OS_WIN)
+    interpreter_path =
+        base::FilePath(base::UTF8ToUTF16(interpreter.string_value()));
+#else
     interpreter_path = base::FilePath(interpreter.string_value());
+#endif
   }
 
   // Make the command line.
