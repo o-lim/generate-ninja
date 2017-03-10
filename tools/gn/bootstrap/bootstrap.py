@@ -323,7 +323,7 @@ def write_gn_ninja(path, root_gen_dir, options):
     cflags.extend([
         '/FS',
         '/Gy',
-        '/W3', '/wd4244',
+        '/W3', '/wd4244', "/wd4996",
         '/Zi',
         '/DWIN32_LEAN_AND_MEAN', '/DNOMINMAX',
         '/D_CRT_SECURE_NO_DEPRECATE', '/D_SCL_SECURE_NO_DEPRECATE',
@@ -334,8 +334,7 @@ def write_gn_ninja(path, root_gen_dir, options):
         '/GR-',
         '/D_HAS_EXCEPTIONS=0',
     ])
-    # TODO(tim): Support for 64bit builds?
-    ldflags.extend(['/MACHINE:x86', '/DEBUG'])
+    ldflags.extend(['/DEBUG'])
 
   static_libraries = {
       'base': {'sources': [], 'tool': 'cxx', 'include_dirs': []},
@@ -685,8 +684,8 @@ def write_gn_ninja(path, root_gen_dir, options):
         'base/time/time_win.cc',
         'base/timer/hi_res_timer_manager_win.cc',
         'base/trace_event/heap_profiler_allocation_register_win.cc',
+        'base/trace_event/malloc_dump_provider.cc',
         'base/trace_event/trace_event_etw_export_win.cc',
-        'base/trace_event/winheap_dump_provider_win.cc',
         'base/win/enum_variant.cc',
         'base/win/event_trace_controller.cc',
         'base/win/event_trace_provider.cc',
@@ -712,6 +711,7 @@ def write_gn_ninja(path, root_gen_dir, options):
     ])
 
     libs.extend([
+        'advapi32.lib',
         'kernel32.lib',
         'user32.lib',
         'shell32.lib',
