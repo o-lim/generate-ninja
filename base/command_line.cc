@@ -36,9 +36,11 @@ const CommandLine::CharType kSwitchValueSeparator[] = FILE_PATH_LITERAL("=");
 // value by changing the value of switch_prefix_count to be one less than
 // the array size.
 const CommandLine::CharType* const kSwitchPrefixes[] = {L"--", L"-", L"/"};
+const CommandLine::CharType kEmptyArg[] = L"\"\"";
 #elif defined(OS_POSIX)
 // Unixes don't use slash as a switch.
 const CommandLine::CharType* const kSwitchPrefixes[] = {"--", "-"};
+const CommandLine::CharType kEmptyArg[] = "\"\"";
 #endif
 size_t switch_prefix_count = arraysize(kSwitchPrefixes);
 
@@ -478,6 +480,9 @@ CommandLine::StringType CommandLine::GetArgumentsStringInternal(
 #if defined(OS_WIN)
       arg = QuoteForCommandLineToArgvW(arg, quote_placeholders);
 #endif
+      if (arg.empty()) {
+        arg = kEmptyArg;
+      }
       params.append(arg);
     }
   }
