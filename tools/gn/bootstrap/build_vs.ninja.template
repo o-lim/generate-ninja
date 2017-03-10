@@ -13,7 +13,7 @@ rule cxx
   deps = msvc
 
 rule alink_thin
-  command = $ar /nologo /ignore:4221 /OUT:${out} @${out}.rsp
+  command = $ar /nologo /ignore:4221 ${arflags} /OUT:${out} @${out}.rsp
   description = LIB ${out}
   rspfile = ${out}.rsp
   rspfile_content = ${in_newline}

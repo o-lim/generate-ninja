@@ -196,7 +196,7 @@ def build_gn_with_ninja_manually(tempdir, options):
 
 def write_generic_ninja(path, static_libraries, executables,
                         cc, cxx, ar, ld,
-                        cflags=[], cflags_cc=[], ldflags=[],
+                        cflags=[], cflags_cc=[], arflags=[], ldflags=[],
                         include_dirs=[], solibs=[]):
   ninja_header_lines = [
     'cc = ' + cc,
@@ -253,9 +253,12 @@ def write_generic_ninja(path, static_libraries, executables,
     for src_file in settings['sources']:
       build_source(src_file, settings)
 
-    ninja_lines.append('build %s: alink_thin %s' % (
-        library_to_a(library),
-        ' '.join([src_to_obj(src_file) for src_file in settings['sources']])))
+    ninja_lines.extend([
+      'build %s: alink_thin %s' % (
+          library_to_a(library),
+          ' '.join([src_to_obj(src_file) for src_file in settings['sources']])),
+      '  arflags = %s' % ' '.join(arflags),
+    ])
 
   for executable, settings in executables.iteritems():
     for src_file in settings['sources']:
@@ -293,6 +296,7 @@ def write_gn_ninja(path, root_gen_dir, options):
 
   cflags = os.environ.get('CFLAGS', '').split()
   cflags_cc = os.environ.get('CXXFLAGS', '').split()
+  arflags = os.environ.get('ARFLAGS', '').split()
   ldflags = os.environ.get('LDFLAGS', '').split()
   include_dirs = [root_gen_dir, SRC_ROOT]
   libs = []
@@ -318,6 +322,7 @@ def write_gn_ninja(path, root_gen_dir, options):
   elif is_win:
     if not options.debug:
       cflags.extend(['/Ox', '/DNDEBUG', '/GL'])
+      arflags.extend(['/LTCG'])
       ldflags.extend(['/LTCG', '/OPT:REF', '/OPT:ICF'])
 
     cflags.extend([
@@ -727,7 +732,7 @@ def write_gn_ninja(path, root_gen_dir, options):
   executables['gn']['libs'].extend(static_libraries.keys())
 
   write_generic_ninja(path, static_libraries, executables, cc, cxx, ar, ld,
-                      cflags, cflags_cc, ldflags, include_dirs, libs)
+                      cflags, cflags_cc, arflags, ldflags, include_dirs, libs)
 
 def build_gn_with_gn(temp_gn, build_dir, options):
   gn_gen_args = options.gn_gen_args or ''
