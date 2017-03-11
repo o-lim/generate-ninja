@@ -30,7 +30,6 @@ const char* Toolchain::kToolCompileXCAssets = "compile_xcassets";
 
 Toolchain::Toolchain(const Settings* settings, const Label& label)
     : Item(settings, label),
-      concurrent_links_(0),
       setup_complete_(false),
       define_switch_("-D"),
       include_switch_("-I"),

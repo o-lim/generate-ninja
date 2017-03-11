@@ -113,7 +113,7 @@
         }, {
           'dependencies': [
             # TODO: This should build on Android and the target should move to the list above.
-            '../sync/sync.gyp:*',
+            '../components/sync.gyp:*',
           ],
           'conditions': [
             ['OS!="ios"', {
@@ -136,8 +136,8 @@
             '../gpu/gpu.gyp:*',
             '../gpu/tools/tools.gyp:*',
             '../ipc/ipc.gyp:*',
-            '../ipc/mojo/ipc_mojo.gyp:*',
             '../jingle/jingle.gyp:*',
+            '../media/capture/capture.gyp:*',
             '../media/cast/cast.gyp:*',
             '../media/media.gyp:*',
             '../media/midi/midi.gyp:*',
@@ -148,7 +148,7 @@
             '../ppapi/tools/ppapi_tools.gyp:*',
             '../services/shell/shell.gyp:*',
             '../skia/skia.gyp:*',
-            '../sync/tools/sync_tools.gyp:*',
+            '../components/sync/tools/sync_tools.gyp:*',
             '../third_party/catapult/telemetry/telemetry.gyp:*',
             '../third_party/WebKit/public/all.gyp:*',
             '../third_party/cacheinvalidation/cacheinvalidation.gyp:*',
@@ -310,7 +310,6 @@
         '../net/net.gyp:net_unittests',
         '../skia/skia_tests.gyp:skia_unittests',
         '../sql/sql.gyp:sql_unittests',
-        '../sync/sync.gyp:sync_unit_tests',
         '../ui/base/ui_base_tests.gyp:ui_base_unittests',
         '../ui/display/display.gyp:display_unittests',
         '../ui/gfx/gfx_tests.gyp:gfx_unittests',
@@ -341,8 +340,8 @@
             '../gpu/gles2_conform_support/gles2_conform_support.gyp:gles2_conform_support',
             '../gpu/gpu.gyp:gpu_unittests',
             '../ipc/ipc.gyp:ipc_tests',
-            '../ipc/mojo/ipc_mojo.gyp:ipc_mojo_unittests',
             '../jingle/jingle.gyp:jingle_unittests',
+            '../media/capture/capture.gyp:capture_unittests',
             '../media/cast/cast.gyp:cast_unittests',
             '../media/media.gyp:media_unittests',
             '../media/midi/midi.gyp:midi_unittests',
@@ -653,6 +652,7 @@
             '../chrome/chrome.gyp:browser_tests',
             '../content/content_shell_and_tests.gyp:content_browsertests',
             '../content/content_shell_and_tests.gyp:content_unittests',
+            '../media/capture/capture.gyp:capture_unittests',
             '../media/media.gyp:media_unittests',
             '../media/midi/midi.gyp:midi_unittests',
             '../third_party/webrtc/tools/tools.gyp:frame_analyzer',
@@ -785,6 +785,7 @@
             '../gpu/gpu.gyp:gpu_perftests_apk',
             '../gpu/gpu.gyp:gpu_unittests',
             '../ipc/ipc.gyp:ipc_tests',
+            '../media/capture/capture.gyp:capture_unittests',
             '../media/media.gyp:media_perftests_apk',
             '../media/media.gyp:media_unittests',
             '../media/midi/midi.gyp:midi_unittests_apk',
@@ -793,7 +794,6 @@
             '../sandbox/sandbox.gyp:sandbox_linux_unittests_deps',
             '../skia/skia_tests.gyp:skia_unittests',
             '../sql/sql.gyp:sql_unittests',
-            '../sync/sync.gyp:sync_unit_tests',
             '../testing/android/junit/junit_test.gyp:junit_unit_tests',
             '../third_party/leveldatabase/leveldatabase.gyp:env_chromium_unittests',
             '../third_party/WebKit/public/all.gyp:*',
@@ -824,8 +824,6 @@
             '../net/net.gyp:net_unittests_apk',
             '../skia/skia_tests.gyp:skia_unittests_apk',
             '../sql/sql.gyp:sql_unittests_apk',
-            '../sync/sync.gyp:sync_unit_tests_apk',
-            '../tools/android/heap_profiler/heap_profiler.gyp:heap_profiler_unittests_apk',
             '../ui/android/ui_android.gyp:ui_android_unittests_apk',
             '../ui/android/ui_android.gyp:ui_junit_tests',
             '../ui/base/ui_base_tests.gyp:ui_base_unittests_apk',
@@ -899,8 +897,8 @@
             '../google_apis/gcm/gcm.gyp:gcm_unit_tests',
             '../gpu/gpu.gyp:gpu_unittests',
             '../ipc/ipc.gyp:ipc_tests',
-            '../ipc/mojo/ipc_mojo.gyp:ipc_mojo_unittests',
             '../jingle/jingle.gyp:jingle_unittests',
+            '../media/capture/capture.gyp:capture_unittests',
             '../media/media.gyp:media_unittests',
             '../media/midi/midi.gyp:midi_unittests',
             '../ppapi/ppapi_internal.gyp:ppapi_unittests',
@@ -909,7 +907,6 @@
             '../rlz/rlz.gyp:*',
             '../skia/skia_tests.gyp:skia_unittests',
             '../sql/sql.gyp:sql_unittests',
-            '../sync/sync.gyp:sync_unit_tests',
             '../third_party/cacheinvalidation/cacheinvalidation.gyp:cacheinvalidation_unittests',
             '../third_party/leveldatabase/leveldatabase.gyp:env_chromium_unittests',
             '../third_party/libaddressinput/libaddressinput.gyp:libaddressinput_unittests',
@@ -939,8 +936,8 @@
             '../google_apis/gcm/gcm.gyp:gcm_unit_tests',
             '../gpu/gpu.gyp:gpu_unittests',
             '../ipc/ipc.gyp:ipc_tests',
-            '../ipc/mojo/ipc_mojo.gyp:ipc_mojo_unittests',
             '../jingle/jingle.gyp:jingle_unittests',
+            '../media/capture/capture.gyp:capture_unittests',
             '../media/media.gyp:media_unittests',
             '../media/midi/midi.gyp:midi_unittests',
             '../ppapi/ppapi_internal.gyp:ppapi_unittests',
@@ -948,7 +945,6 @@
             '../remoting/remoting.gyp:remoting_unittests',
             '../skia/skia_tests.gyp:skia_unittests',
             '../sql/sql.gyp:sql_unittests',
-            '../sync/sync.gyp:sync_unit_tests',
             '../third_party/cacheinvalidation/cacheinvalidation.gyp:cacheinvalidation_unittests',
             '../third_party/leveldatabase/leveldatabase.gyp:env_chromium_unittests',
             '../third_party/libaddressinput/libaddressinput.gyp:libaddressinput_unittests',
@@ -969,6 +965,7 @@
             '../crypto/crypto.gyp:crypto_unittests',
             '../ipc/ipc.gyp:ipc_tests',
             '../jingle/jingle.gyp:jingle_unittests',
+            '../media/capture/capture.gyp:capture_unittests',
             '../media/media.gyp:media_unittests',
             '../media/midi/midi.gyp:midi_unittests',
             '../net/net.gyp:net_unittests',
@@ -1010,8 +1007,8 @@
             '../google_apis/gcm/gcm.gyp:gcm_unit_tests',
             '../gpu/gpu.gyp:gpu_unittests',
             '../ipc/ipc.gyp:ipc_tests',
-            '../ipc/mojo/ipc_mojo.gyp:ipc_mojo_unittests',
             '../jingle/jingle.gyp:jingle_unittests',
+            '../media/capture/capture.gyp:capture_unittests',
             '../media/media.gyp:media_unittests',
             '../media/midi/midi.gyp:midi_unittests',
             '../ppapi/ppapi_internal.gyp:ppapi_unittests',
@@ -1019,7 +1016,6 @@
             '../remoting/remoting.gyp:remoting_unittests',
             '../skia/skia_tests.gyp:skia_unittests',
             '../sql/sql.gyp:sql_unittests',
-            '../sync/sync.gyp:sync_unit_tests',
             '../third_party/cacheinvalidation/cacheinvalidation.gyp:cacheinvalidation_unittests',
             '../third_party/leveldatabase/leveldatabase.gyp:env_chromium_unittests',
             '../third_party/libaddressinput/libaddressinput.gyp:libaddressinput_unittests',
@@ -1045,6 +1041,7 @@
             '../crypto/crypto.gyp:crypto_unittests',
             '../ipc/ipc.gyp:ipc_tests',
             '../jingle/jingle.gyp:jingle_unittests',
+            '../media/capture/capture.gyp:capture_unittests',
             '../media/media.gyp:media_unittests',
             '../media/midi/midi.gyp:midi_unittests',
             '../net/net.gyp:net_unittests',
@@ -1099,8 +1096,8 @@
             '../gpu/gpu.gyp:angle_unittests',
             '../gpu/gpu.gyp:gpu_unittests',
             '../ipc/ipc.gyp:ipc_tests',
-            '../ipc/mojo/ipc_mojo.gyp:ipc_mojo_unittests',
             '../jingle/jingle.gyp:jingle_unittests',
+            '../media/capture/capture.gyp:capture_unittests',
             '../media/cast/cast.gyp:cast_unittests',
             '../media/media.gyp:media_unittests',
             '../media/midi/midi.gyp:midi_unittests',
@@ -1110,7 +1107,6 @@
             '../remoting/remoting.gyp:remoting_unittests',
             '../skia/skia_tests.gyp:skia_unittests',
             '../sql/sql.gyp:sql_unittests',
-            '../sync/sync.gyp:sync_unit_tests',
             '../third_party/cacheinvalidation/cacheinvalidation.gyp:cacheinvalidation_unittests',
             '../third_party/leveldatabase/leveldatabase.gyp:env_chromium_unittests',
             '../third_party/libaddressinput/libaddressinput.gyp:libaddressinput_unittests',
@@ -1129,55 +1125,52 @@
             '../url/url.gyp:url_unittests',
           ],
         },
-      ],  # targets
-      'conditions': [
-        ['branding=="Chrome"', {
-          'targets': [
-            {
-              'target_name': 'chrome_official_builder_no_unittests',
-              'type': 'none',
+        {
+          'target_name': 'chrome_official_builder_no_unittests',
+          'type': 'none',
+          'dependencies': [
+            '../chrome/chrome.gyp:gcapi_dll',
+            '../chrome/chrome.gyp:pack_policy_templates',
+            '../chrome/installer/mini_installer.gyp:mini_installer',
+            '../courgette/courgette.gyp:courgette',
+            '../courgette/courgette.gyp:courgette64',
+            '../remoting/remoting.gyp:remoting_webapp',
+            '../third_party/widevine/cdm/widevine_cdm.gyp:widevinecdmadapter',
+          ],
+          'conditions': [
+            ['component != "shared_library" and wix_exists == "True"', {
+              # GN uses target_cpu==x86 && is_chrome_branded instead, and
+              # so doesn't need the wix_exists check.
               'dependencies': [
-                '../chrome/chrome.gyp:gcapi_dll',
-                '../chrome/chrome.gyp:pack_policy_templates',
-                '../chrome/installer/mini_installer.gyp:mini_installer',
-                '../courgette/courgette.gyp:courgette',
-                '../courgette/courgette.gyp:courgette64',
-                '../remoting/remoting.gyp:remoting_webapp',
-                '../third_party/widevine/cdm/widevine_cdm.gyp:widevinecdmadapter',
+                '../remoting/remoting.gyp:remoting_host_installation',
               ],
-              'conditions': [
-                ['component != "shared_library" and wix_exists == "True"', {
-                  'dependencies': [
-                    '../remoting/remoting.gyp:remoting_host_installation',
-                  ],
-                }], # component != "shared_library"
-              ]
-            }, {
-              'target_name': 'chrome_official_builder',
-              'type': 'none',
-              'dependencies': [
-                'chrome_official_builder_no_unittests',
-                '../base/base.gyp:base_unittests',
-                '../chrome/chrome.gyp:browser_tests',
-                '../chrome/chrome.gyp:sync_integration_tests',
-                '../ipc/ipc.gyp:ipc_tests',
-                '../media/media.gyp:media_unittests',
-                '../media/midi/midi.gyp:midi_unittests',
-                '../net/net.gyp:net_unittests',
-                '../printing/printing.gyp:printing_unittests',
-                '../sql/sql.gyp:sql_unittests',
-                '../sync/sync.gyp:sync_unit_tests',
-                '../ui/base/ui_base_tests.gyp:ui_base_unittests',
-                '../ui/gfx/gfx_tests.gyp:gfx_unittests',
-                '../ui/gl/gl_tests.gyp:gl_unittests',
-                '../ui/touch_selection/ui_touch_selection.gyp:ui_touch_selection_unittests',
-                '../ui/views/views.gyp:views_unittests',
-                '../url/url.gyp:url_unittests',
-              ],
-            },
-          ], # targets
-        }], # branding=="Chrome"
-       ], # conditions
+            }], # component != "shared_library"
+          ]
+        },
+        {
+          'target_name': 'chrome_official_builder',
+          'type': 'none',
+          'dependencies': [
+            'chrome_official_builder_no_unittests',
+            '../base/base.gyp:base_unittests',
+            '../chrome/chrome.gyp:browser_tests',
+            '../chrome/chrome.gyp:sync_integration_tests',
+            '../ipc/ipc.gyp:ipc_tests',
+            '../media/capture/capture.gyp:capture_unittests',
+            '../media/media.gyp:media_unittests',
+            '../media/midi/midi.gyp:midi_unittests',
+            '../net/net.gyp:net_unittests',
+            '../printing/printing.gyp:printing_unittests',
+            '../sql/sql.gyp:sql_unittests',
+            '../ui/base/ui_base_tests.gyp:ui_base_unittests',
+            '../ui/gfx/gfx_tests.gyp:gfx_unittests',
+            '../ui/gl/gl_tests.gyp:gl_unittests',
+            '../ui/touch_selection/ui_touch_selection.gyp:ui_touch_selection_unittests',
+            '../ui/views/views.gyp:views_unittests',
+            '../url/url.gyp:url_unittests',
+          ],
+        },
+      ], # targets
     }], # OS="win"
     ['chromeos==1', {
       'targets': [
@@ -1249,7 +1242,6 @@
                 '../base/base.gyp:base_unittests',
                 '../ipc/ipc.gyp:ipc_tests',
                 '../sql/sql.gyp:sql_unittests',
-                '../sync/sync.gyp:sync_unit_tests',
               ],
             }],
             ['chromeos==1', {

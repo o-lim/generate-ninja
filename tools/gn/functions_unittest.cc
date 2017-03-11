@@ -48,8 +48,7 @@ TEST(Functions, Defined) {
   // "defined(def.foo)" to see if foo is defined on the def scope.
   std::unique_ptr<AccessorNode> undef_accessor(new AccessorNode);
   undef_accessor->set_base(defined_token);
-  undef_accessor->set_member(
-      base::WrapUnique(new IdentifierNode(undefined_token)));
+  undef_accessor->set_member(base::MakeUnique<IdentifierNode>(undefined_token));
   ListNode args_list_accessor_defined;
   args_list_accessor_defined.append_item(std::move(undef_accessor));
   result = functions::RunDefined(setup.scope(), &function_call,
@@ -89,4 +88,40 @@ TEST(Functions, FunctionsWithBlock) {
   EXPECT_FALSE(defined_with_scope.has_error());
   result = defined_with_scope.parsed()->Execute(setup.scope(), &err);
   EXPECT_TRUE(err.has_error());
+}
+
+TEST(Functions, SplitList) {
+  TestWithScope setup;
+
+  TestParseInput input(
+      // Empty input with varying result items.
+      "out1 = split_list([], 1)\n"
+      "out2 = split_list([], 3)\n"
+      "print(\"empty = $out1 $out2\")\n"
+
+      // One item input.
+      "out3 = split_list([1], 1)\n"
+      "out4 = split_list([1], 2)\n"
+      "print(\"one = $out3 $out4\")\n"
+
+      // Multiple items.
+      "out5 = split_list([1, 2, 3, 4, 5, 6, 7, 8, 9], 2)\n"
+      "print(\"many = $out5\")\n"
+
+      // Rounding.
+      "out6 = split_list([1, 2, 3, 4, 5, 6], 4)\n"
+      "print(\"rounding = $out6\")\n"
+      );
+  ASSERT_FALSE(input.has_error());
+
+  Err err;
+  input.parsed()->Execute(setup.scope(), &err);
+  ASSERT_FALSE(err.has_error()) << err.message();
+
+  EXPECT_EQ(
+      "empty = [[]] [[], [], []]\n"
+      "one = [[1]] [[1], []]\n"
+      "many = [[1, 2, 3, 4, 5], [6, 7, 8, 9]]\n"
+      "rounding = [[1, 2], [3, 4], [5], [6]]\n",
+      setup.print_output());
 }

@@ -69,18 +69,18 @@ def _ParseArgs(args):
                       action='store_true',
                       help='Uncompress shared libraries')
   options = parser.parse_args(args)
-  options.assets = build_utils.ParseGypList(options.assets)
-  options.uncompressed_assets = build_utils.ParseGypList(
+  options.assets = build_utils.ParseGnList(options.assets)
+  options.uncompressed_assets = build_utils.ParseGnList(
       options.uncompressed_assets)
-  options.native_lib_placeholders = build_utils.ParseGypList(
+  options.native_lib_placeholders = build_utils.ParseGnList(
       options.native_lib_placeholders)
   all_libs = []
   for gyp_list in options.native_libs:
-    all_libs.extend(build_utils.ParseGypList(gyp_list))
+    all_libs.extend(build_utils.ParseGnList(gyp_list))
   options.native_libs = all_libs
   secondary_libs = []
   for gyp_list in options.secondary_native_libs:
-    secondary_libs.extend(build_utils.ParseGypList(gyp_list))
+    secondary_libs.extend(build_utils.ParseGnList(gyp_list))
   options.secondary_native_libs = secondary_libs
 
 
@@ -182,11 +182,15 @@ def main(args):
   native_libs = sorted(options.native_libs)
 
   input_paths = [options.resource_apk, __file__] + native_libs
+  # Include native libs in the depfile_deps since GN doesn't know about the
+  # dependencies when is_component_build=true.
+  depfile_deps = list(native_libs)
 
   secondary_native_libs = []
   if options.secondary_native_libs:
     secondary_native_libs = sorted(options.secondary_native_libs)
     input_paths += secondary_native_libs
+    depfile_deps += secondary_native_libs
 
   if options.dex_file:
     input_paths.append(options.dex_file)
@@ -299,7 +303,8 @@ def main(args):
       options,
       input_paths=input_paths,
       input_strings=input_strings,
-      output_paths=[options.output_apk])
+      output_paths=[options.output_apk],
+      depfile_deps=depfile_deps)
 
 
 if __name__ == '__main__':

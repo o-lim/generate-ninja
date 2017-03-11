@@ -97,7 +97,7 @@
 //
 // PASSING BOUND INPUT PARAMETERS
 //
-//   Bound parameters are specified when you create thee callback as arguments
+//   Bound parameters are specified when you create the callback as arguments
 //   to Bind(). They will be passed to the function and the Run()ner of the
 //   callback doesn't see those values or even know that the function it's
 //   calling.
@@ -192,10 +192,10 @@
 //   // f becomes null during the following call.
 //   base::Closure cb = base::Bind(&TakesOwnership, base::Passed(&f));
 //
-//   Ownership of the parameter will be with the callback until the it is run,
-//   when ownership is passed to the callback function. This means the callback
-//   can only be run once. If the callback is never run, it will delete the
-//   object when it's destroyed.
+//   Ownership of the parameter will be with the callback until the callback is
+//   run, and then ownership is passed to the callback function. This means the
+//   callback can only be run once. If the callback is never run, it will delete
+//   the object when it's destroyed.
 //
 // PASSING PARAMETERS AS A scoped_refptr
 //
@@ -345,14 +345,13 @@
 // please include "base/callback_forward.h" instead.
 
 namespace base {
-namespace internal {
-template <typename Runnable, typename RunType, typename... BoundArgsType>
-struct BindState;
-}  // namespace internal
 
 template <typename R, typename... Args, internal::CopyMode copy_mode>
 class Callback<R(Args...), copy_mode>
     : public internal::CallbackBase<copy_mode> {
+ private:
+  using PolymorphicInvoke = R (*)(internal::BindStateBase*, Args&&...);
+
  public:
   // MSVC 2013 doesn't support Type Alias of function types.
   // Revisit this after we update it to newer version.
@@ -360,16 +359,8 @@ class Callback<R(Args...), copy_mode>
 
   Callback() : internal::CallbackBase<copy_mode>(nullptr) {}
 
-  template <typename Runnable, typename BindRunType, typename... BoundArgs>
-  explicit Callback(
-      internal::BindState<Runnable, BindRunType, BoundArgs...>* bind_state)
+  Callback(internal::BindStateBase* bind_state, PolymorphicInvoke invoke_func)
       : internal::CallbackBase<copy_mode>(bind_state) {
-    // Force the assignment to a local variable of PolymorphicInvoke
-    // so the compiler will typecheck that the passed in Run() method has
-    // the correct type.
-    PolymorphicInvoke invoke_func =
-        &internal::BindState<Runnable, BindRunType, BoundArgs...>
-            ::InvokerType::Run;
     using InvokeFuncStorage =
         typename internal::CallbackBase<copy_mode>::InvokeFuncStorage;
     this->polymorphic_invoke_ =
@@ -396,9 +387,6 @@ class Callback<R(Args...), copy_mode>
         reinterpret_cast<PolymorphicInvoke>(this->polymorphic_invoke_);
     return f(this->bind_state_.get(), std::forward<Args>(args)...);
   }
-
- private:
-  using PolymorphicInvoke = R (*)(internal::BindStateBase*, Args&&...);
 };
 
 }  // namespace base

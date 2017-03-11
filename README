@@ -14,9 +14,12 @@ with the following files/directories exported directly via git archive:
   tools/gn
   testing/test.gni
   testing/perf
+  testing/libfuzzer
   testing/*.h
   testing/*.cc
   testing/*.mm
+  third_party/apple_apsl
+  third_party/ced
   third_party/libxml
   third_party/modp_b64
   third_party/zlib
@@ -25,4 +28,5 @@ and the following git submodules exported into their respective directories:
 
   testing/gmock
   testing/gtest
+  third_party/ced/src
   third_party/icu

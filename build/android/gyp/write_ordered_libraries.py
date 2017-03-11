@@ -106,12 +106,12 @@ def main():
   parser.add_option('--output', help='Path to the generated .json file.')
   parser.add_option('--stamp', help='Path to touch on success.')
 
-  options, _ = parser.parse_args()
+  options, _ = parser.parse_args(build_utils.ExpandFileArgs(sys.argv[1:]))
 
   SetReadelfPath(options.readelf)
   SetLibraryDirs(options.libraries_dir.split(','))
 
-  libraries = build_utils.ParseGypList(options.input_libraries)
+  libraries = build_utils.ParseGnList(options.input_libraries)
   if len(libraries):
     libraries = GetSortedTransitiveDependenciesForBinaries(libraries)
 

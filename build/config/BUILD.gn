@@ -38,13 +38,27 @@ declare_args() {
   disable_precompiled_headers = false
 }
 
-# TODO(brettw) Most of these should be removed. Instead of global feature
-# flags, we should have more modular flags that apply only to a target and its
-# dependents. For example, depending on the "x11" meta-target should define
-# USE_X11 for all dependents so that everything that could use X11 gets the
-# define, but anything that doesn't depend on X11 doesn't see it.
+# ==============================================
+#   PLEASE DO NOT ADD MORE THINGS TO THIS LIST
+# ==============================================
 #
-# For now we define these globally to match the current GYP build.
+# Legacy feature defines applied to all targets.
+#
+# These are applied to every single compile in the build and most of them are
+# only relevant to a few files. This bloats command lines and causes
+# unnecessary recompiles when flags are flipped.
+#
+# To pass defines to source code from the build, use the buildflag system which
+# will write headers containing the defines you need. This isolates the define
+# and means its definition can participate in the build graph, only recompiling
+# things when it actually changes.
+#
+# See //build/buildflag_header.gni for inntructions on generating headers.
+#
+# This will also allow you to scope your build flag to a BUILD.gn file (or a
+# .gni file if you need it from more than one place) rather than making global
+# flags. See //build/config/BUILDCONFIG.gn for advice on where to define
+# build flags.
 config("feature_flags") {
   # Don't use deprecated V8 APIs anywhere.
   defines = [ "V8_DEPRECATION_WARNINGS" ]
@@ -201,9 +215,6 @@ config("feature_flags") {
   if (enable_app_list) {
     defines += [ "ENABLE_APP_LIST=1" ]
   }
-  if (enable_settings_app) {
-    defines += [ "ENABLE_SETTINGS_APP=1" ]
-  }
   if (enable_supervised_users) {
     defines += [ "ENABLE_SUPERVISED_USERS=1" ]
   }
@@ -259,6 +270,12 @@ config("feature_flags") {
   if (!fieldtrial_testing_like_official_build && !is_chrome_branded) {
     defines += [ "FIELDTRIAL_TESTING_ENABLED" ]
   }
+
+  # ==============================================
+  #   PLEASE DO NOT ADD MORE THINGS TO THIS LIST
+  # ==============================================
+  #
+  # See the comment at the top.
 }
 
 # Debug/release ----------------------------------------------------------------
@@ -392,6 +409,8 @@ config("executable_config") {
       "//build/config/mac:mac_dynamic_flags",
       "//build/config/mac:mac_executable_flags",
     ]
+  } else if (is_ios) {
+    configs += [ "//build/config/ios:ios_dynamic_flags" ]
   } else if (is_linux || is_android) {
     configs += [ "//build/config/gcc:executable_ldconfig" ]
     if (is_android) {
@@ -406,6 +425,10 @@ config("executable_config") {
   if (prebuilt_instrumented_libraries_available) {
     configs += [ "//third_party/instrumented_libraries:prebuilt_ldflags" ]
   }
+  if (use_locally_built_instrumented_libraries) {
+    configs += [ "//third_party/instrumented_libraries:locally_built_ldflags" ]
+  }
+  configs += [ "//build/config/sanitizers:link_executable" ]
 }
 
 # Shared library configs -------------------------------------------------------
@@ -418,6 +441,8 @@ config("shared_library_config") {
     configs += _windows_linker_configs
   } else if (is_mac) {
     configs += [ "//build/config/mac:mac_dynamic_flags" ]
+  } else if (is_ios) {
+    configs += [ "//build/config/ios:ios_dynamic_flags" ]
   } else if (is_chromecast) {
     configs += [ "//build/config/chromecast:shared_library_config" ]
   }
@@ -427,6 +452,10 @@ config("shared_library_config") {
   if (prebuilt_instrumented_libraries_available) {
     configs += [ "//third_party/instrumented_libraries:prebuilt_ldflags" ]
   }
+  if (use_locally_built_instrumented_libraries) {
+    configs += [ "//third_party/instrumented_libraries:locally_built_ldflags" ]
+  }
+  configs += [ "//build/config/sanitizers:link_shared_library" ]
 }
 
 # Add this config to your target to enable precompiled headers.

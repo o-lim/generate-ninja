@@ -15,6 +15,7 @@
 #include "tools/gn/config_values_extractors.h"
 #include "tools/gn/deps_iterator.h"
 #include "tools/gn/filesystem_utils.h"
+#include "tools/gn/functions.h"
 #include "tools/gn/scheduler.h"
 #include "tools/gn/source_file_type.h"
 #include "tools/gn/substitution_writer.h"
@@ -129,7 +130,7 @@ bool EnsureFileIsGeneratedByDependency(const Target* target,
         return true;  // Found a path.
     }
     if (target->output_type() == Target::CREATE_BUNDLE) {
-      for (const auto& dep : target->bundle_data().bundle_deps()) {
+      for (auto* dep : target->bundle_data().bundle_deps()) {
         if (EnsureFileIsGeneratedByDependency(dep, file, false,
                                               consider_object_files,
                                               check_data_deps, seen_targets))
@@ -216,29 +217,29 @@ Target::~Target() {
 const char* Target::GetStringForOutputType(OutputType type) {
   switch (type) {
     case UNKNOWN:
-      return "Unknown";
+      return "unknown";
     case GROUP:
-      return "Group";
+      return functions::kGroup;
     case EXECUTABLE:
-      return "Executable";
+      return functions::kExecutable;
     case LOADABLE_MODULE:
-      return "Loadable module";
+      return functions::kLoadableModule;
     case SHARED_LIBRARY:
-      return "Shared library";
+      return functions::kSharedLibrary;
     case STATIC_LIBRARY:
-      return "Static library";
+      return functions::kStaticLibrary;
     case SOURCE_SET:
-      return "Source set";
+      return functions::kSourceSet;
     case COPY_FILES:
-      return "Copy";
+      return functions::kCopy;
     case ACTION:
-      return "Action";
+      return functions::kAction;
     case ACTION_FOREACH:
-      return "ActionForEach";
+      return functions::kActionForEach;
     case BUNDLE_DATA:
-      return "Bundle data";
+      return functions::kBundleData;
     case CREATE_BUNDLE:
-      return "Create bundle";
+      return functions::kCreateBundle;
     default:
       return "";
   }
@@ -444,14 +445,11 @@ bool Target::GetOutputFilesForSource(const SourceFile& source,
   return !outputs->empty();
 }
 
-void Target::PullDependentTargetConfigsFrom(const Target* dep) {
-  MergeAllDependentConfigsFrom(dep, &configs_, &all_dependent_configs_);
-  MergePublicConfigsFrom(dep, &configs_);
-}
-
 void Target::PullDependentTargetConfigs() {
   for (const auto& pair : GetDeps(DEPS_LINKED))
-    PullDependentTargetConfigsFrom(pair.ptr);
+    MergeAllDependentConfigsFrom(pair.ptr, &configs_, &all_dependent_configs_);
+  for (const auto& pair : GetDeps(DEPS_LINKED))
+    MergePublicConfigsFrom(pair.ptr, &configs_);
 }
 
 void Target::PullDependentTargetLibsFrom(const Target* dep, bool is_public) {
@@ -533,12 +531,16 @@ void Target::PullRecursiveBundleData() {
     if (pair.ptr->output_type() == CREATE_BUNDLE)
       continue;
 
+    // Don't propagate across toolchain.
+    if (pair.ptr->toolchain() != toolchain())
+      continue;
+
     // Direct dependency on a bundle_data target.
     if (pair.ptr->output_type() == BUNDLE_DATA)
       bundle_data_.AddBundleData(pair.ptr);
 
     // Recursive bundle_data informations from all dependencies.
-    for (const auto& target : pair.ptr->bundle_data().bundle_deps())
+    for (auto* target : pair.ptr->bundle_data().bundle_deps())
       bundle_data_.AddBundleData(target);
   }
 
@@ -559,7 +561,8 @@ void Target::FillOutputFiles() {
       // These don't get linked to and use stamps which should be the first
       // entry in the outputs. These stamps are named
       // "<target_out_dir>/<targetname>.stamp".
-      dependency_output_file_ = GetTargetOutputDirAsOutputFile(this);
+      dependency_output_file_ =
+          GetBuildDirForTargetAsOutputFile(this, BuildDirType::OBJ);
       dependency_output_file_.value().append(GetComputedOutputName());
       dependency_output_file_.value().append(".stamp");
       break;
@@ -573,6 +576,14 @@ void Target::FillOutputFiles() {
       dependency_output_file_ =
           SubstitutionWriter::ApplyPatternToLinkerAsOutputFile(
               this, tool, tool->outputs().list()[0]);
+
+      if (tool->runtime_outputs().list().empty()) {
+        // Default to the first output for the runtime output.
+        runtime_outputs_.push_back(dependency_output_file_);
+      } else {
+        SubstitutionWriter::ApplyListToLinkerAsOutputFile(
+            this, tool, tool->runtime_outputs(), &runtime_outputs_);
+      }
       break;
     case STATIC_LIBRARY:
       // Static libraries both have dependencies and linking going off of the
@@ -604,12 +615,12 @@ void Target::FillOutputFiles() {
                   this, tool, tool->depend_output());
         }
       }
-      if (tool->runtime_link_output().empty()) {
-        runtime_link_output_file_ = link_output_file_;
+      if (tool->runtime_outputs().list().empty()) {
+        // Default to the link output for the runtime output.
+        runtime_outputs_.push_back(link_output_file_);
       } else {
-          runtime_link_output_file_ =
-              SubstitutionWriter::ApplyPatternToLinkerAsOutputFile(
-                  this, tool, tool->runtime_link_output());
+        SubstitutionWriter::ApplyListToLinkerAsOutputFile(
+            this, tool, tool->runtime_outputs(), &runtime_outputs_);
       }
       break;
     case UNKNOWN:
@@ -760,10 +771,13 @@ void Target::CheckSourcesGenerated() const {
 void Target::CheckSourceGenerated(const SourceFile& source) const {
   const SourceDir& build_dir = settings()->build_settings()->build_dir();
   const base::FilePath& root_path = settings()->build_settings()->root_path();
+  const BuildDirContext context(settings());
+  const SourceDir obj_dir = GetBuildDirAsSourceDir(context, BuildDirType::OBJ);
+  const SourceDir gen_dir = GetBuildDirAsSourceDir(context, BuildDirType::GEN);
   if (!IsStringInOutputDir(build_dir, source.value()) ||
       (build_dir.Resolve(root_path) == root_path &&
-       !IsStringInOutputDir(GetToolchainObjDir(settings()), source.value()) &&
-       !IsStringInOutputDir(GetToolchainGenDir(settings()), source.value())))
+       !IsStringInOutputDir(obj_dir, source.value()) &&
+       !IsStringInOutputDir(gen_dir, source.value())))
     return;  // Not in output dir, this is OK.
 
   // Tell the scheduler about unknown files. This will be noted for later so

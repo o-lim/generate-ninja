@@ -28,8 +28,7 @@ class Value;
 class Template : public base::RefCountedThreadSafe<Template> {
  public:
   // Makes a new closure based on the given scope.
-  Template(const std::string& name,
-           const Scope* scope,
+  Template(const Scope* scope,
            const FunctionCallNode* def);
 
   // Takes ownership of a previously-constructed closure.
@@ -41,9 +40,12 @@ class Template : public base::RefCountedThreadSafe<Template> {
   std::string GetName() const { return name_; }
 
   // Invoke the template. The values correspond to the state of the code
-  // invoking the template.
+  // invoking the template. The template name needs to be supplied since the
+  // template object itself doesn't know what name the calling code is using
+  // to refer to it (this is used to set defaults).
   Value Invoke(Scope* scope,
                const FunctionCallNode* invocation,
+               const std::string& template_name,
                const std::vector<Value>& args,
                BlockNode* block,
                Err* err) const;

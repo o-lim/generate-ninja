@@ -13,7 +13,7 @@
 #include "tools/gn/token.h"
 
 const char kGrammar_Help[] =
-    "GN build language grammar\n"
+    "Language and grammar for GN build files\n"
     "\n"
     "Tokens\n"
     "\n"
@@ -79,6 +79,13 @@ const char kGrammar_Help[] =
     "  To insert an arbitrary byte value, use $0xFF. For example, to\n"
     "  insert a newline character: \"Line one$0x0ALine two\".\n"
     "\n"
+    "  An expansion will evaluate the variable following the '$' and insert\n"
+    "  a stringified version of it into the result. For example, to concat\n"
+    "  two path components with a slash separating them:\n"
+    "    \"$var_one/$var_two\"\n"
+    "  Use the \"${var_one}\" format to be explicitly deliniate the variable\n"
+    "  for otherwise-ambiguous cases.\n"
+    "\n"
     "Punctuation\n"
     "\n"
     "  The following character sequences represent punctuation:\n"
@@ -95,19 +102,20 @@ const char kGrammar_Help[] =
     "      File = StatementList .\n"
     "\n"
     "      Statement     = Assignment | Call | Condition .\n"
-    "      Assignment    = identifier AssignOp Expr .\n"
+    "      LValue        = identifier | ArrayAccess | ScopeAccess .\n"
+    "      Assignment    = LValue AssignOp Expr .\n"
     "      Call          = identifier \"(\" [ ExprList ] \")\" [ Block ] .\n"
     "      Condition     = \"if\" \"(\" Expr \")\" Block\n"
     "                      [ \"else\" ( Condition | Block ) ] .\n"
     "      Block         = \"{\" StatementList \"}\" .\n"
     "      StatementList = { Statement } .\n"
     "\n"
-    "      ArrayAccess = identifier \"[\" { identifier | integer } \"]\" .\n"
+    "      ArrayAccess = identifier \"[\" Expr \"]\" .\n"
     "      ScopeAccess = identifier \".\" identifier .\n"
     "      Expr        = UnaryExpr | Expr BinaryOp Expr .\n"
     "      UnaryExpr   = PrimaryExpr | UnaryOp UnaryExpr .\n"
     "      PrimaryExpr = identifier | integer | string | Call\n"
-    "                  | ArrayAccess | ScopeAccess\n"
+    "                  | ArrayAccess | ScopeAccess | Block\n"
     "                  | \"(\" Expr \")\"\n"
     "                  | \"[\" [ ExprList [ \",\" ] ] \"]\" .\n"
     "      ExprList    = Expr { \",\" Expr } .\n"
@@ -120,7 +128,95 @@ const char kGrammar_Help[] =
     "               | \"&&\"\n"
     "               | \"||\" .                     // lowest priority\n"
     "\n"
-    "  All binary operators are left-associative.\n";
+    "  All binary operators are left-associative.\n"
+    "\n"
+    "Types\n"
+    "\n"
+    "  The GN language is dynamically typed. The following types are used:\n"
+    "\n"
+    "   - Boolean: Uses the keywords \"true\" and \"false\". There is no\n"
+    "     implicit conversion between booleans and integers.\n"
+    "\n"
+    "   - Integers: All numbers in GN are signed 64-bit integers.\n"
+    "\n"
+    "   - Strings: Strings are 8-bit with no enforced encoding. When a string\n"
+    "     is used to interact with other systems with particular encodings\n"
+    "     (like the Windows and Mac filesystems) it is assumed to be UTF-8.\n"
+    "     See \"String literals\" above for more.\n"
+    "\n"
+    "   - Lists: Lists are arbitrary-length ordered lists of values. See\n"
+    "     \"Lists\" below for more.\n"
+    "\n"
+    "   - Scopes: Scopes are like dictionaries that use variable names for\n"
+    "     keys. See \"Scopes\" below for more.\n"
+    "\n"
+    "Lists\n"
+    "\n"
+    "  Lists are created with [] and using commas to separate items:\n"
+    "\n"
+    "       mylist = [ 0, 1, 2, \"some string\" ]\n"
+    "\n"
+    "  A comma after the last item is optional. Lists are dereferenced using\n"
+    "  0-based indexing:\n"
+    "\n"
+    "       mylist[0] += 1\n"
+    "       var = mylist[2]\n"
+    "\n"
+    "  Lists can be concatenated using the '+' and '+=' operators. Bare\n"
+    "  values can not be concatenated with lists, to add a single item,\n"
+    "  it must be put into a list of length one.\n"
+    "\n"
+    "  Items can be removed from lists using the '-' and '-=' operators.\n"
+    "  This will remove all occurrences of every item in the right-hand list\n"
+    "  from the left-hand list. It is an error to remove an item not in the\n"
+    "  list. This is to prevent common typos and to detect dead code that\n"
+    "  is removing things that no longer apply.\n"
+    "\n"
+    "  It is an error to use '=' to replace a nonempty list with another\n"
+    "  nonempty list. This is to prevent accidentally overwriting data\n"
+    "  when in most cases '+=' was intended. To overwrite a list on purpose,\n"
+    "  first assign it to the empty list:\n"
+    "\n"
+    "    mylist = []\n"
+    "    mylist = otherlist\n"
+    "\n"
+    "  When assigning to a list named 'sources' using '=' or '+=', list\n"
+    "  items may be automatically filtered out.\n"
+    "  See \"gn help set_sources_assignment_filter\" for more.\n"
+    "\n"
+    "Scopes\n"
+    "\n"
+    "  All execution happens in the context of a scope which holds the\n"
+    "  current state (like variables). With the exception of loops and\n"
+    "  conditions, '{' introduces a new scope that has a parent reference to\n"
+    "  the old scope.\n"
+    "\n"
+    "  Variable reads recursively search all nested scopes until the\n"
+    "  variable is found or there are no more scopes. Variable writes always\n"
+    "  go into the current scope. This means that after the closing '}'\n"
+    "  (again excepting loops and conditions), all local variables will be\n"
+    "  restored to the previous values. This also means that \"foo = foo\"\n"
+    "  can do useful work by copying a variable into the current scope that\n"
+    "  was defined in a containing scope.\n"
+    "\n"
+    "  Scopes can also be assigned to variables. Such scopes can be created\n"
+    "  by functions like exec_script, when invoking a template (the template\n"
+    "  code refers to the variables set by the invoking code by the\n"
+    "  implicitly-created \"invoker\" scope), or explicitly like:\n"
+    "\n"
+    "    empty_scope = {}\n"
+    "    myvalues = {\n"
+    "      foo = 21\n"
+    "      bar = \"something\"\n"
+    "    }\n"
+    "\n"
+    "  Inside such a scope definition can be any GN code including\n"
+    "  conditionals and function calls. After the close of the scope, it will\n"
+    "  contain all variables explicitly set by the code contained inside it.\n"
+    "  After this, the values can be read, modified, or added to:\n"
+    "\n"
+    "    myvalues.foo += 2\n"
+    "    empty_scope.new_thing = [ 1, 2, 3 ]\n";
 
 enum Precedence {
   PRECEDENCE_ASSIGNMENT = 1,  // Lowest precedence.
@@ -172,7 +268,7 @@ ParserHelper Parser::expressions_[] = {
     {nullptr, nullptr, -1},                                   // RIGHT_PAREN
     {&Parser::List, &Parser::Subscript, PRECEDENCE_CALL},     // LEFT_BRACKET
     {nullptr, nullptr, -1},                                   // RIGHT_BRACKET
-    {nullptr, nullptr, -1},                                   // LEFT_BRACE
+    {&Parser::Block, nullptr, -1},                            // LEFT_BRACE
     {nullptr, nullptr, -1},                                   // RIGHT_BRACE
     {nullptr, nullptr, -1},                                   // IF
     {nullptr, nullptr, -1},                                   // ELSE
@@ -185,7 +281,9 @@ ParserHelper Parser::expressions_[] = {
 };
 
 Parser::Parser(const std::vector<Token>& tokens, Err* err)
-    : err_(err), cur_(0) {
+    : invalid_token_(Location(), Token::INVALID, base::StringPiece()),
+      err_(err),
+      cur_(0) {
   for (const auto& token : tokens) {
     switch (token.type()) {
       case Token::LINE_COMMENT:
@@ -281,19 +379,20 @@ bool Parser::Match(Token::Type type) {
   return true;
 }
 
-Token Parser::Consume(Token::Type type, const char* error_message) {
+const Token& Parser::Consume(Token::Type type, const char* error_message) {
   Token::Type types[1] = { type };
   return Consume(types, 1, error_message);
 }
 
-Token Parser::Consume(Token::Type* types,
-                      size_t num_types,
-                      const char* error_message) {
+const Token& Parser::Consume(Token::Type* types,
+                             size_t num_types,
+                             const char* error_message) {
   if (has_error()) {
     // Don't overwrite current error, but make progress through tokens so that
     // a loop that's expecting a particular token will still terminate.
-    cur_++;
-    return Token(Location(), Token::INVALID, base::StringPiece());
+    if (!at_end())
+      cur_++;
+    return invalid_token_;
   }
   if (at_end()) {
     const char kEOFMsg[] = "I hit EOF instead.";
@@ -301,7 +400,7 @@ Token Parser::Consume(Token::Type* types,
       *err_ = Err(Location(), error_message, kEOFMsg);
     else
       *err_ = Err(tokens_[tokens_.size() - 1], error_message, kEOFMsg);
-    return Token(Location(), Token::INVALID, base::StringPiece());
+    return invalid_token_;
   }
 
   for (size_t i = 0; i < num_types; ++i) {
@@ -309,10 +408,10 @@ Token Parser::Consume(Token::Type* types,
       return Consume();
   }
   *err_ = Err(cur_token(), error_message);
-  return Token(Location(), Token::INVALID, base::StringPiece());
+  return invalid_token_;
 }
 
-Token Parser::Consume() {
+const Token& Parser::Consume() {
   return tokens_[cur_++];
 }
 
@@ -324,7 +423,7 @@ std::unique_ptr<ParseNode> Parser::ParseExpression(int precedence) {
   if (at_end())
     return std::unique_ptr<ParseNode>();
 
-  Token token = Consume();
+  const Token& token = Consume();
   PrefixFunc prefix = expressions_[token.type()].prefix;
 
   if (prefix == nullptr) {
@@ -340,15 +439,15 @@ std::unique_ptr<ParseNode> Parser::ParseExpression(int precedence) {
 
   while (!at_end() && !IsStatementBreak(cur_token().type()) &&
          precedence <= expressions_[cur_token().type()].precedence) {
-    token = Consume();
-    InfixFunc infix = expressions_[token.type()].infix;
+    const Token& next_token = Consume();
+    InfixFunc infix = expressions_[next_token.type()].infix;
     if (infix == nullptr) {
-      *err_ = Err(token,
-                  std::string("Unexpected token '") +
-                      token.value().as_string() + std::string("'"));
+      *err_ = Err(next_token, std::string("Unexpected token '") +
+                                  next_token.value().as_string() +
+                                  std::string("'"));
       return std::unique_ptr<ParseNode>();
     }
-    left = (this->*infix)(std::move(left), token);
+    left = (this->*infix)(std::move(left), next_token);
     if (has_error())
       return std::unique_ptr<ParseNode>();
   }
@@ -356,21 +455,27 @@ std::unique_ptr<ParseNode> Parser::ParseExpression(int precedence) {
   return left;
 }
 
-std::unique_ptr<ParseNode> Parser::Literal(Token token) {
-  return base::WrapUnique(new LiteralNode(token));
+std::unique_ptr<ParseNode> Parser::Block(const Token& token) {
+  // This entrypoint into ParseBlock means it's part of an expression and we
+  // always want the result.
+  return ParseBlock(token, BlockNode::RETURNS_SCOPE);
 }
 
-std::unique_ptr<ParseNode> Parser::Name(Token token) {
+std::unique_ptr<ParseNode> Parser::Literal(const Token& token) {
+  return base::MakeUnique<LiteralNode>(token);
+}
+
+std::unique_ptr<ParseNode> Parser::Name(const Token& token) {
   return IdentifierOrCall(std::unique_ptr<ParseNode>(), token);
 }
 
-std::unique_ptr<ParseNode> Parser::BlockComment(Token token) {
+std::unique_ptr<ParseNode> Parser::BlockComment(const Token& token) {
   std::unique_ptr<BlockCommentNode> comment(new BlockCommentNode());
   comment->set_comment(token);
   return std::move(comment);
 }
 
-std::unique_ptr<ParseNode> Parser::Group(Token token) {
+std::unique_ptr<ParseNode> Parser::Group(const Token& token) {
   std::unique_ptr<ParseNode> expr = ParseExpression();
   if (has_error())
     return std::unique_ptr<ParseNode>();
@@ -378,7 +483,7 @@ std::unique_ptr<ParseNode> Parser::Group(Token token) {
   return expr;
 }
 
-std::unique_ptr<ParseNode> Parser::Not(Token token) {
+std::unique_ptr<ParseNode> Parser::Not(const Token& token) {
   std::unique_ptr<ParseNode> expr = ParseExpression(PRECEDENCE_PREFIX + 1);
   if (has_error())
     return std::unique_ptr<ParseNode>();
@@ -393,7 +498,7 @@ std::unique_ptr<ParseNode> Parser::Not(Token token) {
   return std::move(unary_op);
 }
 
-std::unique_ptr<ParseNode> Parser::List(Token node) {
+std::unique_ptr<ParseNode> Parser::List(const Token& node) {
   std::unique_ptr<ParseNode> list(ParseList(node, Token::RIGHT_BRACKET, true));
   if (!has_error() && !at_end())
     Consume(Token::RIGHT_BRACKET, "Expected ']'");
@@ -402,7 +507,7 @@ std::unique_ptr<ParseNode> Parser::List(Token node) {
 
 std::unique_ptr<ParseNode> Parser::BinaryOperator(
     std::unique_ptr<ParseNode> left,
-    Token token) {
+    const Token& token) {
   std::unique_ptr<ParseNode> right =
       ParseExpression(expressions_[token.type()].precedence + 1);
   if (!right) {
@@ -421,14 +526,14 @@ std::unique_ptr<ParseNode> Parser::BinaryOperator(
 
 std::unique_ptr<ParseNode> Parser::IdentifierOrCall(
     std::unique_ptr<ParseNode> left,
-    Token token) {
+    const Token& token) {
   std::unique_ptr<ListNode> list(new ListNode);
   list->set_begin_token(token);
-  list->set_end(base::WrapUnique(new EndNode(token)));
+  list->set_end(base::MakeUnique<EndNode>(token));
   std::unique_ptr<BlockNode> block;
   bool has_arg = false;
   if (LookAhead(Token::LEFT_PAREN)) {
-    Token start_token = Consume();
+    const Token& start_token = Consume();
     // Parsing a function call.
     has_arg = true;
     if (Match(Token::RIGHT_PAREN)) {
@@ -441,7 +546,7 @@ std::unique_ptr<ParseNode> Parser::IdentifierOrCall(
     }
     // Optionally with a scope.
     if (LookAhead(Token::LEFT_BRACE)) {
-      block = ParseBlock();
+      block = ParseBlock(Consume(), BlockNode::DISCARDS_RESULT);
       if (has_error())
         return std::unique_ptr<ParseNode>();
     }
@@ -460,9 +565,11 @@ std::unique_ptr<ParseNode> Parser::IdentifierOrCall(
 }
 
 std::unique_ptr<ParseNode> Parser::Assignment(std::unique_ptr<ParseNode> left,
-                                              Token token) {
-  if (left->AsIdentifier() == nullptr) {
-    *err_ = Err(left.get(), "Left-hand side of assignment must be identifier.");
+                                              const Token& token) {
+  if (left->AsIdentifier() == nullptr && left->AsAccessor() == nullptr) {
+    *err_ = Err(left.get(),
+        "The left-hand side of an assignment must be an identifier, "
+        "scope access, or array access.");
     return std::unique_ptr<ParseNode>();
   }
   std::unique_ptr<ParseNode> value = ParseExpression(PRECEDENCE_ASSIGNMENT);
@@ -479,7 +586,7 @@ std::unique_ptr<ParseNode> Parser::Assignment(std::unique_ptr<ParseNode> left,
 }
 
 std::unique_ptr<ParseNode> Parser::Subscript(std::unique_ptr<ParseNode> left,
-                                             Token token) {
+                                             const Token& token) {
   // TODO: Maybe support more complex expressions like a[0][0]. This would
   // require work on the evaluator too.
   if (left->AsIdentifier() == nullptr) {
@@ -498,7 +605,7 @@ std::unique_ptr<ParseNode> Parser::Subscript(std::unique_ptr<ParseNode> left,
 }
 
 std::unique_ptr<ParseNode> Parser::DotOperator(std::unique_ptr<ParseNode> left,
-                                               Token token) {
+                                               const Token& token) {
   if (left->AsIdentifier() == nullptr) {
     *err_ = Err(left.get(), "May only use \".\" for identifiers.",
         "The thing on the left hand side of the dot must be an identifier\n"
@@ -522,7 +629,7 @@ std::unique_ptr<ParseNode> Parser::DotOperator(std::unique_ptr<ParseNode> left,
 }
 
 // Does not Consume the start or end token.
-std::unique_ptr<ListNode> Parser::ParseList(Token start_token,
+std::unique_ptr<ListNode> Parser::ParseList(const Token& start_token,
                                             Token::Type stop_before,
                                             bool allow_trailing_comma) {
   std::unique_ptr<ListNode> list(new ListNode);
@@ -562,12 +669,12 @@ std::unique_ptr<ListNode> Parser::ParseList(Token start_token,
     *err_ = Err(cur_token(), "Trailing comma");
     return std::unique_ptr<ListNode>();
   }
-  list->set_end(base::WrapUnique(new EndNode(cur_token())));
+  list->set_end(base::MakeUnique<EndNode>(cur_token()));
   return list;
 }
 
 std::unique_ptr<ParseNode> Parser::ParseFile() {
-  std::unique_ptr<BlockNode> file(new BlockNode);
+  std::unique_ptr<BlockNode> file(new BlockNode(BlockNode::DISCARDS_RESULT));
   for (;;) {
     if (at_end())
       break;
@@ -604,24 +711,24 @@ std::unique_ptr<ParseNode> Parser::ParseStatement() {
         return stmt;
     }
     if (!has_error()) {
-      Token token = at_end() ? tokens_[tokens_.size() - 1] : cur_token();
+      const Token& token = cur_or_last_token();
       *err_ = Err(token, "Expecting assignment or function call.");
     }
     return std::unique_ptr<ParseNode>();
   }
 }
 
-std::unique_ptr<BlockNode> Parser::ParseBlock() {
-  Token begin_token =
-      Consume(Token::LEFT_BRACE, "Expected '{' to start a block.");
+std::unique_ptr<BlockNode> Parser::ParseBlock(
+    const Token& begin_brace,
+    BlockNode::ResultMode result_mode) {
   if (has_error())
     return std::unique_ptr<BlockNode>();
-  std::unique_ptr<BlockNode> block(new BlockNode);
-  block->set_begin_token(begin_token);
+  std::unique_ptr<BlockNode> block(new BlockNode(result_mode));
+  block->set_begin_token(begin_brace);
 
   for (;;) {
     if (LookAhead(Token::RIGHT_BRACE)) {
-      block->set_end(base::WrapUnique(new EndNode(Consume())));
+      block->set_end(base::MakeUnique<EndNode>(Consume()));
       break;
     }
 
@@ -641,14 +748,17 @@ std::unique_ptr<ParseNode> Parser::ParseCondition() {
   if (IsAssignment(condition->condition()))
     *err_ = Err(condition->condition(), "Assignment not allowed in 'if'.");
   Consume(Token::RIGHT_PAREN, "Expected ')' after condition of 'if'.");
-  condition->set_if_true(ParseBlock());
+  condition->set_if_true(ParseBlock(
+      Consume(Token::LEFT_BRACE, "Expected '{' to start 'if' block."),
+      BlockNode::DISCARDS_RESULT));
   if (Match(Token::ELSE)) {
     if (LookAhead(Token::LEFT_BRACE)) {
-      condition->set_if_false(ParseBlock());
+      condition->set_if_false(ParseBlock(Consume(),
+                                         BlockNode::DISCARDS_RESULT));
     } else if (LookAhead(Token::IF)) {
       condition->set_if_false(ParseStatement());
     } else {
-      *err_ = Err(cur_token(), "Expected '{' or 'if' after 'else'.");
+      *err_ = Err(cur_or_last_token(), "Expected '{' or 'if' after 'else'.");
       return std::unique_ptr<ParseNode>();
     }
   }
@@ -711,7 +821,11 @@ void Parser::AssignComments(ParseNode* file) {
 
   // Assign line comments to syntax immediately following.
   int cur_comment = 0;
-  for (const auto& node : pre) {
+  for (auto* node : pre) {
+    if (node->GetRange().is_null()) {
+      CHECK_EQ(node, file) << "Only expected on top file node";
+      continue;
+    }
     const Location& start = node->GetRange().begin();
     while (cur_comment < static_cast<int>(line_comment_tokens_.size())) {
       if (start.byte() >= line_comment_tokens_[cur_comment].location().byte()) {

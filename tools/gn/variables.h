@@ -41,6 +41,10 @@ extern const char kDefaultToolchain[];
 extern const char kDefaultToolchain_HelpShort[];
 extern const char kDefaultToolchain_Help[];
 
+extern const char kInvoker[];
+extern const char kInvoker_HelpShort[];
+extern const char kInvoker_Help[];
+
 extern const char kPythonPath[];
 extern const char kPythonPath_HelpShort[];
 extern const char kPythonPath_Help[];
@@ -60,6 +64,10 @@ extern const char kRootOutDir_Help[];
 extern const char kTargetCpu[];
 extern const char kTargetCpu_HelpShort[];
 extern const char kTargetCpu_Help[];
+
+extern const char kTargetName[];
+extern const char kTargetName_HelpShort[];
+extern const char kTargetName_Help[];
 
 extern const char kTargetOs[];
 extern const char kTargetOs_HelpShort[];
@@ -95,6 +103,10 @@ extern const char kAsmflags[];
 extern const char kAsmflags_HelpShort[];
 extern const char* kAsmflags_Help;
 
+extern const char kAsmppflags[];
+extern const char kAsmppflags_HelpShort[];
+extern const char* kAsmppflags_Help;
+
 extern const char kAssertNoDeps[];
 extern const char kAssertNoDeps_HelpShort[];
 extern const char kAssertNoDeps_Help[];
@@ -106,6 +118,10 @@ extern const char kBundleRootDir_Help[];
 extern const char kBundleResourcesDir[];
 extern const char kBundleResourcesDir_HelpShort[];
 extern const char kBundleResourcesDir_Help[];
+
+extern const char kBundleDepsFilter[];
+extern const char kBundleDepsFilter_HelpShort[];
+extern const char kBundleDepsFilter_Help[];
 
 extern const char kBundleExecutableDir[];
 extern const char kBundleExecutableDir_HelpShort[];
@@ -134,6 +150,26 @@ extern const char* kCflagsObjC_Help;
 extern const char kCflagsObjCC[];
 extern const char kCflagsObjCC_HelpShort[];
 extern const char* kCflagsObjCC_Help;
+
+extern const char kCppflags[];
+extern const char kCppflags_HelpShort[];
+extern const char* kCppflags_Help;
+
+extern const char kCppflagsC[];
+extern const char kCppflagsC_HelpShort[];
+extern const char* kCppflagsC_Help;
+
+extern const char kCppflagsCC[];
+extern const char kCppflagsCC_HelpShort[];
+extern const char* kCppflagsCC_Help;
+
+extern const char kCppflagsObjC[];
+extern const char kCppflagsObjC_HelpShort[];
+extern const char* kCppflagsObjC_Help;
+
+extern const char kCppflagsObjCC[];
+extern const char kCppflagsObjCC_HelpShort[];
+extern const char* kCppflagsObjCC_Help;
 
 extern const char kCheckIncludes[];
 extern const char kCheckIncludes_HelpShort[];
@@ -274,6 +310,10 @@ extern const char kScript_Help[];
 extern const char kSources[];
 extern const char kSources_HelpShort[];
 extern const char kSources_Help[];
+
+extern const char kSysIncludeDirs[];
+extern const char kSysIncludeDirs_HelpShort[];
+extern const char kSysIncludeDirs_Help[];
 
 extern const char kTestonly[];
 extern const char kTestonly_HelpShort[];

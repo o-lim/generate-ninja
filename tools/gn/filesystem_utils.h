@@ -100,6 +100,11 @@ bool EnsureStringIsInOutputDir(const SourceDir& output_dir,
 // paths of both the native format: "C:/foo" and ours "/C:/foo"
 bool IsPathAbsolute(const base::StringPiece& path);
 
+// Returns true if the input string is source-absolute. Source-absolute
+// paths begin with two forward slashes and resolve as if they are
+// relative to the source root.
+bool IsPathSourceAbsolute(const base::StringPiece& path);
+
 // Given an absolute path, checks to see if is it is inside the source root.
 // If it is, fills a source-absolute path into the given output and returns
 // true. If it isn't, clears the dest and returns false.
@@ -175,12 +180,60 @@ bool WriteFileIfChanged(const base::FilePath& file_path,
                         const std::string& data,
                         Err* err);
 
+// Writes given stream contents to the given file. Returns true if data was
+// successfully written, false otherwise. |err| is set on error if not nullptr.
+bool WriteFile(const base::FilePath& file_path, const std::string& data,
+               Err* err);
+
 // -----------------------------------------------------------------------------
 
-// These functions return the various flavors of output and gen directories.
-SourceDir GetToolchainOutputDir(const Settings* settings);
-SourceDir GetToolchainOutputDir(const BuildSettings* build_settings,
-                                const Label& label, bool is_default);
+enum class BuildDirType {
+  // Returns the root toolchain dir rather than the generated or output
+  // subdirectories. This is valid only for the toolchain directory getters.
+  // Asking for this for a target or source dir makes no sense.
+  TOOLCHAIN_ROOT,
+
+  // Generated file directory.
+  GEN,
+
+  // Output file directory.
+  OBJ,
+};
+
+// In different contexts, different information is known about the toolchain in
+// question. If you have a Target or settings object, everything can be
+// extracted from there. But when querying label information on something in
+// another toolchain, for example, the only thing known (it may not even exist)
+// is the toolchain label string and whether it matches the default toolchain.
+//
+// This object extracts the relevant information from a variety of input
+// types for the convenience of the caller.
+class BuildDirContext {
+ public:
+  // Extracts toolchain information associated with the given target.
+  explicit BuildDirContext(const Target* target);
+
+  // Extracts toolchain information associated with the given settings object.
+  explicit BuildDirContext(const Settings* settings);
+
+  // Extrats toolchain information from the current toolchain of the scope.
+  explicit BuildDirContext(const Scope* execution_scope);
+
+  // Extracts the default toolchain information from the given execution
+  // scope. The toolchain you want to query must be passed in. This doesn't
+  // use the settings object from the Scope so one can query other toolchains.
+  // If you want to use the scope's current toolchain, use the version above.
+  BuildDirContext(const Scope* execution_scope, const Label& toolchain_label);
+
+  // Specify all information manually.
+  BuildDirContext(const BuildSettings* build_settings,
+                  const Label& toolchain_label,
+                  bool is_default_toolchain);
+
+  const BuildSettings* build_settings;
+  const Label& toolchain_label;
+  bool is_default_toolchain;
+};
 
 SourceDir GetToolchainObjDir(const Settings* settings);
 OutputFile GetToolchainObjDirAsOutputFile(const Settings* settings);
@@ -190,37 +243,37 @@ SourceDir GetToolchainObjDir(const BuildSettings* build_settings,
                              const Label& toolchain_label,
                              bool is_default);
 
-SourceDir GetToolchainGenDir(const Settings* settings);
-OutputFile GetToolchainGenDirAsOutputFile(const Settings* settings);
-SourceDir GetToolchainGenDir(const BuildSettings* build_settings,
-                             const Label& toolchain_label,
-                             bool is_default);
+// Returns the root, object, or generated file directory for the toolchain.
+//
+// The toolchain object file root is never exposed in GN (there is no
+// root_obj_dir variable) so BuildDirType::OBJ would normally never be passed
+// to this function except when it's called by one of the variants below that
+// append paths to it.
+SourceDir GetBuildDirAsSourceDir(const BuildDirContext& context,
+                                 BuildDirType type);
+OutputFile GetBuildDirAsOutputFile(const BuildDirContext& context,
+                                   BuildDirType type);
 
-SourceDir GetOutputDirForSourceDir(const Settings* settings,
-                                   const SourceDir& source_dir);
-SourceDir GetOutputDirForSourceDir(const BuildSettings* build_settings,
-                                   const SourceDir& source_dir,
-                                   const Label& toolchain_label,
-                                   bool is_default_toolchain);
-OutputFile GetOutputDirForSourceDirAsOutputFile(
-    const BuildSettings* build_settings,
-    const SourceDir& source_dir,
-    const Label& toolchain_label,
-    bool is_default_toolchain);
-OutputFile GetOutputDirForSourceDirAsOutputFile(const Settings* settings,
-                                                const SourceDir& source_dir);
+// Returns the output or generated file directory corresponding to the given
+// source directory.
+SourceDir GetSubBuildDirAsSourceDir(const BuildDirContext& context,
+                                    const SourceDir& source_dir,
+                                    BuildDirType type);
+OutputFile GetSubBuildDirAsOutputFile(const BuildDirContext& context,
+                                      const SourceDir& source_dir,
+                                      BuildDirType type);
 
-SourceDir GetGenDirForSourceDir(const Settings* settings,
-                                 const SourceDir& source_dir);
-OutputFile GetGenDirForSourceDirAsOutputFile(const Settings* settings,
-                                             const SourceDir& source_dir);
+// Returns the output or generated file directory corresponding to the given
+// target.
+SourceDir GetBuildDirForTargetAsSourceDir(const Target* target,
+                                          BuildDirType type);
+OutputFile GetBuildDirForTargetAsOutputFile(const Target* target,
+                                            BuildDirType type);
 
-SourceDir GetTargetOutputDir(const Target* target);
-OutputFile GetTargetOutputDirAsOutputFile(const Target* target);
-SourceDir GetTargetGenDir(const Target* target);
-OutputFile GetTargetGenDirAsOutputFile(const Target* target);
-
-SourceDir GetCurrentOutputDir(const Scope* scope);
-SourceDir GetCurrentGenDir(const Scope* scope);
+// Returns the scope's current directory.
+SourceDir GetScopeCurrentBuildDirAsSourceDir(const Scope* scope,
+                                             BuildDirType type);
+// Lack of OutputDir version is due only to it not currently being needed,
+// please add one if you need it.
 
 #endif  // TOOLS_GN_FILESYSTEM_UTILS_H_

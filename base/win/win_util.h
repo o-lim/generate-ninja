@@ -66,6 +66,11 @@ inline uint32_t HandleToUint32(HANDLE h) {
   return static_cast<uint32_t>(reinterpret_cast<uintptr_t>(h));
 }
 
+inline HANDLE Uint32ToHandle(uint32_t h) {
+  return reinterpret_cast<HANDLE>(
+      static_cast<uintptr_t>(static_cast<int32_t>(h)));
+}
+
 BASE_EXPORT void GetNonClientMetrics(NONCLIENTMETRICS_XP* metrics);
 
 // Returns the string representing the current user sid.
@@ -175,6 +180,9 @@ BASE_EXPORT bool GetLoadedModulesSnapshot(HANDLE process,
 // disable pen flick gestures for the given HWND.
 BASE_EXPORT void EnableFlicks(HWND hwnd);
 BASE_EXPORT void DisableFlicks(HWND hwnd);
+
+// Returns true if the process is per monitor DPI aware.
+BASE_EXPORT bool IsProcessPerMonitorDpiAware();
 
 }  // namespace win
 }  // namespace base

@@ -32,7 +32,7 @@ base::FilePath::CharType kDefinesFileSuffix[] = FILE_PATH_LITERAL(".config");
 
 // static
 bool QtCreatorWriter::RunAndWriteFile(const BuildSettings* build_settings,
-                                      const Builder* builder,
+                                      const Builder& builder,
                                       Err* err,
                                       const std::string& root_target,
                                       bool all_toolchains) {
@@ -62,7 +62,7 @@ bool QtCreatorWriter::RunAndWriteFile(const BuildSettings* build_settings,
 }
 
 QtCreatorWriter::QtCreatorWriter(const BuildSettings* build_settings,
-                                 const Builder* builder,
+                                 const Builder& builder,
                                  const base::FilePath& project_prefix,
                                  const std::string& root_target_name,
                                  bool all_toolchains)
@@ -85,7 +85,7 @@ void QtCreatorWriter::CollectDeps(const Target* target) {
 }
 
 bool QtCreatorWriter::DiscoverTargets() {
-  auto all_targets = builder_->GetAllResolvedTargets();
+  auto all_targets = builder_.GetAllResolvedTargets();
 
   if (root_target_name_.empty()) {
     targets_ = std::set<const Target*>(all_targets.begin(), all_targets.end());
@@ -164,7 +164,7 @@ void QtCreatorWriter::Run() {
 
   for (const Target* target : targets_) {
     if (!all_toolchains_ && target->toolchain()->label() !=
-                            builder_->loader()->GetDefaultToolchain())
+                            builder_.loader()->GetDefaultToolchain())
       continue;
     HandleTarget(target);
   }

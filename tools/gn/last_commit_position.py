@@ -112,7 +112,6 @@ if git_directory:
 else:
   value = version
 if not value:
-  print "Could not get last commit position."
-  sys.exit(1)
+  value = 'UNKNOWN'
 
 WriteHeader(output_file, header_guard, value)

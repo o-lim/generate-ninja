@@ -7,11 +7,14 @@
 #include "base/message_loop/message_loop.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/power_monitor/power_monitor_source.h"
+#include "base/run_loop.h"
 
 namespace base {
 
 PowerMonitorTestSource::PowerMonitorTestSource()
     : test_on_battery_power_(false) {
+  DCHECK(MessageLoop::current())
+      << "PowerMonitorTestSource requires a MessageLoop.";
 }
 
 PowerMonitorTestSource::~PowerMonitorTestSource() {
@@ -20,17 +23,17 @@ PowerMonitorTestSource::~PowerMonitorTestSource() {
 void PowerMonitorTestSource::GeneratePowerStateEvent(bool on_battery_power) {
   test_on_battery_power_ = on_battery_power;
   ProcessPowerEvent(POWER_STATE_EVENT);
-  message_loop_.RunUntilIdle();
+  RunLoop().RunUntilIdle();
 }
 
 void PowerMonitorTestSource::GenerateSuspendEvent() {
   ProcessPowerEvent(SUSPEND_EVENT);
-  message_loop_.RunUntilIdle();
+  RunLoop().RunUntilIdle();
 }
 
 void PowerMonitorTestSource::GenerateResumeEvent() {
   ProcessPowerEvent(RESUME_EVENT);
-  message_loop_.RunUntilIdle();
+  RunLoop().RunUntilIdle();
 }
 
 bool PowerMonitorTestSource::IsOnBatteryPowerImpl() {
