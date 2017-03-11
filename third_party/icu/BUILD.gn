@@ -67,6 +67,7 @@ config("icu_code") {
       # complain about it.
       "-Wno-deprecated-declarations",
       "-Wno-unused-function",
+      "-Wno-unused-result",
     ]
   }
   if (is_clang) {
