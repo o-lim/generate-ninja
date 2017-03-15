@@ -19,7 +19,10 @@ URL_TEMPLATE = ('https://commondatastorage.googleapis.com/chromeos-localmirror/'
 SOURCES = [
   {
     'name': 'notofonts',
-    'version': '20160310'
+    'version': '20161129'
+  }, {
+    'name': 'noto-cjk',
+    'version': '20150910'
   }, {
     'name': 'robotofonts',
     'version': '2.132'
@@ -78,6 +81,36 @@ def main(args):
       os.chmod(os.path.join(base, dir), 0755)
     for file in files:
       os.chmod(os.path.join(base, file), 0644)
+
+  print """\
+
+Chrome OS font rendering settings are specified using Fontconfig. If your
+system's configuration doesn't match Chrome OS's (which vary for different
+devices), fonts may be rendered with different subpixel rendering, subpixel
+positioning, or hinting settings. This may affect font metrics.
+
+Chrome OS's settings are stored in the media-libs/fontconfig package, which is
+at src/third_party/chromiumos-overlay/media-libs/fontconfig in a Chrome OS
+checkout. You can configure your system to match Chrome OS's defaults by
+creating or editing a ~/.fonts.conf file:
+
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <match target="font">
+    <edit name="antialias" mode="assign"><bool>true</bool></edit>
+    <edit name="autohint" mode="assign"><bool>true</bool></edit>
+    <edit name="hinting" mode="assign"><bool>true</bool></edit>
+    <edit name="hintstyle" mode="assign"><const>hintslight</const></edit>
+    <edit name="rgba" mode="assign"><const>rgb</const></edit>
+  </match>
+</fontconfig>
+
+To load additional per-font configs (and assuming you have Chrome OS checked
+out), add the following immediately before the "</fontconfig>" line:
+
+  <include ignore_missing="yes">/path/to/src/third_party/chromiumos-overlay/media-libs/fontconfig/files/local.conf</include>
+"""
 
   return 0
 

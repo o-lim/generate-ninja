@@ -34,113 +34,113 @@ void SetDirOrDotWithNoSlash(const std::string& dir, std::string* dest) {
 }  // namespace
 
 const char kSourceExpansion_Help[] =
-    "How Source Expansion Works\n"
-    "\n"
-    "  Source expansion is used for the action_foreach and copy target types\n"
-    "  to map source file names to output file names or arguments.\n"
-    "\n"
-    "  To perform source expansion in the outputs, GN maps every entry in the\n"
-    "  sources to every entry in the outputs list, producing the cross\n"
-    "  product of all combinations, expanding placeholders (see below).\n"
-    "\n"
-    "  Source expansion in the args works similarly, but performing the\n"
-    "  placeholder substitution produces a different set of arguments for\n"
-    "  each invocation of the script.\n"
-    "\n"
-    "  If no placeholders are found, the outputs or args list will be treated\n"
-    "  as a static list of literal file names that do not depend on the\n"
-    "  sources.\n"
-    "\n"
-    "  See \"gn help copy\" and \"gn help action_foreach\" for more on how\n"
-    "  this is applied.\n"
-    "\n"
-    "Placeholders\n"
-    "\n"
-    "  This section discusses only placeholders for actions. There are other\n"
-    "  placeholders used in the definition of tools. See \"gn help tool\" for\n"
-    "  those.\n"
-    "\n"
-    "  {{source}}\n"
-    "      The name of the source file including directory (*). This will\n"
-    "      generally be used for specifying inputs to a script in the\n"
-    "      \"args\" variable.\n"
-    "        \"//foo/bar/baz.txt\" => \"../../foo/bar/baz.txt\"\n"
-    "\n"
-    "  {{source_file_part}}\n"
-    "      The file part of the source including the extension.\n"
-    "        \"//foo/bar/baz.txt\" => \"baz.txt\"\n"
-    "\n"
-    "  {{source_name_part}}\n"
-    "      The filename part of the source file with no directory or\n"
-    "      extension. This will generally be used for specifying a\n"
-    "      transformation from a source file to a destination file with the\n"
-    "      same name but different extension.\n"
-    "        \"//foo/bar/baz.txt\" => \"baz\"\n"
-    "\n"
-    "  {{source_dir}}\n"
-    "      The directory (*) containing the source file with no\n"
-    "      trailing slash.\n"
-    "        \"//foo/bar/baz.txt\" => \"../../foo/bar\"\n"
-    "\n"
-    "  {{source_root_relative_dir}}\n"
-    "      The path to the source file's directory relative to the source\n"
-    "      root, with no leading \"//\" or trailing slashes. If the path is\n"
-    "      system-absolute, (beginning in a single slash) this will just\n"
-    "      return the path with no trailing slash. This value will always\n"
-    "      be the same, regardless of whether it appears in the \"outputs\"\n"
-    "      or \"args\" section.\n"
-    "        \"//foo/bar/baz.txt\" => \"foo/bar\"\n"
-    "\n"
-    "  {{source_gen_dir}}\n"
-    "      The generated file directory (*) corresponding to the source\n"
-    "      file's path. This will be different than the target's generated\n"
-    "      file directory if the source file is in a different directory\n"
-    "      than the BUILD.gn file.\n"
-    "        \"//foo/bar/baz.txt\" => \"gen/foo/bar\"\n"
-    "\n"
-    "  {{source_out_dir}}\n"
-    "      The object file directory (*) corresponding to the source file's\n"
-    "      path, relative to the build directory. this us be different than\n"
-    "      the target's out directory if the source file is in a different\n"
-    "      directory than the build.gn file.\n"
-    "        \"//foo/bar/baz.txt\" => \"obj/foo/bar\"\n"
-    "\n"
-    "(*) Note on directories\n"
-    "\n"
-    "  Paths containing directories (except the source_root_relative_dir)\n"
-    "  will be different depending on what context the expansion is evaluated\n"
-    "  in. Generally it should \"just work\" but it means you can't\n"
-    "  concatenate strings containing these values with reasonable results.\n"
-    "\n"
-    "  Details: source expansions can be used in the \"outputs\" variable,\n"
-    "  the \"args\" variable, and in calls to \"process_file_template\". The\n"
-    "  \"args\" are passed to a script which is run from the build directory,\n"
-    "  so these directories will relative to the build directory for the\n"
-    "  script to find. In the other cases, the directories will be source-\n"
-    "  absolute (begin with a \"//\") because the results of those expansions\n"
-    "  will be handled by GN internally.\n"
-    "\n"
-    "Examples\n"
-    "\n"
-    "  Non-varying outputs:\n"
-    "    action(\"hardcoded_outputs\") {\n"
-    "      sources = [ \"input1.idl\", \"input2.idl\" ]\n"
-    "      outputs = [ \"$target_out_dir/output1.dat\",\n"
-    "                  \"$target_out_dir/output2.dat\" ]\n"
-    "    }\n"
-    "  The outputs in this case will be the two literal files given.\n"
-    "\n"
-    "  Varying outputs:\n"
-    "    action_foreach(\"varying_outputs\") {\n"
-    "      sources = [ \"input1.idl\", \"input2.idl\" ]\n"
-    "      outputs = [ \"{{source_gen_dir}}/{{source_name_part}}.h\",\n"
-    "                  \"{{source_gen_dir}}/{{source_name_part}}.cc\" ]\n"
-    "    }\n"
-    "  Performing source expansion will result in the following output names:\n"
-    "    //out/Debug/obj/mydirectory/input1.h\n"
-    "    //out/Debug/obj/mydirectory/input1.cc\n"
-    "    //out/Debug/obj/mydirectory/input2.h\n"
-    "    //out/Debug/obj/mydirectory/input2.cc\n";
+    R"(How Source Expansion Works
+
+  Source expansion is used for the action_foreach and copy target types to map
+  source file names to output file names or arguments.
+
+  To perform source expansion in the outputs, GN maps every entry in the
+  sources to every entry in the outputs list, producing the cross product of
+  all combinations, expanding placeholders (see below).
+
+  Source expansion in the args works similarly, but performing the placeholder
+  substitution produces a different set of arguments for each invocation of the
+  script.
+
+  If no placeholders are found, the outputs or args list will be treated as a
+  static list of literal file names that do not depend on the sources.
+
+  See "gn help copy" and "gn help action_foreach" for more on how this is
+  applied.
+
+Placeholders
+
+  This section discusses only placeholders for actions. There are other
+  placeholders used in the definition of tools. See "gn help tool" for those.
+
+  {{source}}
+      The name of the source file including directory (*). This will generally
+      be used for specifying inputs to a script in the "args" variable.
+        "//foo/bar/baz.txt" => "../../foo/bar/baz.txt"
+
+  {{source_file_part}}
+      The file part of the source including the extension.
+        "//foo/bar/baz.txt" => "baz.txt"
+
+  {{source_name_part}}
+      The filename part of the source file with no directory or extension. This
+      will generally be used for specifying a transformation from a source file
+      to a destination file with the same name but different extension.
+        "//foo/bar/baz.txt" => "baz"
+
+  {{source_dir}}
+      The directory (*) containing the source file with no trailing slash.
+        "//foo/bar/baz.txt" => "../../foo/bar"
+
+  {{source_root_relative_dir}}
+      The path to the source file's directory relative to the source root, with
+      no leading "//" or trailing slashes. If the path is system-absolute,
+      (beginning in a single slash) this will just return the path with no
+      trailing slash. This value will always be the same, regardless of whether
+      it appears in the "outputs" or "args" section.
+        "//foo/bar/baz.txt" => "foo/bar"
+
+  {{source_gen_dir}}
+      The generated file directory (*) corresponding to the source file's path.
+      This will be different than the target's generated file directory if the
+      source file is in a different directory than the BUILD.gn file.
+        "//foo/bar/baz.txt" => "gen/foo/bar"
+
+  {{source_out_dir}}
+      The object file directory (*) corresponding to the source file's path,
+      relative to the build directory. this us be different than the target's
+      out directory if the source file is in a different directory than the
+      build.gn file.
+        "//foo/bar/baz.txt" => "obj/foo/bar"
+
+  {{source_target_relative}}
+      The path to the source file relative to the target's directory. This will
+      generally be used for replicating the source directory layout in the
+      output directory. This can only be used in actions and it is an error to
+      use in process_file_template where there is no "target".
+        "//foo/bar/baz.txt" => "baz.txt"
+
+(*) Note on directories
+
+  Paths containing directories (except the source_root_relative_dir) will be
+  different depending on what context the expansion is evaluated in. Generally
+  it should "just work" but it means you can't concatenate strings containing
+  these values with reasonable results.
+
+  Details: source expansions can be used in the "outputs" variable, the "args"
+  variable, and in calls to "process_file_template". The "args" are passed to a
+  script which is run from the build directory, so these directories will
+  relative to the build directory for the script to find. In the other cases,
+  the directories will be source- absolute (begin with a "//") because the
+  results of those expansions will be handled by GN internally.
+
+Examples
+
+  Non-varying outputs:
+    action("hardcoded_outputs") {
+      sources = [ "input1.idl", "input2.idl" ]
+      outputs = [ "$target_out_dir/output1.dat",
+                  "$target_out_dir/output2.dat" ]
+    }
+  The outputs in this case will be the two literal files given.
+
+  Varying outputs:
+    action_foreach("varying_outputs") {
+      sources = [ "input1.idl", "input2.idl" ]
+      outputs = [ "{{source_gen_dir}}/{{source_name_part}}.h",
+                  "{{source_gen_dir}}/{{source_name_part}}.cc" ]
+    }
+  Performing source expansion will result in the following output names:
+    //out/Debug/obj/mydirectory/input1.h
+    //out/Debug/obj/mydirectory/input1.cc
+    //out/Debug/obj/mydirectory/input2.h
+    //out/Debug/obj/mydirectory/input2.cc
+)";
 
 // static
 void SubstitutionWriter::WriteWithNinjaVariables(
@@ -203,11 +203,12 @@ void SubstitutionWriter::GetListAsOutputFiles(
 
 // static
 SourceFile SubstitutionWriter::ApplyPatternToSource(
+      const Target* target,
       const Settings* settings,
       const SubstitutionPattern& pattern,
       const SourceFile& source) {
   std::string result_value = ApplyPatternToSourceAsString(
-      settings, pattern, source);
+      target, settings, pattern, source);
   CHECK(!result_value.empty() && result_value[0] == '/')
       << "The result of the pattern \""
       << pattern.AsString()
@@ -217,6 +218,7 @@ SourceFile SubstitutionWriter::ApplyPatternToSource(
 
 // static
 std::string SubstitutionWriter::ApplyPatternToSourceAsString(
+    const Target* target,
     const Settings* settings,
     const SubstitutionPattern& pattern,
     const SourceFile& source) {
@@ -226,7 +228,7 @@ std::string SubstitutionWriter::ApplyPatternToSourceAsString(
       result_value.append(subrange.literal);
     } else {
       result_value.append(
-          GetSourceSubstitution(settings, source, subrange.type,
+          GetSourceSubstitution(target, settings, source, subrange.type,
                                 OUTPUT_ABSOLUTE, SourceDir()));
     }
   }
@@ -235,78 +237,89 @@ std::string SubstitutionWriter::ApplyPatternToSourceAsString(
 
 // static
 OutputFile SubstitutionWriter::ApplyPatternToSourceAsOutputFile(
+    const Target* target,
     const Settings* settings,
     const SubstitutionPattern& pattern,
     const SourceFile& source) {
-  SourceFile result_as_source = ApplyPatternToSource(settings, pattern, source);
+  SourceFile result_as_source = ApplyPatternToSource(
+      target, settings, pattern, source);
   return OutputFile(settings->build_settings(), result_as_source);
 }
 
 // static
 void SubstitutionWriter::ApplyListToSource(
+    const Target* target,
     const Settings* settings,
     const SubstitutionList& list,
     const SourceFile& source,
     std::vector<SourceFile>* output) {
   for (const auto& item : list.list())
-    output->push_back(ApplyPatternToSource(settings, item, source));
+    output->push_back(ApplyPatternToSource(target, settings, item, source));
 }
 
 // static
 void SubstitutionWriter::ApplyListToSourceAsString(
+    const Target* target,
     const Settings* settings,
     const SubstitutionList& list,
     const SourceFile& source,
     std::vector<std::string>* output) {
   for (const auto& item : list.list())
-    output->push_back(ApplyPatternToSourceAsString(settings, item, source));
+    output->push_back(ApplyPatternToSourceAsString(
+        target, settings, item, source));
 }
 
 // static
 void SubstitutionWriter::ApplyListToSourceAsOutputFile(
+    const Target* target,
     const Settings* settings,
     const SubstitutionList& list,
     const SourceFile& source,
     std::vector<OutputFile>* output) {
   for (const auto& item : list.list())
-    output->push_back(ApplyPatternToSourceAsOutputFile(settings, item, source));
+    output->push_back(ApplyPatternToSourceAsOutputFile(
+        target, settings, item, source));
 }
 
 // static
 void SubstitutionWriter::ApplyListToSources(
+    const Target* target,
     const Settings* settings,
     const SubstitutionList& list,
     const std::vector<SourceFile>& sources,
     std::vector<SourceFile>* output) {
   output->clear();
   for (const auto& source : sources)
-    ApplyListToSource(settings, list, source, output);
+    ApplyListToSource(target, settings, list, source, output);
 }
 
 // static
 void SubstitutionWriter::ApplyListToSourcesAsString(
+    const Target* target,
     const Settings* settings,
     const SubstitutionList& list,
     const std::vector<SourceFile>& sources,
     std::vector<std::string>* output) {
   output->clear();
   for (const auto& source : sources)
-    ApplyListToSourceAsString(settings, list, source, output);
+    ApplyListToSourceAsString(target, settings, list, source, output);
 }
 
 // static
 void SubstitutionWriter::ApplyListToSourcesAsOutputFile(
+    const Target* target,
     const Settings* settings,
     const SubstitutionList& list,
     const std::vector<SourceFile>& sources,
     std::vector<OutputFile>* output) {
   output->clear();
   for (const auto& source : sources)
-    ApplyListToSourceAsOutputFile(settings, list, source, output);
+    ApplyListToSourceAsOutputFile(target, settings, list, source, output);
 }
 
 // static
 void SubstitutionWriter::WriteNinjaVariablesForSource(
+    const Target* target,
     const Settings* settings,
     const SourceFile& source,
     const std::vector<SubstitutionType>& types,
@@ -321,7 +334,8 @@ void SubstitutionWriter::WriteNinjaVariablesForSource(
       out << "  " << kSubstitutionNinjaNames[type] << " = ";
         EscapeStringToStream(
             out,
-            GetSourceSubstitution(settings, source, type, OUTPUT_RELATIVE,
+            GetSourceSubstitution(target, settings, source, type,
+                                  OUTPUT_RELATIVE,
                                   settings->build_settings()->build_dir()),
             escape_options);
       out << std::endl;
@@ -331,6 +345,7 @@ void SubstitutionWriter::WriteNinjaVariablesForSource(
 
 // static
 std::string SubstitutionWriter::GetSourceSubstitution(
+    const Target* target,
     const Settings* settings,
     const SourceFile& source,
     SubstitutionType type,
@@ -372,6 +387,16 @@ std::string SubstitutionWriter::GetSourceSubstitution(
       to_rebase = DirectoryWithNoLastSlash(GetSubBuildDirAsSourceDir(
           BuildDirContext(settings), source.GetDir(), BuildDirType::OBJ));
       break;
+
+    case SUBSTITUTION_SOURCE_TARGET_RELATIVE:
+      if (target) {
+        return RebasePath(source.value(), target->label().dir(),
+            settings->build_settings()->root_path_utf8());
+      }
+      NOTREACHED()
+          << "Cannot use substitution " << kSubstitutionNames[type]
+          << " without target";
+      return std::string();
 
     default:
       NOTREACHED()
@@ -509,7 +534,7 @@ std::string SubstitutionWriter::GetCompilerSubstitution(
 
   // Fall-through to the source ones.
   return GetSourceSubstitution(
-      target->settings(), source, type, OUTPUT_RELATIVE,
+      target, target->settings(), source, type, OUTPUT_RELATIVE,
       target->settings()->build_settings()->build_dir());
 }
 

@@ -12,6 +12,7 @@
 #include "base/android/early_trace_event_binding.h"
 #include "base/android/field_trial_list.h"
 #include "base/android/important_file_writer_android.h"
+#include "base/android/java_exception_reporter.h"
 #include "base/android/java_handler_thread.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_registrar.h"
@@ -19,6 +20,8 @@
 #include "base/android/path_service_android.h"
 #include "base/android/record_histogram.h"
 #include "base/android/record_user_action.h"
+#include "base/android/statistics_recorder_android.h"
+#include "base/android/time_utils.h"
 #include "base/android/trace_event_binding.h"
 #include "base/macros.h"
 #include "base/message_loop/message_pump_android.h"
@@ -42,12 +45,16 @@ static RegistrationMethod kBaseRegisteredMethods[] = {
      base::android::RegisterImportantFileWriterAndroid},
     {"MemoryPressureListenerAndroid",
      base::android::MemoryPressureListenerAndroid::Register},
+    {"JavaExceptionReporter", base::android::RegisterJavaExceptionReporterJni},
     {"JavaHandlerThread", base::android::JavaHandlerThread::RegisterBindings},
     {"PathService", base::android::RegisterPathService},
     {"PowerMonitor", base::RegisterPowerMonitor},
     {"RecordHistogram", base::android::RegisterRecordHistogram},
     {"RecordUserAction", base::android::RegisterRecordUserAction},
+    {"StatisticsRecorderAndroid",
+     base::android::RegisterStatisticsRecorderAndroid},
     {"SystemMessageHandler", base::MessagePumpForUI::RegisterBindings},
+    {"TimeUtils", base::android::RegisterTimeUtils},
     {"TraceEvent", base::android::RegisterTraceEvent},
 };
 

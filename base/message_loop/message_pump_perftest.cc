@@ -95,8 +95,7 @@ class ScheduleWorkTest : public testing::Test {
     max_batch_times_.reset(new base::TimeDelta[num_scheduling_threads]);
 
     for (int i = 0; i < num_scheduling_threads; ++i) {
-      scheduling_threads.push_back(
-          WrapUnique(new Thread("posting thread")));
+      scheduling_threads.push_back(MakeUnique<Thread>("posting thread"));
       scheduling_threads[i]->Start();
     }
 
@@ -273,7 +272,7 @@ class PostTaskTest : public testing::Test {
         while (!loop_local_queue.empty()) {
           PendingTask t = std::move(loop_local_queue.front());
           loop_local_queue.pop();
-          loop.RunTask(t);
+          loop.RunTask(&t);
         }
       }
 

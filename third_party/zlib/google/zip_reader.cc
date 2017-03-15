@@ -10,7 +10,6 @@
 #include "base/files/file.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -392,7 +391,7 @@ void ZipReader::ExtractCurrentEntryToFilePathAsync(
     return;
   }
 
-  base::MessageLoop::current()->task_runner()->PostTask(
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::Bind(&ZipReader::ExtractChunk, weak_ptr_factory_.GetWeakPtr(),
                  Passed(std::move(output_file)), success_callback,
@@ -499,7 +498,7 @@ void ZipReader::ExtractChunk(base::File output_file,
 
     progress_callback.Run(current_progress);
 
-    base::MessageLoop::current()->task_runner()->PostTask(
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
         base::Bind(&ZipReader::ExtractChunk, weak_ptr_factory_.GetWeakPtr(),
                    Passed(std::move(output_file)), success_callback,
@@ -515,11 +514,9 @@ FileWriterDelegate::FileWriterDelegate(base::File* file)
 }
 
 FileWriterDelegate::~FileWriterDelegate() {
-#if !defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)
-  const bool success =
-#endif
-      file_->SetLength(file_length_);
-  DPLOG_IF(ERROR, !success) << "Failed updating length of written file";
+  if (!file_->SetLength(file_length_)) {
+    DPLOG(ERROR) << "Failed updating length of written file";
+  }
 }
 
 bool FileWriterDelegate::PrepareOutput() {

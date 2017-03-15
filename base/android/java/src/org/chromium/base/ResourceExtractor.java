@@ -4,7 +4,6 @@
 
 package org.chromium.base;
 
-import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
@@ -12,15 +11,15 @@ import android.os.AsyncTask;
 import android.os.Handler;
 import android.os.Looper;
 
-import org.chromium.base.annotations.SuppressFBWarnings;
-
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 
@@ -35,23 +34,7 @@ public class ResourceExtractor {
     private static final String V8_NATIVES_DATA_FILENAME = "natives_blob.bin";
     private static final String V8_SNAPSHOT_DATA_FILENAME = "snapshot_blob.bin";
     private static final String APP_VERSION_PREF = "org.chromium.base.ResourceExtractor.Version";
-
-    private static ResourceEntry[] sResourcesToExtract = new ResourceEntry[0];
-
-    /**
-     * Holds information about a res/raw file (e.g. locale .pak files).
-     */
-    public static final class ResourceEntry {
-        public final int resourceId;
-        public final String pathWithinApk;
-        public final String extractedFileName;
-
-        public ResourceEntry(int resourceId, String pathWithinApk, String extractedFileName) {
-            this.resourceId = resourceId;
-            this.pathWithinApk = pathWithinApk;
-            this.extractedFileName = extractedFileName;
-        }
-    }
+    private static final String FALLBACK_LOCALE = "en-US";
 
     private class ExtractTask extends AsyncTask<Void, Void, Void> {
         private static final int BUFFER_SIZE = 16 * 1024;
@@ -107,16 +90,16 @@ public class ResourceExtractor {
             TraceEvent.begin("WalkAssets");
             byte[] buffer = new byte[BUFFER_SIZE];
             try {
-                for (ResourceEntry entry : sResourcesToExtract) {
-                    File output = new File(outputDir, entry.extractedFileName);
+                for (String assetName : mAssetsToExtract) {
+                    File output = new File(outputDir, assetName);
                     // TODO(agrieve): It would be better to check that .length == expectedLength.
                     //     http://crbug.com/606413
                     if (output.length() != 0) {
                         continue;
                     }
                     TraceEvent.begin("ExtractResource");
-                    InputStream inputStream = mContext.getResources().openRawResource(
-                            entry.resourceId);
+                    InputStream inputStream =
+                            ContextUtils.getApplicationContext().getAssets().open(assetName);
                     try {
                         extractResourceHelper(inputStream, output, buffer);
                     } finally {
@@ -128,7 +111,7 @@ public class ResourceExtractor {
                 // Try to recover here, can we try again after deleting files instead of
                 // returning null? It might be useful to gather UMA here too to track if
                 // this happens with regularity.
-                Log.w(TAG, "Exception unpacking required pak resources: %s", e.getMessage());
+                Log.w(TAG, "Exception unpacking required pak asset: %s", e.getMessage());
                 deleteFiles();
                 return;
             } finally {
@@ -166,42 +149,50 @@ public class ResourceExtractor {
 
         /** Returns a number that is different each time the apk changes. */
         private long getApkVersion() {
-            PackageManager pm = mContext.getPackageManager();
+            PackageManager pm = ContextUtils.getApplicationContext().getPackageManager();
             try {
-                // More appropriate would be versionCode, but it doesn't change while developing.
-                PackageInfo pi = pm.getPackageInfo(mContext.getPackageName(), 0);
-                return pi.lastUpdateTime;
+                // Use lastUpdateTime since versionCode does not change when developing locally,
+                // but also use versionCode since it is possible for Chrome to be updated without
+                // the lastUpdateTime being changed (http://crbug.org/673458).
+                PackageInfo pi =
+                        pm.getPackageInfo(ContextUtils.getApplicationContext().getPackageName(), 0);
+                // Xor'ing versionCode into upper half of the long to ensure it doesn't somehow
+                // exactly offset an increase in time.
+                return pi.lastUpdateTime ^ (((long) pi.versionCode) << 32);
             } catch (PackageManager.NameNotFoundException e) {
                 throw new RuntimeException(e);
             }
         }
     }
 
-    private final Context mContext;
     private ExtractTask mExtractTask;
+    private final String[] mAssetsToExtract = detectFilesToExtract();
 
     private static ResourceExtractor sInstance;
 
-    public static ResourceExtractor get(Context context) {
+    public static ResourceExtractor get() {
         if (sInstance == null) {
-            sInstance = new ResourceExtractor(context);
+            sInstance = new ResourceExtractor();
         }
         return sInstance;
     }
 
-    /**
-     * Specifies the files that should be extracted from the APK.
-     * and moved to {@link #getOutputDir()}.
-     */
-    @SuppressFBWarnings("EI_EXPOSE_STATIC_REP2")
-    public static void setResourcesToExtract(ResourceEntry[] entries) {
-        assert (sInstance == null || sInstance.mExtractTask == null)
-                : "Must be called before startExtractingResources is called";
-        sResourcesToExtract = entries;
-    }
-
-    private ResourceExtractor(Context context) {
-        mContext = context.getApplicationContext();
+    private static String[] detectFilesToExtract() {
+        Locale defaultLocale = Locale.getDefault();
+        String language = LocaleUtils.getUpdatedLanguageForChromium(defaultLocale.getLanguage());
+        // Currenty (Oct 2016), this array can be as big as 4 entries, so using a capacity
+        // that allows a bit of growth, but is still in the right ballpark..
+        ArrayList<String> activeLocalePakFiles = new ArrayList<String>(6);
+        for (String locale : BuildConfig.COMPRESSED_LOCALES) {
+            if (locale.startsWith(language)) {
+                activeLocalePakFiles.add(locale + ".pak");
+            }
+        }
+        if (activeLocalePakFiles.isEmpty() && BuildConfig.COMPRESSED_LOCALES.length > 0) {
+            assert Arrays.asList(BuildConfig.COMPRESSED_LOCALES).contains(FALLBACK_LOCALE);
+            activeLocalePakFiles.add(FALLBACK_LOCALE + ".pak");
+        }
+        return activeLocalePakFiles.toArray(new String[activeLocalePakFiles.size()]);
     }
 
     /**
@@ -282,7 +273,7 @@ public class ResourceExtractor {
     }
 
     private File getAppDataDir() {
-        return new File(PathUtils.getDataDirectory(mContext));
+        return new File(PathUtils.getDataDirectory());
     }
 
     private File getOutputDir() {
@@ -329,6 +320,6 @@ public class ResourceExtractor {
      * Pak extraction not necessarily required by the embedder.
      */
     private static boolean shouldSkipPakExtraction() {
-        return sResourcesToExtract.length == 0;
+        return get().mAssetsToExtract.length == 0;
     }
 }

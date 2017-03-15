@@ -13,8 +13,6 @@ group("linux") {
 # is applied to all targets. It is here to separate out the logic that is
 # Linux-only. This is not applied to Android, but is applied to ChromeOS.
 config("compiler") {
-  cflags = [ "-pthread" ]
-  ldflags = [ "-pthread" ]
 }
 
 # This is included by reference in the //build/config/compiler:runtime_library
@@ -93,6 +91,10 @@ if (use_glib) {
       "gmodule-2.0",
       "gobject-2.0",
       "gthread-2.0",
+    ]
+    defines = [
+      "GLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_2_32",
+      "GLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_2_26",
     ]
   }
 }

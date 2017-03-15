@@ -120,7 +120,7 @@ TEST_F(AnalyzerTest, AllWasPruned) {
   RunBasicTest(
       "{"
       "  \"files\": [ \"//d/b.cc\" ],"
-      "  \"compile_targets\": [ \"all\" ],"
+      "  \"additional_compile_targets\": [ \"all\" ],"
       "  \"test_targets\": [ ]"
       "}",
       "{"
@@ -134,7 +134,7 @@ TEST_F(AnalyzerTest, NoDependency) {
   RunBasicTest(
       "{"
       "  \"files\":[ \"//missing.cc\" ],"
-      "  \"compile_targets\": [ \"all\" ],"
+      "  \"additional_compile_targets\": [ \"all\" ],"
       "  \"test_targets\": [ \"//:a\" ]"
       "}",
       "{"
@@ -148,7 +148,7 @@ TEST_F(AnalyzerTest, NoFilesNoTargets) {
   RunBasicTest(
       "{"
       "  \"files\": [],"
-      "  \"compile_targets\": [],"
+      "  \"additional_compile_targets\": [],"
       "  \"test_targets\": []"
       "}",
       "{"
@@ -162,12 +162,75 @@ TEST_F(AnalyzerTest, OneTestTargetModified) {
   RunBasicTest(
       "{"
       "  \"files\": [ \"//a.cc\" ],"
-      "  \"compile_targets\": [],"
+      "  \"additional_compile_targets\": [],"
       "  \"test_targets\": [ \"//:a\" ]"
       "}",
       "{"
       "\"compile_targets\":[],"
       "\"status\":\"Found dependency\","
+      "\"test_targets\":[\"//:a\"]"
+      "}");
+}
+
+TEST_F(AnalyzerTest, FilesArentSourceAbsolute) {
+  RunBasicTest(
+      "{"
+      "  \"files\": [ \"a.cc\" ],"
+      "  \"additional_compile_targets\": [],"
+      "  \"test_targets\": [ \"//:a\" ]"
+      "}",
+      "{"
+      "\"error\":"
+      "\"\\\"a.cc\\\" is not a source-absolute or absolute path.\","
+      "\"invalid_targets\":[]"
+      "}");
+}
+
+TEST_F(AnalyzerTest, WrongInputFields) {
+  RunBasicTest(
+      "{"
+      "  \"files\": [ \"//a.cc\" ],"
+      "  \"compile_targets\": [],"
+      "  \"test_targets\": [ \"//:a\" ]"
+      "}",
+      "{"
+      "\"error\":"
+      "\"Input does not have a key named "
+      "\\\"additional_compile_targets\\\" with a list value.\","
+      "\"invalid_targets\":[]"
+      "}");
+}
+
+TEST_F(AnalyzerTest, BuildFilesWereModified) {
+  // This tests that if a build file is modified, we bail out early with
+  // "Found dependency (all)" error since we can't handle changes to
+  // build files yet (crbug.com/555273).
+  RunBasicTest(
+      "{"
+      "  \"files\": [ \"//a.cc\", \"//BUILD.gn\" ],"
+      "  \"additional_compile_targets\": [],"
+      "  \"test_targets\": [ \"//:a\" ]"
+      "}",
+      "{"
+      "\"compile_targets\":[\"//:a\"],"
+      "\"status\":\"Found dependency (all)\","
+      "\"test_targets\":[\"//:a\"]"
+      "}");
+}
+
+TEST_F(AnalyzerTest, BuildFilesWereModifiedAndCompilingAll) {
+  // This tests that if a build file is modified, we bail out early with
+  // "Found dependency (all)" error since we can't handle changes to
+  // build files yet (crbug.com/555273).
+  RunBasicTest(
+      "{"
+      "  \"files\": [ \"//a.cc\", \"//BUILD.gn\" ],"
+      "  \"additional_compile_targets\": [ \"all\" ],"
+      "  \"test_targets\": [ \"//:a\" ]"
+      "}",
+      "{"
+      "\"compile_targets\":[\"all\"],"
+      "\"status\":\"Found dependency (all)\","
       "\"test_targets\":[\"//:a\"]"
       "}");
 }

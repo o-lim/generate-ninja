@@ -6,13 +6,14 @@
 #define BASE_FILES_FILE_PATH_WATCHER_KQUEUE_H_
 
 #include <sys/event.h>
+
+#include <memory>
 #include <vector>
 
+#include "base/files/file_descriptor_watcher_posix.h"
 #include "base/files/file_path.h"
 #include "base/files/file_path_watcher.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
-#include "base/single_thread_task_runner.h"
 
 namespace base {
 
@@ -27,27 +28,16 @@ namespace base {
 // detect the creation and deletion of files, just not the modification of
 // files. It does however detect the attribute changes that the FSEvents impl
 // would miss.
-class FilePathWatcherKQueue : public FilePathWatcher::PlatformDelegate,
-                              public MessageLoopForIO::Watcher,
-                              public MessageLoop::DestructionObserver {
+class FilePathWatcherKQueue : public FilePathWatcher::PlatformDelegate {
  public:
   FilePathWatcherKQueue();
-
-  // MessageLoopForIO::Watcher overrides.
-  void OnFileCanReadWithoutBlocking(int fd) override;
-  void OnFileCanWriteWithoutBlocking(int fd) override;
-
-  // MessageLoop::DestructionObserver overrides.
-  void WillDestroyCurrentMessageLoop() override;
+  ~FilePathWatcherKQueue() override;
 
   // FilePathWatcher::PlatformDelegate overrides.
   bool Watch(const FilePath& path,
              bool recursive,
              const FilePathWatcher::Callback& callback) override;
   void Cancel() override;
-
- protected:
-  ~FilePathWatcherKQueue() override;
 
  private:
   class EventData {
@@ -60,8 +50,8 @@ class FilePathWatcherKQueue : public FilePathWatcher::PlatformDelegate,
 
   typedef std::vector<struct kevent> EventVector;
 
-  // Can only be called on |io_task_runner_|'s thread.
-  void CancelOnMessageLoopThread() override;
+  // Called when data is available in |kqueue_|.
+  void OnKQueueReadable();
 
   // Returns true if the kevent values are error free.
   bool AreKeventValuesValid(struct kevent* kevents, int count);
@@ -119,11 +109,13 @@ class FilePathWatcherKQueue : public FilePathWatcher::PlatformDelegate,
   }
 
   EventVector events_;
-  scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
-  MessageLoopForIO::FileDescriptorWatcher kqueue_watcher_;
   FilePathWatcher::Callback callback_;
   FilePath target_;
   int kqueue_;
+
+  // Throughout the lifetime of this, OnKQueueReadable() will be called when
+  // data is available in |kqueue_|.
+  std::unique_ptr<FileDescriptorWatcher::Controller> kqueue_watch_controller_;
 
   DISALLOW_COPY_AND_ASSIGN(FilePathWatcherKQueue);
 };

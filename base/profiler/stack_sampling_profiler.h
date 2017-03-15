@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "base/atomicops.h"
 #include "base/base_export.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
@@ -107,14 +108,37 @@ class BASE_EXPORT StackSamplingProfiler {
     size_t module_index;
   };
 
-  // Sample represents a set of stack frames.
-  using Sample = std::vector<Frame>;
+  // Sample represents a set of stack frames with some extra information.
+  struct BASE_EXPORT Sample {
+    Sample();
+    Sample(const Sample& sample);
+    ~Sample();
+
+    // These constructors are used only during testing.
+    Sample(const Frame& frame);
+    Sample(const std::vector<Frame>& frames);
+
+    // The entire stack frame when the sample is taken.
+    std::vector<Frame> frames;
+
+    // A bit-field indicating which process milestones have passed. This can be
+    // used to tell where in the process lifetime the samples are taken. Just
+    // as a "lifetime" can only move forward, these bits mark the milestones of
+    // the processes life as they occur. Bits can be set but never reset. The
+    // actual definition of the individual bits is left to the user of this
+    // module.
+    uint32_t process_milestones = 0;
+  };
 
   // CallStackProfile represents a set of samples.
   struct BASE_EXPORT CallStackProfile {
     CallStackProfile();
-    CallStackProfile(const CallStackProfile& other);
+    CallStackProfile(CallStackProfile&& other);
     ~CallStackProfile();
+
+    CallStackProfile& operator=(CallStackProfile&& other);
+
+    CallStackProfile CopyForTesting() const;
 
     std::vector<Module> modules;
     std::vector<Sample> samples;
@@ -124,34 +148,39 @@ class BASE_EXPORT StackSamplingProfiler {
 
     // Time between samples.
     TimeDelta sampling_period;
+
+   private:
+    // Copying is possible but expensive so disallow it except for internal use
+    // (i.e. CopyForTesting); use std::move instead.
+    CallStackProfile(const CallStackProfile& other);
+
+    DISALLOW_ASSIGN(CallStackProfile);
   };
 
   using CallStackProfiles = std::vector<CallStackProfile>;
 
   // Represents parameters that configure the sampling.
   struct BASE_EXPORT SamplingParams {
-    SamplingParams();
+    // Time to delay before first samples are taken.
+    TimeDelta initial_delay = TimeDelta::FromMilliseconds(0);
 
-    // Time to delay before first samples are taken. Defaults to 0.
-    TimeDelta initial_delay;
-
-    // Number of sampling bursts to perform. Defaults to 1.
-    int bursts;
+    // Number of sampling bursts to perform.
+    int bursts = 1;
 
     // Interval between sampling bursts. This is the desired duration from the
-    // start of one burst to the start of the next burst. Defaults to 10s.
-    TimeDelta burst_interval;
+    // start of one burst to the start of the next burst.
+    TimeDelta burst_interval = TimeDelta::FromSeconds(10);
 
-    // Number of samples to record per burst. Defaults to 300.
-    int samples_per_burst;
+    // Number of samples to record per burst.
+    int samples_per_burst = 300;
 
     // Interval between samples during a sampling burst. This is the desired
-    // duration from the start of one sample to the start of the next
-    // sample. Defaults to 100ms.
-    TimeDelta sampling_interval;
+    // duration from the start of one sample to the start of the next sample.
+    TimeDelta sampling_interval = TimeDelta::FromMilliseconds(100);
   };
 
-  // The callback type used to collect completed profiles.
+  // The callback type used to collect completed profiles. The passed |profiles|
+  // are move-only.
   //
   // IMPORTANT NOTE: the callback is invoked on a thread the profiler
   // constructs, rather than on the thread used to construct the profiler and
@@ -159,7 +188,7 @@ class BASE_EXPORT StackSamplingProfiler {
   // threads with message loops that create StackSamplingProfilers, posting a
   // task to the message loop with a copy of the profiles is the recommended
   // thread-safe callback implementation.
-  using CompletedCallback = Callback<void(const CallStackProfiles&)>;
+  using CompletedCallback = Callback<void(CallStackProfiles)>;
 
   // Creates a profiler that sends completed profiles to |callback|. The second
   // constructor is for test purposes.
@@ -188,6 +217,15 @@ class BASE_EXPORT StackSamplingProfiler {
   // specified in the SamplingParams are completed or the profiler is destroyed,
   // whichever occurs first.
   void Stop();
+
+  // Set the current system state that is recorded with each captured stack
+  // frame. This is thread-safe so can be called from anywhere. The parameter
+  // value should be from an enumeration of the appropriate type with values
+  // ranging from 0 to 31, inclusive. This sets bits within Sample field of
+  // |process_milestones|. The actual meanings of these bits are defined
+  // (globally) by the caller(s).
+  static void SetProcessMilestone(int milestone);
+  static void ResetAnnotationsForTesting();
 
  private:
   // SamplingThread is a separate thread used to suspend and sample stacks from
@@ -231,6 +269,16 @@ class BASE_EXPORT StackSamplingProfiler {
     DISALLOW_COPY_AND_ASSIGN(SamplingThread);
   };
 
+  // Adds annotations to a Sample.
+  static void RecordAnnotations(Sample* sample);
+
+  // This global variables holds the current system state and is recorded with
+  // every captured sample, done on a separate thread which is why updates to
+  // this must be atomic. A PostTask to move the the updates to that thread
+  // would skew the timing and a lock could result in deadlock if the thread
+  // making a change was also being profiled and got stopped.
+  static subtle::Atomic32 process_milestones_;
+
   // The thread whose stack will be sampled.
   PlatformThreadId thread_id_;
 
@@ -251,6 +299,12 @@ class BASE_EXPORT StackSamplingProfiler {
 // done in tests and by the metrics provider code.
 BASE_EXPORT bool operator==(const StackSamplingProfiler::Module& a,
                             const StackSamplingProfiler::Module& b);
+BASE_EXPORT bool operator==(const StackSamplingProfiler::Sample& a,
+                            const StackSamplingProfiler::Sample& b);
+BASE_EXPORT bool operator!=(const StackSamplingProfiler::Sample& a,
+                            const StackSamplingProfiler::Sample& b);
+BASE_EXPORT bool operator<(const StackSamplingProfiler::Sample& a,
+                           const StackSamplingProfiler::Sample& b);
 BASE_EXPORT bool operator==(const StackSamplingProfiler::Frame& a,
                             const StackSamplingProfiler::Frame& b);
 BASE_EXPORT bool operator<(const StackSamplingProfiler::Frame& a,

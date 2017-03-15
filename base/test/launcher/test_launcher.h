@@ -21,17 +21,14 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 
-namespace testing {
-class TestCase;
-class TestInfo;
-}
-
 namespace base {
 
 class CommandLine;
 struct LaunchOptions;
 class SequencedWorkerPoolOwner;
+class TaskRunner;
 class TestLauncher;
+class Thread;
 
 // Constants for GTest command-line flags.
 extern const char kGTestFilterFlag[];
@@ -146,10 +143,13 @@ class TestLauncher {
   // Runs all tests in current iteration. Uses callbacks to communicate success.
   void RunTests();
 
+  void CombinePositiveTestFilters(std::vector<std::string> filter_a,
+                                  std::vector<std::string> filter_b);
+
   void RunTestIteration();
 
   // Saves test results summary as JSON if requested from command line.
-  void MaybeSaveSummaryAsJSON();
+  void MaybeSaveSummaryAsJSON(const std::vector<std::string>& additional_tags);
 
   // Called on a worker thread after a child process finishes.
   void OnLaunchTestProcessFinished(
@@ -164,6 +164,10 @@ class TestLauncher {
 
   // Called by the delay timer when no output was made for a while.
   void OnOutputTimeout();
+
+  // Returns the TaskRunner to be used to launch child test processes. This
+  // TaskRunner will have TaskShutdownBehavior::BLOCK_SHUTDOWN semantics.
+  scoped_refptr<TaskRunner> GetTaskRunner();
 
   // Make sure we don't accidentally call the wrong methods e.g. on the worker
   // pool thread. With lots of callbacks used this is non-trivial.
@@ -181,6 +185,7 @@ class TestLauncher {
   int cycles_;  // Number of remaining test itreations, or -1 for infinite.
 
   // Test filters (empty means no filter).
+  bool has_at_least_one_positive_filter_;
   std::vector<std::string> positive_test_filter_;
   std::vector<std::string> negative_test_filter_;
 
@@ -227,8 +232,10 @@ class TestLauncher {
   // Number of jobs to run in parallel.
   size_t parallel_jobs_;
 
-  // Worker pool used to launch processes in parallel.
+  // Worker pool used to launch processes in parallel (|worker_thread_| is used
+  // instead if |parallel_jobs == 1|).
   std::unique_ptr<SequencedWorkerPoolOwner> worker_pool_owner_;
+  std::unique_ptr<Thread> worker_thread_;
 
   DISALLOW_COPY_AND_ASSIGN(TestLauncher);
 };

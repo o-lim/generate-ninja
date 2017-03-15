@@ -10,7 +10,6 @@
 #include "base/atomicops.h"
 #include "base/base_export.h"
 #include "base/debug/stack_trace.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/trace_event/heap_profiler_allocation_context.h"
 
@@ -28,6 +27,17 @@ class BASE_EXPORT AllocationContextTracker {
     DISABLED,       // Don't capture anything
     PSEUDO_STACK,   // GetContextSnapshot() returns pseudo stack trace
     NATIVE_STACK    // GetContextSnapshot() returns native (real) stack trace
+  };
+
+  // Stack frame constructed from trace events in codebase.
+  struct BASE_EXPORT PseudoStackFrame {
+    const char* trace_event_category;
+    const char* trace_event_name;
+
+    bool operator==(const PseudoStackFrame& other) const {
+      return trace_event_category == other.trace_event_category &&
+             trace_event_name == other.trace_event_name;
+    }
   };
 
   // Globally sets capturing mode.
@@ -60,8 +70,8 @@ class BASE_EXPORT AllocationContextTracker {
   static void SetCurrentThreadName(const char* name);
 
   // Starts and ends a new ignore scope between which the allocations are
-  // ignored in the heap profiler. A dummy context that short circuits to
-  // "tracing_overhead" is returned for these allocations.
+  // ignored by the heap profiler. GetContextSnapshot() returns false when
+  // allocations are ignored.
   void begin_ignore_scope() { ignore_scope_depth_++; }
   void end_ignore_scope() {
     if (ignore_scope_depth_)
@@ -69,18 +79,19 @@ class BASE_EXPORT AllocationContextTracker {
   }
 
   // Pushes a frame onto the thread-local pseudo stack.
-  void PushPseudoStackFrame(const char* trace_event_name);
+  void PushPseudoStackFrame(PseudoStackFrame stack_frame);
 
   // Pops a frame from the thread-local pseudo stack.
-  void PopPseudoStackFrame(const char* trace_event_name);
+  void PopPseudoStackFrame(PseudoStackFrame stack_frame);
 
   // Push and pop current task's context. A stack is used to support nested
   // tasks and the top of the stack will be used in allocation context.
   void PushCurrentTaskContext(const char* context);
   void PopCurrentTaskContext(const char* context);
 
-  // Returns a snapshot of the current thread-local context.
-  AllocationContext GetContextSnapshot();
+  // Fills a snapshot of the current thread-local context. Doesn't fill and
+  // returns false if allocations are being ignored.
+  bool GetContextSnapshot(AllocationContext* snapshot);
 
   ~AllocationContextTracker();
 
@@ -90,7 +101,7 @@ class BASE_EXPORT AllocationContextTracker {
   static subtle::Atomic32 capture_mode_;
 
   // The pseudo stack where frames are |TRACE_EVENT| names.
-  std::vector<const char*> pseudo_stack_;
+  std::vector<PseudoStackFrame> pseudo_stack_;
 
   // The thread name is used as the first entry in the pseudo stack.
   const char* thread_name_;

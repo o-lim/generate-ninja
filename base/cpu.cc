@@ -16,7 +16,6 @@
 
 #if defined(ARCH_CPU_ARM_FAMILY) && (defined(OS_ANDROID) || defined(OS_LINUX))
 #include "base/files/file_util.h"
-#include "base/lazy_instance.h"
 #endif
 
 #if defined(ARCH_CPU_X86_FAMILY)
@@ -43,6 +42,7 @@ CPU::CPU()
     has_ssse3_(false),
     has_sse41_(false),
     has_sse42_(false),
+    has_popcnt_(false),
     has_avx_(false),
     has_avx2_(false),
     has_aesni_(false),
@@ -59,23 +59,22 @@ namespace {
 #if defined(__pic__) && defined(__i386__)
 
 void __cpuid(int cpu_info[4], int info_type) {
-  __asm__ volatile (
-    "mov %%ebx, %%edi\n"
-    "cpuid\n"
-    "xchg %%edi, %%ebx\n"
-    : "=a"(cpu_info[0]), "=D"(cpu_info[1]), "=c"(cpu_info[2]), "=d"(cpu_info[3])
-    : "a"(info_type)
-  );
+  __asm__ volatile(
+      "mov %%ebx, %%edi\n"
+      "cpuid\n"
+      "xchg %%edi, %%ebx\n"
+      : "=a"(cpu_info[0]), "=D"(cpu_info[1]), "=c"(cpu_info[2]),
+        "=d"(cpu_info[3])
+      : "a"(info_type), "c"(0));
 }
 
 #else
 
 void __cpuid(int cpu_info[4], int info_type) {
-  __asm__ volatile (
-    "cpuid\n"
-    : "=a"(cpu_info[0]), "=b"(cpu_info[1]), "=c"(cpu_info[2]), "=d"(cpu_info[3])
-    : "a"(info_type)
-  );
+  __asm__ volatile("cpuid\n"
+                   : "=a"(cpu_info[0]), "=b"(cpu_info[1]), "=c"(cpu_info[2]),
+                     "=d"(cpu_info[3])
+                   : "a"(info_type), "c"(0));
 }
 
 #endif
@@ -94,9 +93,8 @@ uint64_t _xgetbv(uint32_t xcr) {
 #endif  // ARCH_CPU_X86_FAMILY
 
 #if defined(ARCH_CPU_ARM_FAMILY) && (defined(OS_ANDROID) || defined(OS_LINUX))
-class LazyCpuInfoValue {
- public:
-  LazyCpuInfoValue() {
+std::string* CpuInfoBrand() {
+  static std::string* brand = []() {
     // This function finds the value from /proc/cpuinfo under the key "model
     // name" or "Processor". "model name" is used in Linux 3.8 and later (3.7
     // and later for arm64) and is shown once per CPU. "Processor" is used in
@@ -109,30 +107,23 @@ class LazyCpuInfoValue {
     ReadFileToString(FilePath("/proc/cpuinfo"), &contents);
     DCHECK(!contents.empty());
     if (contents.empty()) {
-      return;
+      return new std::string();
     }
 
     std::istringstream iss(contents);
     std::string line;
     while (std::getline(iss, line)) {
-      if (brand_.empty() &&
-          (line.compare(0, strlen(kModelNamePrefix), kModelNamePrefix) == 0 ||
+      if ((line.compare(0, strlen(kModelNamePrefix), kModelNamePrefix) == 0 ||
            line.compare(0, strlen(kProcessorPrefix), kProcessorPrefix) == 0)) {
-        brand_.assign(line.substr(strlen(kModelNamePrefix)));
+        return new std::string(line.substr(strlen(kModelNamePrefix)));
       }
     }
-  }
 
-  const std::string& brand() const { return brand_; }
+    return new std::string();
+  }();
 
- private:
-  std::string brand_;
-  DISALLOW_COPY_AND_ASSIGN(LazyCpuInfoValue);
-};
-
-base::LazyInstance<LazyCpuInfoValue>::Leaky g_lazy_cpuinfo =
-    LAZY_INSTANCE_INITIALIZER;
-
+  return brand;
+}
 #endif  // defined(ARCH_CPU_ARM_FAMILY) && (defined(OS_ANDROID) ||
         // defined(OS_LINUX))
 
@@ -177,6 +168,8 @@ void CPU::Initialize() {
     has_ssse3_ = (cpu_info[2] & 0x00000200) != 0;
     has_sse41_ = (cpu_info[2] & 0x00080000) != 0;
     has_sse42_ = (cpu_info[2] & 0x00100000) != 0;
+    has_popcnt_ = (cpu_info[2] & 0x00800000) != 0;
+
     // AVX instructions will generate an illegal instruction exception unless
     //   a) they are supported by the CPU,
     //   b) XSAVE is supported by the CPU and
@@ -219,7 +212,7 @@ void CPU::Initialize() {
     has_non_stop_time_stamp_counter_ = (cpu_info[3] & (1 << 8)) != 0;
   }
 #elif defined(ARCH_CPU_ARM_FAMILY) && (defined(OS_ANDROID) || defined(OS_LINUX))
-  cpu_brand_.assign(g_lazy_cpuinfo.Get().brand());
+  cpu_brand_.assign(*CpuInfoBrand());
 #endif
 }
 

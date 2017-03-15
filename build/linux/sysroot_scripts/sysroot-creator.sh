@@ -7,6 +7,8 @@
 # to define certain environment variables: e.g.
 #  DISTRO=ubuntu
 #  DIST=trusty
+#  DIST_UPDATES=trusty-updates  # optional
+#  REPO_EXTRA="universe restricted multiverse"  # optional
 #  APT_REPO=http://archive.ubuntu.com/ubuntu
 #  KEYRING_FILE=/usr/share/keyrings/ubuntu-archive-keyring.gpg
 #  DEBIAN_PACKAGES="gcc libz libssl"
@@ -103,8 +105,10 @@ DownloadOrCopy() {
   echo "$1" | grep -qs ^http:// && HTTP=1
   if [ "$HTTP" = "1" ]; then
     SubBanner "downloading from $1 -> $2"
-    wget "$1" -O "${2}.partial"
-    mv "${2}.partial" $2
+    # Appending the "$$" shell pid is necessary here to prevent concurrent
+    # instances of sysroot-creator.sh from trying to write to the same file.
+    wget "$1" -O "${2}.partial.$$"
+    mv "${2}.partial.$$" $2
   else
     SubBanner "copying from $1"
     cp "$1" "$2"
@@ -191,13 +195,14 @@ ExtractPackageBz2() {
 
 GeneratePackageListDist() {
   local arch="$1"
-  local apt_repo="$2"
+  local apt_url="$2"
   local dist="$3"
+  local repo_name="$4"
 
-  TMP_PACKAGE_LIST="${BUILD_DIR}/Packages.${dist}_${arch}"
-  local repo_basedir="${apt_repo}/dists/${dist}"
-  local package_list="${BUILD_DIR}/Packages.${dist}_${arch}.${PACKAGES_EXT}"
-  local package_file_arch="main/binary-${arch}/Packages.${PACKAGES_EXT}"
+  TMP_PACKAGE_LIST="${BUILD_DIR}/Packages.${dist}_${repo_name}_${arch}"
+  local repo_basedir="${apt_url}/dists/${dist}"
+  local package_list="${BUILD_DIR}/Packages.${dist}_${repo_name}_${arch}.${PACKAGES_EXT}"
+  local package_file_arch="${repo_name}/binary-${arch}/Packages.${PACKAGES_EXT}"
   local package_list_arch="${repo_basedir}/${package_file_arch}"
 
   DownloadOrCopy "${package_list_arch}" "${package_list}"
@@ -206,14 +211,23 @@ GeneratePackageListDist() {
 }
 
 GeneratePackageListCommon() {
-  GeneratePackageListDist "$2" "$3" ${DIST}
   local output_file="$1"
+  local arch="$2"
+  local apt_url="$3"
   local packages="$4"
-  local list_base="${TMP_PACKAGE_LIST}"
-  if [ ! -z ${DIST_UPDATES:-} ]; then
-      GeneratePackageListDist "$2" "$3" ${DIST_UPDATES}
+
+  local dists="${DIST} ${DIST_UPDATES:-}"
+  local repos="main ${REPO_EXTRA:-}"
+
+  local list_base="${BUILD_DIR}/Packages.${DIST}_${arch}"
+  > "${list_base}"
+  for dist in ${dists}; do
+    for repo in ${repos}; do
+      GeneratePackageListDist "${arch}" "${apt_url}" "${dist}" "${repo}"
       cat "${TMP_PACKAGE_LIST}" | ./merge-package-lists.py "${list_base}"
-  fi
+    done
+  done
+
   GeneratePackageList "${list_base}" "${output_file}" "${packages}"
 }
 
@@ -375,7 +389,11 @@ InstallIntoSysroot() {
   Banner "Install Libs And Headers Into Jail"
 
   mkdir -p ${BUILD_DIR}/debian-packages
-  mkdir -p ${INSTALL_ROOT}
+  # The /debian directory is an implementation detail that's used to cd into
+  # when running dpkg-shlibdeps.
+  mkdir -p ${INSTALL_ROOT}/debian
+  # An empty control file is necessary to run dpkg-shlibdeps.
+  touch ${INSTALL_ROOT}/debian/control
   while (( "$#" )); do
     local file="$1"
     local package="${BUILD_DIR}/debian-packages/${file##*/}"
@@ -397,9 +415,11 @@ InstallIntoSysroot() {
     echo "${sha256sum}  ${package}" | sha256sum --quiet -c
 
     SubBanner "Extracting to ${INSTALL_ROOT}"
-    dpkg --fsys-tarfile ${package}\
-      | tar -xf - -C ${INSTALL_ROOT}
+    dpkg-deb -x ${package} ${INSTALL_ROOT}
 
+    base_package=$(dpkg-deb --field ${package} Package)
+    mkdir -p ${INSTALL_ROOT}/debian/${base_package}/DEBIAN
+    dpkg-deb -e ${package} ${INSTALL_ROOT}/debian/${base_package}/DEBIAN
   done
 
   # Prune /usr/share, leaving only pkgconfig
@@ -548,7 +568,7 @@ BuildSysrootMips() {
     return
   fi
   ClearInstallDir
-  local package_file="$BUILD_DIR/package_with_sha256sum_arm"
+  local package_file="$BUILD_DIR/package_with_sha256sum_mips"
   GeneratePackageListMips "$package_file"
   local files_and_sha256sums="$(cat ${package_file})"
   StripChecksumsFromPackageList "$package_file"
@@ -807,6 +827,44 @@ UpdatePackageListsAll() {
   RunCommand UpdatePackageListsMips
 }
 
+#@
+#@ PrintArchitectures
+#@
+#@    Prints supported architectures.
+PrintArchitectures() {
+  if [ "$HAS_ARCH_AMD64" = "1" ]; then
+    echo Amd64
+  fi
+  if [ "$HAS_ARCH_I386" = "1" ]; then
+    echo I386
+  fi
+  if [ "$HAS_ARCH_ARM" = "1" ]; then
+    echo ARM
+  fi
+  if [ "$HAS_ARCH_ARM64" = "1" ]; then
+    echo ARM64
+  fi
+  if [ "$HAS_ARCH_MIPS" = "1" ]; then
+    echo Mips
+  fi
+}
+
+#@
+#@ PrintDistro
+#@
+#@    Prints distro.  eg: ubuntu
+PrintDistro() {
+  echo ${DISTRO}
+}
+
+#@
+#@ DumpRelease
+#@
+#@    Prints disto release.  eg: trusty
+PrintRelease() {
+  echo ${DIST}
+}
+
 RunCommand() {
   SetEnvironmentVariables "$1"
   SanityCheck
@@ -825,7 +883,7 @@ elif [ "$(type -t $1)" != "function" ]; then
   exit 1
 else
   ChangeDirectory
-  if echo $1 | grep -qs "All$"; then
+  if echo $1 | grep -qs --regexp='\(^Print\)\|\(All$\)'; then
     "$@"
   else
     RunCommand "$@"

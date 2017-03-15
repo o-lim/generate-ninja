@@ -21,9 +21,11 @@
 // ThreadTicks will "stand still" whenever the thread has been de-scheduled by
 // the operating system.
 //
-// All time classes are copyable, assignable, and occupy 64-bits per
-// instance. Thus, they can be efficiently passed by-value (as opposed to
-// by-reference).
+// All time classes are copyable, assignable, and occupy 64-bits per instance.
+// As a result, prefer passing them by value:
+//   void MyFunction(TimeDelta arg);
+// If circumstances require, you may also pass by const reference:
+//   void MyFunction(const TimeDelta& arg);  // Not preferred.
 //
 // Definitions of operator<< are provided to make these types work with
 // DCHECK_EQ() and other log macros. For human-readable formatting, see
@@ -57,6 +59,7 @@
 
 #include "base/base_export.h"
 #include "base/compiler_specific.h"
+#include "base/logging.h"
 #include "base/numerics/safe_math.h"
 #include "build/build_config.h"
 
@@ -93,10 +96,6 @@ namespace time_internal {
 BASE_EXPORT int64_t SaturatedAdd(TimeDelta delta, int64_t value);
 BASE_EXPORT int64_t SaturatedSub(TimeDelta delta, int64_t value);
 
-// Clamp |value| on overflow and underflow conditions. The int64_t argument and
-// return value are in terms of a microsecond timebase.
-BASE_EXPORT int64_t FromCheckedNumeric(const CheckedNumeric<int64_t> value);
-
 }  // namespace time_internal
 
 // TimeDelta ------------------------------------------------------------------
@@ -115,6 +114,9 @@ class BASE_EXPORT TimeDelta {
   static constexpr TimeDelta FromSecondsD(double secs);
   static constexpr TimeDelta FromMillisecondsD(double ms);
   static constexpr TimeDelta FromMicroseconds(int64_t us);
+#if defined(OS_POSIX)
+  static TimeDelta FromTimeSpec(const timespec& ts);
+#endif
 #if defined(OS_WIN)
   static TimeDelta FromQPCValue(LONGLONG qpc_value);
 #endif
@@ -128,7 +130,7 @@ class BASE_EXPORT TimeDelta {
   // Returns the maximum time delta, which should be greater than any reasonable
   // time delta we might compare it to. Adding or subtracting the maximum time
   // delta to a time or another time delta has an undefined result.
-  static TimeDelta Max();
+  static constexpr TimeDelta Max();
 
   // Returns the internal numeric value of the TimeDelta object. Please don't
   // use this and do arithmetic on it, as it is more error prone than using the
@@ -200,13 +202,24 @@ class BASE_EXPORT TimeDelta {
   TimeDelta operator*(T a) const {
     CheckedNumeric<int64_t> rv(delta_);
     rv *= a;
-    return TimeDelta(time_internal::FromCheckedNumeric(rv));
+    if (rv.IsValid())
+      return TimeDelta(rv.ValueOrDie());
+    // Matched sign overflows. Mismatched sign underflows.
+    if ((delta_ < 0) ^ (a < 0))
+      return TimeDelta(-std::numeric_limits<int64_t>::max());
+    return TimeDelta(std::numeric_limits<int64_t>::max());
   }
   template<typename T>
   TimeDelta operator/(T a) const {
     CheckedNumeric<int64_t> rv(delta_);
     rv /= a;
-    return TimeDelta(time_internal::FromCheckedNumeric(rv));
+    if (rv.IsValid())
+      return TimeDelta(rv.ValueOrDie());
+    // Matched sign overflows. Mismatched sign underflows.
+    // Special case to catch divide by zero.
+    if ((delta_ < 0) ^ (a <= 0))
+      return TimeDelta(-std::numeric_limits<int64_t>::max());
+    return TimeDelta(std::numeric_limits<int64_t>::max());
   }
   template<typename T>
   TimeDelta& operator*=(T a) {
@@ -457,8 +470,6 @@ class BASE_EXPORT Time : public time_internal::TimeBase<Time> {
   static Time NowFromSystemTime();
 
   // Converts to/from time_t in UTC and a Time class.
-  // TODO(brettw) this should be removed once everybody starts using the |Time|
-  // class.
   static Time FromTimeT(time_t tt);
   time_t ToTimeT() const;
 
@@ -484,8 +495,9 @@ class BASE_EXPORT Time : public time_internal::TimeBase<Time> {
   static Time FromJsTime(double ms_since_epoch);
   double ToJsTime() const;
 
-  // Converts to Java convention for times, a number of
+  // Converts to/from Java convention for times, a number of
   // milliseconds since the epoch.
+  static Time FromJavaTime(int64_t ms_since_epoch);
   int64_t ToJavaTime() const;
 
 #if defined(OS_POSIX)
@@ -526,23 +538,8 @@ class BASE_EXPORT Time : public time_internal::TimeBase<Time> {
 #endif
 
   // Converts an exploded structure representing either the local time or UTC
-  // into a Time class.
-  // TODO(maksims): Get rid of these in favor of the methods below when
-  // all the callers stop using these ones.
-  static Time FromUTCExploded(const Exploded& exploded) {
-    base::Time time;
-    ignore_result(FromUTCExploded(exploded, &time));
-    return time;
-  }
-  static Time FromLocalExploded(const Exploded& exploded) {
-    base::Time time;
-    ignore_result(FromLocalExploded(exploded, &time));
-    return time;
-  }
-
-  // Converts an exploded structure representing either the local time or UTC
   // into a Time class. Returns false on a failure when, for example, a day of
-  // month is set to 31 on a 28-30 day month.
+  // month is set to 31 on a 28-30 day month. Returns Time(0) on overflow.
   static bool FromUTCExploded(const Exploded& exploded,
                               Time* time) WARN_UNUSED_RESULT {
     return FromExploded(false, exploded, time);
@@ -560,10 +557,12 @@ class BASE_EXPORT Time : public time_internal::TimeBase<Time> {
   // specified in RFC822) is treated as if the timezone is not specified.
   // TODO(iyengar) Move the FromString/FromTimeT/ToTimeT/FromFileTime to
   // a new time converter class.
-  static bool FromString(const char* time_string, Time* parsed_time) {
+  static bool FromString(const char* time_string,
+                         Time* parsed_time) WARN_UNUSED_RESULT {
     return FromStringInternal(time_string, true, parsed_time);
   }
-  static bool FromUTCString(const char* time_string, Time* parsed_time) {
+  static bool FromUTCString(const char* time_string,
+                            Time* parsed_time) WARN_UNUSED_RESULT {
     return FromStringInternal(time_string, false, parsed_time);
   }
 
@@ -606,10 +605,11 @@ class BASE_EXPORT Time : public time_internal::TimeBase<Time> {
   // timezone is not specified.
   static bool FromStringInternal(const char* time_string,
                                  bool is_local,
-                                 Time* parsed_time);
+                                 Time* parsed_time) WARN_UNUSED_RESULT;
 
   // Comparison does not consider |day_of_week| when doing the operation.
-  static bool ExplodedMostlyEquals(const Exploded& lhs, const Exploded& rhs);
+  static bool ExplodedMostlyEquals(const Exploded& lhs,
+                                   const Exploded& rhs) WARN_UNUSED_RESULT;
 };
 
 // static
@@ -656,6 +656,11 @@ constexpr TimeDelta TimeDelta::FromMillisecondsD(double ms) {
 // static
 constexpr TimeDelta TimeDelta::FromMicroseconds(int64_t us) {
   return TimeDelta(us);
+}
+
+// static
+constexpr TimeDelta TimeDelta::Max() {
+  return TimeDelta(std::numeric_limits<int64_t>::max());
 }
 
 // static
@@ -716,14 +721,14 @@ class BASE_EXPORT TimeTicks : public time_internal::TimeBase<TimeTicks> {
   // Now() will return high resolution values. Note that, on systems where the
   // high resolution clock works but is deemed inefficient, the low resolution
   // clock will be used instead.
-  static bool IsHighResolution();
+  static bool IsHighResolution() WARN_UNUSED_RESULT;
 
   // Returns true if TimeTicks is consistent across processes, meaning that
   // timestamps taken on different processes can be safely compared with one
   // another. (Note that, even on platforms where this returns true, time values
   // from different threads that are within one tick of each other must be
   // considered to have an ambiguous ordering.)
-  static bool IsConsistentAcrossProcesses();
+  static bool IsConsistentAcrossProcesses() WARN_UNUSED_RESULT;
 
 #if defined(OS_WIN)
   // Translates an absolute QPC timestamp into a TimeTicks value. The returned
@@ -731,6 +736,10 @@ class BASE_EXPORT TimeTicks : public time_internal::TimeBase<TimeTicks> {
   // IsHighResolution() returns false.
   static TimeTicks FromQPCValue(LONGLONG qpc_value);
 #endif
+
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+  static TimeTicks FromMachAbsoluteTime(uint64_t mach_absolute_time);
+#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
 
   // Get an estimate of the TimeTick value at the time of the UnixEpoch. Because
   // Time and TimeTicks respond differently to user-set time and NTP
@@ -780,7 +789,7 @@ class BASE_EXPORT ThreadTicks : public time_internal::TimeBase<ThreadTicks> {
   }
 
   // Returns true if ThreadTicks::Now() is supported on this system.
-  static bool IsSupported() {
+  static bool IsSupported() WARN_UNUSED_RESULT {
 #if (defined(_POSIX_THREAD_CPUTIME) && (_POSIX_THREAD_CPUTIME >= 0)) || \
     (defined(OS_MACOSX) && !defined(OS_IOS)) || defined(OS_ANDROID)
     return true;
@@ -831,7 +840,7 @@ class BASE_EXPORT ThreadTicks : public time_internal::TimeBase<ThreadTicks> {
   // allow testing.
   static double TSCTicksPerSecond();
 
-  static bool IsSupportedWin();
+  static bool IsSupportedWin() WARN_UNUSED_RESULT;
   static void WaitUntilInitializedWin();
 #endif
 };

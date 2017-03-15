@@ -134,9 +134,10 @@ TEST(JSONValueDeserializerTest, ReadJSONWithTrailingCommasFromString) {
   ASSERT_FALSE(value);
   ASSERT_NE(0, error_code);
   ASSERT_FALSE(error_message.empty());
-  // Now the flag is set and it must pass.
-  str_deserializer.set_allow_trailing_comma(true);
-  value = str_deserializer.Deserialize(&error_code, &error_message);
+  // Repeat with commas allowed.
+  JSONStringValueDeserializer str_deserializer2(kProperJSONWithCommas,
+                                                JSON_ALLOW_TRAILING_COMMAS);
+  value = str_deserializer2.Deserialize(&error_code, &error_message);
   ASSERT_TRUE(value);
   ASSERT_EQ(JSONReader::JSON_TRAILING_COMMA, error_code);
   // Verify if the same JSON is still there.
@@ -148,7 +149,7 @@ TEST(JSONValueDeserializerTest, ReadProperJSONFromFile) {
   ScopedTempDir tempdir;
   ASSERT_TRUE(tempdir.CreateUniqueTempDir());
   // Write it down in the file.
-  FilePath temp_file(tempdir.path().AppendASCII("test.json"));
+  FilePath temp_file(tempdir.GetPath().AppendASCII("test.json"));
   ASSERT_EQ(static_cast<int>(strlen(kProperJSON)),
             WriteFile(temp_file, kProperJSON, strlen(kProperJSON)));
 
@@ -172,7 +173,7 @@ TEST(JSONValueDeserializerTest, ReadJSONWithCommasFromFile) {
   ScopedTempDir tempdir;
   ASSERT_TRUE(tempdir.CreateUniqueTempDir());
   // Write it down in the file.
-  FilePath temp_file(tempdir.path().AppendASCII("test.json"));
+  FilePath temp_file(tempdir.GetPath().AppendASCII("test.json"));
   ASSERT_EQ(static_cast<int>(strlen(kProperJSONWithCommas)),
             WriteFile(temp_file, kProperJSONWithCommas,
                       strlen(kProperJSONWithCommas)));
@@ -187,9 +188,10 @@ TEST(JSONValueDeserializerTest, ReadJSONWithCommasFromFile) {
   ASSERT_FALSE(value);
   ASSERT_NE(0, error_code);
   ASSERT_FALSE(error_message.empty());
-  // Now the flag is set and it must pass.
-  file_deserializer.set_allow_trailing_comma(true);
-  value = file_deserializer.Deserialize(&error_code, &error_message);
+  // Repeat with commas allowed.
+  JSONFileValueDeserializer file_deserializer2(temp_file,
+                                               JSON_ALLOW_TRAILING_COMMAS);
+  value = file_deserializer2.Deserialize(&error_code, &error_message);
   ASSERT_TRUE(value);
   ASSERT_EQ(JSONReader::JSON_TRAILING_COMMA, error_code);
   // Verify if the same JSON is still there.
@@ -200,8 +202,8 @@ TEST(JSONValueDeserializerTest, AllowTrailingComma) {
   static const char kTestWithCommas[] = "{\"key\": [true,],}";
   static const char kTestNoCommas[] = "{\"key\": [true]}";
 
-  JSONStringValueDeserializer deserializer(kTestWithCommas);
-  deserializer.set_allow_trailing_comma(true);
+  JSONStringValueDeserializer deserializer(kTestWithCommas,
+                                           JSON_ALLOW_TRAILING_COMMAS);
   JSONStringValueDeserializer deserializer_expected(kTestNoCommas);
   std::unique_ptr<Value> root = deserializer.Deserialize(nullptr, nullptr);
   ASSERT_TRUE(root);
@@ -222,7 +224,7 @@ TEST(JSONValueSerializerTest, Roundtrip) {
   Value* null_value = nullptr;
   ASSERT_TRUE(root_dict->Get("null", &null_value));
   ASSERT_TRUE(null_value);
-  ASSERT_TRUE(null_value->IsType(Value::TYPE_NULL));
+  ASSERT_TRUE(null_value->IsType(Value::Type::NONE));
 
   bool bool_value = false;
   ASSERT_TRUE(root_dict->GetBoolean("bool", &bool_value));
@@ -415,7 +417,7 @@ TEST_F(JSONFileValueSerializerTest, Roundtrip) {
   Value* null_value = nullptr;
   ASSERT_TRUE(root_dict->Get("null", &null_value));
   ASSERT_TRUE(null_value);
-  ASSERT_TRUE(null_value->IsType(Value::TYPE_NULL));
+  ASSERT_TRUE(null_value->IsType(Value::Type::NONE));
 
   bool bool_value = false;
   ASSERT_TRUE(root_dict->GetBoolean("bool", &bool_value));
@@ -431,7 +433,7 @@ TEST_F(JSONFileValueSerializerTest, Roundtrip) {
 
   // Now try writing.
   const FilePath written_file_path =
-      temp_dir_.path().AppendASCII("test_output.js");
+      temp_dir_.GetPath().AppendASCII("test_output.js");
 
   ASSERT_FALSE(PathExists(written_file_path));
   JSONFileValueSerializer serializer(written_file_path);
@@ -456,7 +458,8 @@ TEST_F(JSONFileValueSerializerTest, RoundtripNested) {
   ASSERT_TRUE(root);
 
   // Now try writing.
-  FilePath written_file_path = temp_dir_.path().AppendASCII("test_output.json");
+  FilePath written_file_path =
+      temp_dir_.GetPath().AppendASCII("test_output.json");
 
   ASSERT_FALSE(PathExists(written_file_path));
   JSONFileValueSerializer serializer(written_file_path);

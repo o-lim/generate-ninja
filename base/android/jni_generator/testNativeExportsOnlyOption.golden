@@ -27,11 +27,9 @@ base::subtle::AtomicWord g_SampleForTests_clazz __attribute__((unused)) = 0;
 }  // namespace
 
 // Step 2: method stubs.
-extern "C" __attribute__((visibility("default")))
-jint
+JNI_GENERATOR_EXPORT jint
     Java_org_chromium_example_jni_1generator_SampleForTests_nativeStaticMethod(JNIEnv*
-    env,
-    jobject jcaller,
+    env, jobject jcaller,
     jlong nativeTest,
     jint arg1) {
   Test* native = reinterpret_cast<Test*>(nativeTest);
@@ -40,11 +38,9 @@ jint
       jcaller), arg1);
 }
 
-extern "C" __attribute__((visibility("default")))
-jint
+JNI_GENERATOR_EXPORT jint
     Java_org_chromium_example_jni_1generator_SampleForTests_nativeMethod(JNIEnv*
-    env,
-    jobject jcaller,
+    env, jobject jcaller,
     jlong nativeTest,
     jint arg1) {
   Test* native = reinterpret_cast<Test*>(nativeTest);
@@ -56,8 +52,7 @@ jint
 static jint Init(JNIEnv* env, const base::android::JavaParamRef<jobject>&
     jcaller);
 
-extern "C" __attribute__((visibility("default")))
-jint
+JNI_GENERATOR_EXPORT jint
     Java_org_chromium_example_jni_1generator_SampleForTests_00024MyInnerClass_nativeInit(JNIEnv*
     env, jobject jcaller) {
   return Init(env, base::android::JavaParamRef<jobject>(env, jcaller));
@@ -66,8 +61,7 @@ jint
 static jint Init(JNIEnv* env, const base::android::JavaParamRef<jobject>&
     jcaller);
 
-extern "C" __attribute__((visibility("default")))
-jint
+JNI_GENERATOR_EXPORT jint
     Java_org_chromium_example_jni_1generator_SampleForTests_00024MyOtherInnerClass_nativeInit(JNIEnv*
     env, jobject jcaller) {
   return Init(env, base::android::JavaParamRef<jobject>(env, jcaller));
@@ -83,7 +77,6 @@ static void Java_SampleForTests_testMethodWithParam(JNIEnv* env, const
       base::android::MethodID::TYPE_INSTANCE>(
       env, SampleForTests_clazz(env),
       "testMethodWithParam",
-
 "("
 "I"
 ")"
@@ -93,7 +86,6 @@ static void Java_SampleForTests_testMethodWithParam(JNIEnv* env, const
      env->CallVoidMethod(obj.obj(),
           method_id, as_jint(iParam));
   jni_generator::CheckException(env);
-
 }
 
 static base::subtle::AtomicWord g_SampleForTests_testMethodWithParamAndReturn =
@@ -108,7 +100,6 @@ static base::android::ScopedJavaLocalRef<jstring>
       base::android::MethodID::TYPE_INSTANCE>(
       env, SampleForTests_clazz(env),
       "testMethodWithParamAndReturn",
-
 "("
 "I"
 ")"
@@ -132,7 +123,6 @@ static jint Java_SampleForTests_testStaticMethodWithParam(JNIEnv* env,
       base::android::MethodID::TYPE_STATIC>(
       env, SampleForTests_clazz(env),
       "testStaticMethodWithParam",
-
 "("
 "I"
 ")"
@@ -155,7 +145,6 @@ static jdouble Java_SampleForTests_testMethodWithNoParam(JNIEnv* env) {
       base::android::MethodID::TYPE_STATIC>(
       env, SampleForTests_clazz(env),
       "testMethodWithNoParam",
-
 "("
 ")"
 "D",
@@ -179,7 +168,6 @@ static base::android::ScopedJavaLocalRef<jstring>
       base::android::MethodID::TYPE_STATIC>(
       env, SampleForTests_clazz(env),
       "testStaticMethodWithNoParam",
-
 "("
 ")"
 "Ljava/lang/String;",

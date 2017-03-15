@@ -85,11 +85,16 @@ class WinTool(object):
     """Simple stamp command."""
     open(path, 'w').close()
 
+  def ExecDeleteFile(self, path):
+    """Simple file delete command."""
+    if os.path.exists(path):
+      os.unlink(path)
+
   def ExecRecursiveMirror(self, source, dest):
     """Emulation of rm -rf out && cp -af in out."""
     if os.path.exists(dest):
       if os.path.isdir(dest):
-        def _on_error(fn, path, excinfo):
+        def _on_error(fn, path, dummy_excinfo):
           # The operation failed, possibly because the file is set to
           # read-only. If that's why, make it writable and try the op again.
           if not os.access(path, os.W_OK):
@@ -128,13 +133,14 @@ class WinTool(object):
     # non-Windows don't do that there.
     link = subprocess.Popen(args, shell=sys.platform == 'win32', env=env,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    out, _ = link.communicate()
-    for line in out.splitlines():
+    # Read output one line at a time as it shows up to avoid OOM failures when
+    # GBs of output is produced.
+    for line in link.stdout:
       if (not line.startswith('   Creating library ') and
           not line.startswith('Generating code') and
           not line.startswith('Finished generating code')):
-        print line
-    return link.returncode
+        print line,
+    return link.wait()
 
   def ExecLinkWithManifests(self, arch, embed_manifest, out, ldcmd, resname,
                             mt, rc, intermediate_manifest, *manifests):
@@ -225,7 +231,7 @@ class WinTool(object):
         print line
     return popen.returncode
 
-  def ExecManifestToRc(self, arch, *args):
+  def ExecManifestToRc(self, dummy_arch, *args):
     """Creates a resource file pointing a SxS assembly manifest.
     |args| is tuple containing path to resource file, path to manifest file
     and resource name which can be "1" (for executables) or "2" (for DLLs)."""
@@ -296,9 +302,9 @@ class WinTool(object):
         print line
     return popen.returncode
 
-  def ExecActionWrapper(self, arch, rspfile, *dir):
+  def ExecActionWrapper(self, arch, rspfile, *dirname):
     """Runs an action command line from a response file using the environment
-    for |arch|. If |dir| is supplied, use that as the working directory."""
+    for |arch|. If |dirname| is supplied, use that as the working directory."""
     env = self._GetEnv(arch)
     # TODO(scottmg): This is a temporary hack to get some specific variables
     # through to actions that are set after GN-time. http://crbug.com/333738.
@@ -306,8 +312,8 @@ class WinTool(object):
       if k not in env:
         env[k] = v
     args = open(rspfile).read()
-    dir = dir[0] if dir else None
-    return subprocess.call(args, shell=True, env=env, cwd=dir)
+    dirname = dirname[0] if dirname else None
+    return subprocess.call(args, shell=True, env=env, cwd=dirname)
 
   def ExecClCompile(self, project_dir, selected_files):
     """Executed by msvs-ninja projects when the 'ClCompile' target is used to

@@ -68,6 +68,10 @@ def _ProcessManifest(main_manifest, disable_isolated_processes):
     main_manifest = main_manifest.replace('isolatedProcess="true"',
                                           'isolatedProcess="false"')
 
+  # Disable check for page-aligned native libraries.
+  main_manifest = main_manifest.replace('extractNativeLibs="false"',
+                                        'extractNativeLibs="true"')
+
   doc = ElementTree.fromstring(main_manifest)
   app_node = doc.find('application')
   if app_node is None:
@@ -101,9 +105,8 @@ def main():
     f.write(new_manifest_data)
 
   if options.depfile:
-    build_utils.WriteDepfile(
-        options.depfile,
-        [options.src_manifest] + build_utils.GetPythonDependencies())
+    deps = [options.src_manifest]
+    build_utils.WriteDepfile(options.depfile, options.out_manifest, deps)
 
 
 if __name__ == '__main__':

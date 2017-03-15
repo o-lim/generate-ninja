@@ -70,6 +70,14 @@ bool DeleteFileRecursive(const FilePath& path,
   return true;
 }
 
+// Appends |mode_char| to |mode| before the optional character set encoding; see
+// https://msdn.microsoft.com/library/yeby3zcb.aspx for details.
+void AppendModeCharacter(base::char16 mode_char, base::string16* mode) {
+  size_t comma_pos = mode->find(L',');
+  mode->insert(comma_pos == base::string16::npos ? mode->length() : comma_pos,
+               1, mode_char);
+}
+
 }  // namespace
 
 FilePath MakeAbsoluteFilePath(const FilePath& input) {
@@ -134,6 +142,8 @@ bool ReplaceFile(const FilePath& from_path,
   // already exist.
   if (::MoveFile(from_path.value().c_str(), to_path.value().c_str()))
     return true;
+  File::Error move_error = File::OSErrorToFileError(GetLastError());
+
   // Try the full-blown replace if the move fails, as ReplaceFile will only
   // succeed when |to_path| does exist. When writing to a network share, we may
   // not be able to change the ACLs. Ignore ACL errors then
@@ -142,8 +152,14 @@ bool ReplaceFile(const FilePath& from_path,
                     REPLACEFILE_IGNORE_MERGE_ERRORS, NULL, NULL)) {
     return true;
   }
-  if (error)
-    *error = File::OSErrorToFileError(GetLastError());
+  // In the case of FILE_ERROR_NOT_FOUND from ReplaceFile, it is likely that
+  // |to_path| does not exist. In this case, the more relevant error comes
+  // from the call to MoveFile.
+  if (error) {
+    File::Error replace_error = File::OSErrorToFileError(GetLastError());
+    *error = replace_error == File::FILE_ERROR_NOT_FOUND ? move_error
+                                                         : replace_error;
+  }
   return false;
 }
 
@@ -177,11 +193,8 @@ bool CopyDirectory(const FilePath& from_path, const FilePath& to_path,
   FilePath real_from_path = MakeAbsoluteFilePath(from_path);
   if (real_from_path.empty())
     return false;
-  if (real_to_path.value().size() >= real_from_path.value().size() &&
-      real_to_path.value().compare(0, real_from_path.value().size(),
-                                   real_from_path.value()) == 0) {
+  if (real_to_path == real_from_path || real_from_path.IsParent(real_to_path))
     return false;
-  }
 
   int traverse_type = FileEnumerator::FILES;
   if (recursive)
@@ -559,26 +572,6 @@ bool NormalizeToNativeFilePath(const FilePath& path, FilePath* nt_path) {
   return success;
 }
 
-bool IsOnNetworkDrive(const base::FilePath& path) {
-  win::ScopedHandle handle(
-      ::CreateFileW(path.value().c_str(),
-                    GENERIC_READ,
-                    kFileShareAll,
-                    NULL,
-                    OPEN_EXISTING,
-                    FILE_FLAG_BACKUP_SEMANTICS,  // Needed to open directory.
-                    NULL));
-
-  if (!handle.IsValid())
-    return false;
-
-  // If able to get network information, then the file is on a network.
-  FILE_REMOTE_PROTOCOL_INFO remote_proto_info = {0};
-  return !!::GetFileInformationByHandleEx(handle.Get(), FileRemoteProtocolInfo,
-                                          &remote_proto_info,
-                                          sizeof(remote_proto_info));
-}
-
 // TODO(rkc): Work out if we want to handle NTFS junctions here or not, handle
 // them if we do decide to.
 bool IsLink(const FilePath& file_path) {
@@ -609,8 +602,14 @@ bool GetFileInfo(const FilePath& file_path, File::Info* results) {
 }
 
 FILE* OpenFile(const FilePath& filename, const char* mode) {
+  // 'N' is unconditionally added below, so be sure there is not one already
+  // present before a comma in |mode|.
+  DCHECK(
+      strchr(mode, 'N') == nullptr ||
+      (strchr(mode, ',') != nullptr && strchr(mode, 'N') > strchr(mode, ',')));
   ThreadRestrictions::AssertIOAllowed();
   string16 w_mode = ASCIIToUTF16(mode);
+  AppendModeCharacter(L'N', &w_mode);
   return _wfsopen(filename.value().c_str(), w_mode.c_str(), _SH_DENYNO);
 }
 

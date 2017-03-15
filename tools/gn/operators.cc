@@ -155,7 +155,7 @@ bool ValueDestination::Init(Scope* exec_scope,
 
 const Value* ValueDestination::GetExistingValue() const {
   if (type_ == SCOPE)
-    return scope_->GetValue(name_token_->value(), false);
+    return scope_->GetValue(name_token_->value(), true);
   else if (type_ == LIST)
     return &list_->list_value()[index_];
   return nullptr;
@@ -419,7 +419,7 @@ Value ExecuteMinus(const BinaryOpNode* op_node,
                    const Value& right,
                    Err* err) {
   // Left-hand-side int. The only thing to do is subtract another int.
-  if (left.type() == Value::INTEGER && right.type() != Value::INTEGER) {
+  if (left.type() == Value::INTEGER && right.type() == Value::INTEGER) {
     // Int - int -> subtraction.
     return Value(op_node, left.int_value() - right.int_value());
   }

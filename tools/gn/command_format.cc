@@ -32,43 +32,44 @@ const char kFormat[] = "format";
 const char kFormat_HelpShort[] =
     "format: Format .gn file.";
 const char kFormat_Help[] =
-    "gn format [--dump-tree] (--stdin | <build_file>)\n"
-    "\n"
-    "  Formats .gn file to a standard format.\n"
-    "\n"
-    "  The contents of some lists ('sources', 'deps', etc.) will be sorted to\n"
-    "  a canonical order. To suppress this, you can add a comment of the form\n"
-    "  \"# NOSORT\" immediately preceeding the assignment. e.g.\n"
-    "\n"
-    "  # NOSORT\n"
-    "  sources = [\n"
-    "    \"z.cc\",\n"
-    "    \"a.cc\",\n"
-    "  ]\n"
-    "\n"
-    "Arguments\n"
-    "\n"
-    "  --dry-run\n"
-    "      Does not change or output anything, but sets the process exit code\n"
-    "      based on whether output would be different than what's on disk.\n"
-    "      This is useful for presubmit/lint-type checks.\n"
-    "      - Exit code 0: successful format, matches on disk.\n"
-    "      - Exit code 1: general failure (parse error, etc.)\n"
-    "      - Exit code 2: successful format, but differs from on disk.\n"
-    "\n"
-    "  --dump-tree\n"
-    "      For debugging, dumps the parse tree to stdout and does not update\n"
-    "      the file or print formatted output.\n"
-    "\n"
-    "  --stdin\n"
-    "      Read input from stdin and write to stdout rather than update\n"
-    "      a file in-place.\n"
-    "\n"
-    "Examples\n"
-    "  gn format //some/BUILD.gn\n"
-    "  gn format some\\BUILD.gn\n"
-    "  gn format /abspath/some/BUILD.gn\n"
-    "  gn format --stdin\n";
+    R"(gn format [--dump-tree] (--stdin | <build_file>)
+
+  Formats .gn file to a standard format.
+
+  The contents of some lists ('sources', 'deps', etc.) will be sorted to a
+  canonical order. To suppress this, you can add a comment of the form "#
+  NOSORT" immediately preceeding the assignment. e.g.
+
+  # NOSORT
+  sources = [
+    "z.cc",
+    "a.cc",
+  ]
+
+Arguments
+
+  --dry-run
+      Does not change or output anything, but sets the process exit code based
+      on whether output would be different than what's on disk. This is useful
+      for presubmit/lint-type checks.
+      - Exit code 0: successful format, matches on disk.
+      - Exit code 1: general failure (parse error, etc.)
+      - Exit code 2: successful format, but differs from on disk.
+
+  --dump-tree
+      For debugging, dumps the parse tree to stdout and does not update the
+      file or print formatted output.
+
+  --stdin
+      Read input from stdin and write to stdout rather than update a file
+      in-place.
+
+Examples
+  gn format //some/BUILD.gn
+  gn format some\\BUILD.gn
+  gn format /abspath/some/BUILD.gn
+  gn format --stdin
+)";
 
 namespace {
 
@@ -323,7 +324,7 @@ void Printer::AnnotatePreferredMultilineAssignment(const BinaryOpNode* binop) {
 }
 
 void Printer::SortIfSourcesOrDeps(const BinaryOpNode* binop) {
-  if (binop && binop->comments() && !binop->comments()->before().empty() &&
+  if (binop->comments() && !binop->comments()->before().empty() &&
       binop->comments()->before()[0].value().as_string() == "# NOSORT") {
     // Allow disabling of sort for specific actions that might be
     // order-sensitive.
@@ -746,7 +747,7 @@ int Printer::FunctionCall(const FunctionCallNode* func_call,
   const auto& list = func_call->args()->contents();
   const ParseNode* end = func_call->args()->End();
 
-  if (end && end->comments() && !end->comments()->before().empty())
+  if (end->comments() && !end->comments()->before().empty())
     force_multiline = true;
 
   // If there's before line comments, make sure we have a place to put them.

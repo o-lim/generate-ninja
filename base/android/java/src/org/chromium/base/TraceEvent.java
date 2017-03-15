@@ -12,6 +12,7 @@ import android.util.Printer;
 
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
+import org.chromium.base.annotations.MainDex;
 /**
  * Java mirror of Chrome trace event API. See base/trace_event/trace_event.h. Unlike the native
  * version, Java does not have stack objects, so a TRACE_EVENT() which does both TRACE_EVENT_BEGIN()
@@ -20,10 +21,10 @@ import org.chromium.base.annotations.JNINamespace;
  * @see EarlyTraceEvent for details.
  */
 @JNINamespace("base::android")
+@MainDex
 public class TraceEvent {
-
-    private static volatile boolean sEnabled = false;
-    private static volatile boolean sATraceEnabled = false; // True when taking an Android systrace.
+    private static volatile boolean sEnabled;
+    private static volatile boolean sATraceEnabled; // True when taking an Android systrace.
 
     private static class BasicLooperMonitor implements Printer {
         @Override
@@ -82,14 +83,14 @@ public class TraceEvent {
                 MIN_INTERESTING_DURATION_MILLIS * 3;
 
         // Stats tracking
-        private long mLastIdleStartedAt = 0L;
-        private long mLastWorkStartedAt = 0L;
-        private int mNumTasksSeen = 0;
-        private int mNumIdlesSeen = 0;
-        private int mNumTasksSinceLastIdle = 0;
+        private long mLastIdleStartedAt;
+        private long mLastWorkStartedAt;
+        private int mNumTasksSeen;
+        private int mNumIdlesSeen;
+        private int mNumTasksSinceLastIdle;
 
         // State
-        private boolean mIdleMonitorAttached = false;
+        private boolean mIdleMonitorAttached;
 
         // Called from within the begin/end methods only.
         // This method can only execute on the looper thread, because that is
@@ -180,11 +181,16 @@ public class TraceEvent {
     @CalledByNative
     public static void setEnabled(boolean enabled) {
         if (enabled) EarlyTraceEvent.disable();
-        sEnabled = enabled;
-        // Android M+ systrace logs this on its own. Only log it if not writing to Android systrace.
-        if (sATraceEnabled) return;
-        ThreadUtils.getUiThreadLooper().setMessageLogging(
-                enabled ? LooperMonitorHolder.sInstance : null);
+        // Only disable logging if Chromium enabled it originally, so as to not disrupt logging done
+        // by other applications
+        if (sEnabled != enabled) {
+            sEnabled = enabled;
+            // Android M+ systrace logs this on its own. Only log it if not writing to Android
+            // systrace.
+            if (sATraceEnabled) return;
+            ThreadUtils.getUiThreadLooper().setMessageLogging(
+                    enabled ? LooperMonitorHolder.sInstance : null);
+        }
     }
 
     /**

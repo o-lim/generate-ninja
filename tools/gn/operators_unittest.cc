@@ -237,6 +237,34 @@ TEST(Operators, ListRemove) {
   EXPECT_EQ("bar", new_value->list_value()[0].string_value());
 }
 
+TEST(Operators, IntegerAdd) {
+  Err err;
+  TestWithScope setup;
+
+  TestBinaryOpNode node(Token::PLUS, "+");
+  node.SetLeftToValue(Value(nullptr, static_cast<int64_t>(123)));
+  node.SetRightToValue(Value(nullptr, static_cast<int64_t>(456)));
+  Value ret = ExecuteBinaryOperator(setup.scope(), &node, node.left(),
+                                    node.right(), &err);
+  ASSERT_FALSE(err.has_error());
+  ASSERT_EQ(Value::INTEGER, ret.type());
+  EXPECT_EQ(579, ret.int_value());
+}
+
+TEST(Operators, IntegerSubtract) {
+  Err err;
+  TestWithScope setup;
+
+  TestBinaryOpNode node(Token::MINUS, "-");
+  node.SetLeftToValue(Value(nullptr, static_cast<int64_t>(123)));
+  node.SetRightToValue(Value(nullptr, static_cast<int64_t>(456)));
+  Value ret = ExecuteBinaryOperator(setup.scope(), &node, node.left(),
+                                    node.right(), &err);
+  ASSERT_FALSE(err.has_error());
+  ASSERT_EQ(Value::INTEGER, ret.type());
+  EXPECT_EQ(-333, ret.int_value());
+}
+
 TEST(Operators, ShortCircuitAnd) {
   Err err;
   TestWithScope setup;
@@ -329,4 +357,35 @@ TEST(Operators, NonemptyOverwriting) {
   ASSERT_TRUE(new_value);
   ASSERT_EQ(Value::SCOPE, new_value->type());
   ASSERT_FALSE(new_value->scope_value()->HasValues(Scope::SEARCH_CURRENT));
+}
+
+// Tests this case:
+//  foo = 1
+//  target(...) {
+//    foo += 1
+//
+// This should mark the outer "foo" as used, and the inner "foo" as unused.
+TEST(Operators, PlusEqualsUsed) {
+  Err err;
+  TestWithScope setup;
+
+  // Outer "foo" definition, it should be unused.
+  const char foo[] = "foo";
+  Value old_value(nullptr, static_cast<int64_t>(1));
+  setup.scope()->SetValue(foo, old_value, nullptr);
+  EXPECT_TRUE(setup.scope()->IsSetButUnused(foo));
+
+  // Nested scope.
+  Scope nested(setup.scope());
+
+  // Run "foo += 1".
+  TestBinaryOpNode node(Token::PLUS_EQUALS, "+=");
+  node.SetLeftToIdentifier(foo);
+  node.SetRightToValue(Value(nullptr, static_cast<int64_t>(1)));
+  node.Execute(&nested, &err);
+  ASSERT_FALSE(err.has_error());
+
+  // Outer foo should be used, inner foo should not be.
+  EXPECT_FALSE(setup.scope()->IsSetButUnused(foo));
+  EXPECT_TRUE(nested.IsSetButUnused(foo));
 }

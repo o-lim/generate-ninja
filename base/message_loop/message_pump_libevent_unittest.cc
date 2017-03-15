@@ -21,6 +21,7 @@
 #include "base/test/gtest_util.h"
 #include "base/third_party/libevent/event.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -87,7 +88,7 @@ class StupidWatcher : public MessagePumpLibevent::Watcher {
 #define MAYBE_TestWatchingFromBadThread TestWatchingFromBadThread
 #endif
 TEST_F(MessagePumpLibeventTest, MAYBE_TestWatchingFromBadThread) {
-  MessagePumpLibevent::FileDescriptorWatcher watcher;
+  MessagePumpLibevent::FileDescriptorWatcher watcher(FROM_HERE);
   StupidWatcher delegate;
 
   ASSERT_DCHECK_DEATH(
@@ -136,7 +137,7 @@ class DeleteWatcher : public BaseWatcher {
 TEST_F(MessagePumpLibeventTest, DeleteWatcher) {
   std::unique_ptr<MessagePumpLibevent> pump(new MessagePumpLibevent);
   MessagePumpLibevent::FileDescriptorWatcher* watcher =
-      new MessagePumpLibevent::FileDescriptorWatcher;
+      new MessagePumpLibevent::FileDescriptorWatcher(FROM_HERE);
   DeleteWatcher delegate(watcher);
   pump->WatchFileDescriptor(pipefds_[1],
       false, MessagePumpLibevent::WATCH_READ_WRITE, watcher, &delegate);
@@ -160,7 +161,7 @@ class StopWatcher : public BaseWatcher {
 
 TEST_F(MessagePumpLibeventTest, StopWatcher) {
   std::unique_ptr<MessagePumpLibevent> pump(new MessagePumpLibevent);
-  MessagePumpLibevent::FileDescriptorWatcher watcher;
+  MessagePumpLibevent::FileDescriptorWatcher watcher(FROM_HERE);
   StopWatcher delegate(&watcher);
   pump->WatchFileDescriptor(pipefds_[1],
       false, MessagePumpLibevent::WATCH_READ_WRITE, &watcher, &delegate);
@@ -174,8 +175,7 @@ void QuitMessageLoopAndStart(const Closure& quit_closure) {
 
   MessageLoop::ScopedNestableTaskAllower allow(MessageLoop::current());
   RunLoop runloop;
-  MessageLoop::current()->task_runner()->PostTask(FROM_HERE,
-                                                  runloop.QuitClosure());
+  ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, runloop.QuitClosure());
   runloop.Run();
 }
 
@@ -186,7 +186,7 @@ class NestedPumpWatcher : public MessagePumpLibevent::Watcher {
 
   void OnFileCanReadWithoutBlocking(int /* fd */) override {
     RunLoop runloop;
-    MessageLoop::current()->task_runner()->PostTask(
+    ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, Bind(&QuitMessageLoopAndStart, runloop.QuitClosure()));
     runloop.Run();
   }
@@ -196,7 +196,7 @@ class NestedPumpWatcher : public MessagePumpLibevent::Watcher {
 
 TEST_F(MessagePumpLibeventTest, NestedPumpWatcher) {
   std::unique_ptr<MessagePumpLibevent> pump(new MessagePumpLibevent);
-  MessagePumpLibevent::FileDescriptorWatcher watcher;
+  MessagePumpLibevent::FileDescriptorWatcher watcher(FROM_HERE);
   NestedPumpWatcher delegate;
   pump->WatchFileDescriptor(pipefds_[1],
       false, MessagePumpLibevent::WATCH_READ, &watcher, &delegate);
@@ -218,8 +218,7 @@ class QuitWatcher : public BaseWatcher {
 
   void OnFileCanReadWithoutBlocking(int /* fd */) override {
     // Post a fatal closure to the MessageLoop before we quit it.
-    MessageLoop::current()->task_runner()->PostTask(FROM_HERE,
-                                                    Bind(&FatalClosure));
+    ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, Bind(&FatalClosure));
 
     // Now quit the MessageLoop.
     run_loop_->Quit();
@@ -245,7 +244,7 @@ TEST_F(MessagePumpLibeventTest, QuitWatcher) {
   MessagePumpLibevent* pump = new MessagePumpLibevent;  // owned by |loop|.
   MessageLoop loop(WrapUnique(pump));
   RunLoop run_loop;
-  MessagePumpLibevent::FileDescriptorWatcher controller;
+  MessagePumpLibevent::FileDescriptorWatcher controller(FROM_HERE);
   QuitWatcher delegate(&controller, &run_loop);
   WaitableEvent event(WaitableEvent::ResetPolicy::AUTOMATIC,
                       WaitableEvent::InitialState::NOT_SIGNALED);

@@ -15,8 +15,6 @@ config("cpu_features_warnings") {
   }
 }
 
-# This is the GN version of
-# //build/android/ndk.gyp:cpu_features
 source_set("cpu_features") {
   sources = [
     "$android_ndk_root/sources/android/cpufeatures/cpu-features.c",
@@ -32,23 +30,32 @@ source_set("cpu_features") {
   ]
 }
 
-lib_version = "24.1.1"
+lib_version = "25.0.1"
 lib_path = "$android_sdk_root/extras/android/m2repository/com/android/support"
 
 android_java_prebuilt("android_gcm_java") {
   jar_path = "$android_sdk_root/extras/google/gcm/gcm-client/dist/gcm.jar"
 }
 
-android_java_prebuilt("emma_device") {
+android_java_prebuilt("emma_device_java") {
   jar_path = "$android_sdk_root/tools/lib/emma_device.jar"
+  include_java_resources = true
 }
 
 android_aar_prebuilt("android_support_design_java") {
   deps = [
     ":android_support_v7_appcompat_java",
   ]
-  lib_name = "design"
-  aar_path = "$lib_path/$lib_name/$lib_version/$lib_name-$lib_version.aar"
+  _lib_name = "design"
+  aar_path = "$lib_path/$_lib_name/$lib_version/$_lib_name-$lib_version.aar"
+}
+
+android_aar_prebuilt("android_support_transition_java") {
+  deps = [
+    ":android_support_v7_appcompat_java",
+  ]
+  _lib_name = "transition"
+  aar_path = "$lib_path/$_lib_name/$lib_version/$_lib_name-$lib_version.aar"
 }
 
 android_aar_prebuilt("android_support_multidex_java") {
@@ -58,13 +65,45 @@ android_aar_prebuilt("android_support_multidex_java") {
 }
 
 android_java_prebuilt("android_support_annotations_java") {
-  lib_name = "support-annotations"
-  jar_path = "$lib_path/$lib_name/$lib_version/$lib_name-$lib_version.jar"
+  _lib_name = "support-annotations"
+  jar_path = "$lib_path/$_lib_name/$lib_version/$_lib_name-$lib_version.jar"
 }
 
-android_aar_prebuilt("android_support_v4_java") {
-  lib_name = "support-v4"
-  aar_path = "$lib_path/$lib_name/$lib_version/$lib_name-$lib_version.aar"
+java_group("android_support_v4_java") {
+  deps = [
+    ":android_support_compat_java",
+    ":android_support_core_ui_java",
+    ":android_support_core_utils_java",
+    ":android_support_fragment_java",
+    ":android_support_media_compat_java",
+  ]
+}
+
+android_aar_prebuilt("android_support_compat_java") {
+  _lib_name = "support-compat"
+  aar_path = "$lib_path/$_lib_name/$lib_version/$_lib_name-$lib_version.aar"
+  ignore_aidl = true  # We don't appear to need these currently.
+}
+
+android_aar_prebuilt("android_support_core_ui_java") {
+  _lib_name = "support-core-ui"
+  aar_path = "$lib_path/$_lib_name/$lib_version/$_lib_name-$lib_version.aar"
+}
+
+android_aar_prebuilt("android_support_core_utils_java") {
+  _lib_name = "support-core-utils"
+  aar_path = "$lib_path/$_lib_name/$lib_version/$_lib_name-$lib_version.aar"
+}
+
+android_aar_prebuilt("android_support_fragment_java") {
+  _lib_name = "support-fragment"
+  aar_path = "$lib_path/$_lib_name/$lib_version/$_lib_name-$lib_version.aar"
+}
+
+android_aar_prebuilt("android_support_media_compat_java") {
+  _lib_name = "support-media-compat"
+  aar_path = "$lib_path/$_lib_name/$lib_version/$_lib_name-$lib_version.aar"
+  ignore_aidl = true  # We don't appear to need these currently.
 }
 
 android_aar_prebuilt("android_support_v13_java") {
@@ -72,18 +111,18 @@ android_aar_prebuilt("android_support_v13_java") {
     ":android_support_annotations_java",
     ":android_support_v4_java",
   ]
-  lib_name = "support-v13"
-  aar_path = "$lib_path/$lib_name/$lib_version/$lib_name-$lib_version.aar"
+  _lib_name = "support-v13"
+  aar_path = "$lib_path/$_lib_name/$lib_version/$_lib_name-$lib_version.aar"
 }
 
 android_aar_prebuilt("android_support_vector_drawable_java") {
-  lib_name = "support-vector-drawable"
-  aar_path = "$lib_path/$lib_name/$lib_version/$lib_name-$lib_version.aar"
+  _lib_name = "support-vector-drawable"
+  aar_path = "$lib_path/$_lib_name/$lib_version/$_lib_name-$lib_version.aar"
 }
 
 android_aar_prebuilt("android_support_v7_appcompat_java_internal") {
-  lib_name = "appcompat-v7"
-  aar_path = "$lib_path/$lib_name/$lib_version/$lib_name-$lib_version.aar"
+  _lib_name = "appcompat-v7"
+  aar_path = "$lib_path/$_lib_name/$lib_version/$_lib_name-$lib_version.aar"
 }
 
 java_group("android_support_v7_appcompat_java") {
@@ -94,51 +133,167 @@ java_group("android_support_v7_appcompat_java") {
   ]
 }
 
+android_aar_prebuilt("android_support_v7_gridlayout_java") {
+  deps = [
+    ":android_support_v7_appcompat_java",
+  ]
+  _lib_name = "gridlayout-v7"
+  aar_path = "$lib_path/$_lib_name/$lib_version/$_lib_name-$lib_version.aar"
+}
+
 android_aar_prebuilt("android_support_v7_mediarouter_java") {
   deps = [
     ":android_support_v7_appcompat_java",
   ]
-  lib_name = "mediarouter-v7"
-  aar_path = "$lib_path/$lib_name/$lib_version/$lib_name-$lib_version.aar"
+  _lib_name = "mediarouter-v7"
+  aar_path = "$lib_path/$_lib_name/$lib_version/$_lib_name-$lib_version.aar"
 }
 
 android_aar_prebuilt("android_support_v7_recyclerview_java") {
   deps = [
     ":android_support_v7_appcompat_java",
   ]
-  lib_name = "recyclerview-v7"
-  aar_path = "$lib_path/$lib_name/$lib_version/$lib_name-$lib_version.aar"
+  _lib_name = "recyclerview-v7"
+  aar_path = "$lib_path/$_lib_name/$lib_version/$_lib_name-$lib_version.aar"
 }
 
-android_resources("google_play_services_default_resources") {
-  v14_skip = true
-  resource_dirs = [ "$android_sdk_root/extras/google/google_play_services/libproject/google-play-services_lib/res" ]
-  custom_package = "com.google.android.gms"
+# TODO(dgn): Remove this once no other target has a dependency on it
+java_group("google_play_services_default_resources") {
+  deps = []
 }
 
-android_java_prebuilt("google_play_services_default_java") {
+# TODO(dgn): Remove this once other targets register dependencies on only the
+# modules they need.
+java_group("google_play_services_default_java") {
   deps = [
-    ":android_support_annotations_java",
-    ":android_support_v4_java",
-    ":android_support_v7_mediarouter_java",
-    ":google_play_services_default_resources",
+    ":google_play_services_auth_base_java",
+    ":google_play_services_auth_java",
+    ":google_play_services_base_java",
+    ":google_play_services_basement_java",
+    ":google_play_services_cast_java",
+    ":google_play_services_gcm_java",
+    ":google_play_services_iid_java",
+    ":google_play_services_nearby_java",
+    ":google_play_services_vision_java",
   ]
-  input_jars_paths = [ "$android_sdk/optional/org.apache.http.legacy.jar" ]
-  proguard_preprocess = true
-  proguard_config = "//third_party/android_tools/proguard.flags"
-  jar_path = "$android_sdk_root/extras/google/google_play_services/libproject/google-play-services_lib/libs/google-play-services.jar"
 }
 
 android_aar_prebuilt("android_support_v17_leanback_java") {
   deps = [
     ":android_support_v7_recyclerview_java",
   ]
-  lib_name = "leanback-v17"
-  aar_path = "$lib_path/$lib_name/$lib_version/$lib_name-$lib_version.aar"
+  _lib_name = "leanback-v17"
+  aar_path = "$lib_path/$_lib_name/$lib_version/$_lib_name-$lib_version.aar"
 }
 
 # TODO(jbudorick): Remove this once net_java_test_support no longer needs it.
 android_java_prebuilt("legacy_http_javalib") {
   testonly = true
   jar_path = "$android_sdk/optional/org.apache.http.legacy.jar"
+}
+
+# TODO(dgn): Use the POM files instead of hardcoding the dependencies.
+gms_path = "$default_extras_android_sdk_root/extras/google/m2repository/com/google/android/gms"
+gms_version = "10.2.0"
+
+android_aar_prebuilt("google_play_services_basement_java") {
+  deps = [
+    ":android_support_v4_java",
+  ]
+  _lib_name = "play-services-basement"
+  aar_path = "$gms_path/$_lib_name/$gms_version/$_lib_name-$gms_version.aar"
+  input_jars_paths = [ "$android_sdk/optional/org.apache.http.legacy.jar" ]
+  ignore_manifest = true
+}
+
+android_aar_prebuilt("google_play_services_tasks_java") {
+  deps = [
+    ":google_play_services_basement_java",
+  ]
+  _lib_name = "play-services-tasks"
+  aar_path = "$gms_path/$_lib_name/$gms_version/$_lib_name-$gms_version.aar"
+  ignore_manifest = true
+}
+
+android_aar_prebuilt("google_play_services_base_java") {
+  deps = [
+    ":google_play_services_basement_java",
+    ":google_play_services_tasks_java",
+  ]
+  _lib_name = "play-services-base"
+  aar_path = "$gms_path/$_lib_name/$gms_version/$_lib_name-$gms_version.aar"
+  ignore_manifest = true
+}
+
+android_aar_prebuilt("google_play_services_auth_base_java") {
+  deps = [
+    ":google_play_services_base_java",
+    ":google_play_services_basement_java",
+  ]
+  _lib_name = "play-services-auth-base"
+  aar_path = "$gms_path/$_lib_name/$gms_version/$_lib_name-$gms_version.aar"
+  ignore_manifest = true
+}
+
+android_aar_prebuilt("google_play_services_auth_java") {
+  deps = [
+    ":google_play_services_auth_base_java",
+    ":google_play_services_base_java",
+    ":google_play_services_basement_java",
+  ]
+  _lib_name = "play-services-auth"
+  aar_path = "$gms_path/$_lib_name/$gms_version/$_lib_name-$gms_version.aar"
+  ignore_manifest = true
+}
+
+android_aar_prebuilt("google_play_services_cast_java") {
+  deps = [
+    ":android_support_v7_mediarouter_java",
+    ":google_play_services_base_java",
+    ":google_play_services_basement_java",
+  ]
+  _lib_name = "play-services-cast"
+  aar_path = "$gms_path/$_lib_name/$gms_version/$_lib_name-$gms_version.aar"
+  ignore_manifest = true
+}
+
+android_aar_prebuilt("google_play_services_iid_java") {
+  deps = [
+    ":google_play_services_base_java",
+    ":google_play_services_basement_java",
+  ]
+  _lib_name = "play-services-iid"
+  aar_path = "$gms_path/$_lib_name/$gms_version/$_lib_name-$gms_version.aar"
+  ignore_manifest = true
+}
+
+android_aar_prebuilt("google_play_services_gcm_java") {
+  deps = [
+    ":google_play_services_base_java",
+    ":google_play_services_basement_java",
+    ":google_play_services_iid_java",
+  ]
+  _lib_name = "play-services-gcm"
+  aar_path = "$gms_path/$_lib_name/$gms_version/$_lib_name-$gms_version.aar"
+  ignore_manifest = true
+}
+
+android_aar_prebuilt("google_play_services_nearby_java") {
+  deps = [
+    ":google_play_services_base_java",
+    ":google_play_services_basement_java",
+  ]
+  _lib_name = "play-services-nearby"
+  aar_path = "$gms_path/$_lib_name/$gms_version/$_lib_name-$gms_version.aar"
+  ignore_manifest = true
+}
+
+android_aar_prebuilt("google_play_services_vision_java") {
+  deps = [
+    ":google_play_services_base_java",
+    ":google_play_services_basement_java",
+  ]
+  _lib_name = "play-services-vision"
+  aar_path = "$gms_path/$_lib_name/$gms_version/$_lib_name-$gms_version.aar"
+  ignore_manifest = true
 }

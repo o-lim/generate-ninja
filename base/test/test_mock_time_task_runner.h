@@ -7,15 +7,17 @@
 
 #include <stddef.h>
 
+#include <deque>
 #include <memory>
 #include <queue>
 #include <vector>
 
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "base/test/test_pending_task.h"
-#include "base/threading/thread_checker.h"
+#include "base/threading/thread_checker_impl.h"
 #include "base/time/time.h"
 
 namespace base {
@@ -46,6 +48,53 @@ class TickClock;
 // that it supports running delayed tasks in the correct temporal order.
 class TestMockTimeTaskRunner : public SingleThreadTaskRunner {
  public:
+  // Everything that is executed in the scope of a ScopedContext will behave as
+  // though it ran under |scope| (i.e. ThreadTaskRunnerHandle,
+  // RunsTasksOnCurrentThread, etc.). This allows the test body to be all in one
+  // block when multiple TestMockTimeTaskRunners share the main thread. For
+  // example:
+  //
+  //   class ExampleFixture {
+  //    protected:
+  //     DoBarOnFoo() {
+  //       DCHECK(foo_task_runner_->RunsOnCurrentThread());
+  //       EXPECT_EQ(foo_task_runner_, ThreadTaskRunnerHandle::Get());
+  //       DoBar();
+  //     }
+  //
+  //     // Mock main task runner.
+  //     base::MessageLoop message_loop_;
+  //     base::ScopedMockTimeMessageLoopTaskRunner main_task_runner_;
+  //
+  //     // Mock foo task runner.
+  //     scoped_refptr<TestMockTimeTaskRunner> foo_task_runner_ =
+  //         new TestMockTimeTaskRunner();
+  //   };
+  //
+  //   TEST_F(ExampleFixture, DoBarOnFoo) {
+  //     DoThingsOnMain();
+  //     {
+  //       TestMockTimeTaskRunner::ScopedContext scoped_context(
+  //           foo_task_runner_.get());
+  //       DoBarOnFoo();
+  //     }
+  //     DoMoreThingsOnMain();
+  //   }
+  //
+  class ScopedContext {
+   public:
+    // Note: |scope| is ran until idle as part of this constructor to ensure
+    // that anything which runs in the underlying scope runs after any already
+    // pending tasks (the contrary would break the SequencedTraskRunner
+    // contract).
+    explicit ScopedContext(scoped_refptr<TestMockTimeTaskRunner> scope);
+    ~ScopedContext();
+
+   private:
+    ScopedClosureRunner on_destroy_;
+    DISALLOW_COPY_AND_ASSIGN(ScopedContext);
+  };
+
   // Constructs an instance whose virtual time will start at the Unix epoch, and
   // whose time ticks will start at zero.
   TestMockTimeTaskRunner();
@@ -83,6 +132,7 @@ class TestMockTimeTaskRunner : public SingleThreadTaskRunner {
   // source. The returned TickClock will hold a reference to |this|.
   std::unique_ptr<TickClock> GetMockTickClock() const;
 
+  std::deque<TestPendingTask> TakePendingTasks();
   bool HasPendingTask() const;
   size_t GetPendingTaskCount() const;
   TimeDelta NextPendingTaskDelay() const;
@@ -148,7 +198,10 @@ class TestMockTimeTaskRunner : public SingleThreadTaskRunner {
                        const TimeDelta& max_delta,
                        TestPendingTask* next_task);
 
-  ThreadChecker thread_checker_;
+  // Also used for non-dcheck logic (RunsTasksOnCurrentThread()) and as such
+  // needs to be a ThreadCheckerImpl.
+  ThreadCheckerImpl thread_checker_;
+
   Time now_;
   TimeTicks now_ticks_;
 

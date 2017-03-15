@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 #include "base/base_export.h"
+#include "build/build_config.h"
 
 namespace base {
 namespace allocator {
@@ -45,23 +46,54 @@ namespace allocator {
 // wihout introducing unnecessary perf hits.
 
 struct AllocatorDispatch {
-  using AllocFn = void*(const AllocatorDispatch* self, size_t size);
+  using AllocFn = void*(const AllocatorDispatch* self,
+                        size_t size,
+                        void* context);
   using AllocZeroInitializedFn = void*(const AllocatorDispatch* self,
                                        size_t n,
-                                       size_t size);
+                                       size_t size,
+                                       void* context);
   using AllocAlignedFn = void*(const AllocatorDispatch* self,
                                size_t alignment,
-                               size_t size);
+                               size_t size,
+                               void* context);
   using ReallocFn = void*(const AllocatorDispatch* self,
                           void* address,
-                          size_t size);
-  using FreeFn = void(const AllocatorDispatch* self, void* address);
+                          size_t size,
+                          void* context);
+  using FreeFn = void(const AllocatorDispatch* self,
+                      void* address,
+                      void* context);
+  // Returns the best available estimate for the actual amount of memory
+  // consumed by the allocation |address|. If possible, this should include
+  // heap overhead or at least a decent estimate of the full cost of the
+  // allocation. If no good estimate is possible, returns zero.
+  using GetSizeEstimateFn = size_t(const AllocatorDispatch* self,
+                                   void* address,
+                                   void* context);
+  using BatchMallocFn = unsigned(const AllocatorDispatch* self,
+                                 size_t size,
+                                 void** results,
+                                 unsigned num_requested,
+                                 void* context);
+  using BatchFreeFn = void(const AllocatorDispatch* self,
+                           void** to_be_freed,
+                           unsigned num_to_be_freed,
+                           void* context);
+  using FreeDefiniteSizeFn = void(const AllocatorDispatch* self,
+                                  void* ptr,
+                                  size_t size,
+                                  void* context);
 
   AllocFn* const alloc_function;
   AllocZeroInitializedFn* const alloc_zero_initialized_function;
   AllocAlignedFn* const alloc_aligned_function;
   ReallocFn* const realloc_function;
   FreeFn* const free_function;
+  GetSizeEstimateFn* const get_size_estimate_function;
+  BatchMallocFn* const batch_malloc_function;
+  BatchFreeFn* const batch_free_function;
+  FreeDefiniteSizeFn* const free_definite_size_function;
 
   const AllocatorDispatch* next;
 
@@ -79,16 +111,21 @@ BASE_EXPORT void SetCallNewHandlerOnMallocFailure(bool value);
 // regardless of SetCallNewHandlerOnMallocFailure().
 BASE_EXPORT void* UncheckedAlloc(size_t size);
 
-// Inserts |dispatch| in front of the allocator chain. This method is NOT
+// Inserts |dispatch| in front of the allocator chain. This method is
 // thread-safe w.r.t concurrent invocations of InsertAllocatorDispatch().
-// The callers have the responsibility of linearizing the changes to the chain
-// (or more likely call these always on the same thread).
+// The callers have responsibility for inserting a single dispatch no more
+// than once.
 BASE_EXPORT void InsertAllocatorDispatch(AllocatorDispatch* dispatch);
 
 // Test-only. Rationale: (1) lack of use cases; (2) dealing safely with a
 // removal of arbitrary elements from a singly linked list would require a lock
 // in malloc(), which we really don't want.
 BASE_EXPORT void RemoveAllocatorDispatchForTesting(AllocatorDispatch* dispatch);
+
+#if defined(OS_MACOSX)
+// On macOS, the allocator shim needs to be turned on during runtime.
+BASE_EXPORT void InitializeAllocatorShim();
+#endif  // defined(OS_MACOSX)
 
 }  // namespace allocator
 }  // namespace base

@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/android/config.gni")
 import("//build/config/android/rules.gni")
 
 if (enable_java_templates) {
@@ -21,7 +22,6 @@ if (enable_java_templates) {
     script = "//build/android/gyp/find_sun_tools_jar.py"
     depfile = "$target_gen_dir/$target_name.d"
     outputs = [
-      depfile,
       sun_tools_jar_path,
     ]
     args = [
@@ -42,18 +42,18 @@ if (enable_java_templates) {
     output_jar = "$root_out_dir/lib.java/android.interface.jar"
   }
 
-  _rebased_android_sdk_root = rebase_path(android_sdk_root, root_build_dir)
-
-  # Record GN vars that are needed by generate_gradle.py.
-  # One statement per-line to make GN's formatter leave it alone.
+  # Write to a file some GN vars that are useful to scripts that use the output
+  # directory. Format is chosen as easliy importable by both python and bash.
   CR = "$0x0A"
-  _json = "{$CR"
-  _json += "  \"android_sdk_root\": \"$_rebased_android_sdk_root\",$CR"
-  _json += "  \"android_sdk_root\": \"$_rebased_android_sdk_root\",$CR"
-  _json += "  \"compile_sdk_version\": \"$android_sdk_version\",$CR"
-  _json += "  \"build_tools_version\": \"$android_sdk_build_tools_version\"$CR"
-  _json += "}$CR"
-  write_file("$root_build_dir/gradle/config.json", _json)
+  _data = ""
+  _data += "android_sdk_build_tools=" +
+           rebase_path(android_sdk_build_tools, root_build_dir) + CR
+  _data += "android_sdk_build_tools_version=$android_sdk_build_tools_version$CR"
+  _data +=
+      "android_sdk_root=" + rebase_path(android_sdk_root, root_build_dir) + CR
+  _data += "android_sdk_version=$android_sdk_version$CR"
+  _data += "android_tool_prefix=$android_tool_prefix"
+  write_file("$root_build_dir/build_vars.txt", _data)
 }
 
 # Copy to the lib.unstripped directory so that gdb can easily find it.
@@ -70,7 +70,7 @@ copy("cpplib_unstripped") {
 action("cpplib_stripped") {
   _strip_bin = "${android_tool_prefix}strip"
   _soname = "libc++_shared.so"
-  _input_so = "${root_out_dir}/lib.unstripped/${_soname}"
+  _input_so = "${root_shlib_dir}/lib.unstripped/${_soname}"
   _output_so = "${root_shlib_dir}/${_soname}"
 
   deps = [
@@ -91,9 +91,9 @@ action("cpplib_stripped") {
     _output_so,
   ]
 
-  _rebased_strip_bin = rebase_path(_strip_bin, root_out_dir)
-  _rebased_input_so = rebase_path(_input_so, root_out_dir)
-  _rebased_output_so = rebase_path(_output_so, root_out_dir)
+  _rebased_strip_bin = rebase_path(_strip_bin, root_build_dir)
+  _rebased_input_so = rebase_path(_input_so, root_build_dir)
+  _rebased_output_so = rebase_path(_output_so, root_build_dir)
   args = [
     _rebased_strip_bin,
     "--strip-unneeded",
@@ -114,18 +114,25 @@ group("test_runner_py") {
            "devil_chromium.json",
            "pylib/gtest/filter/",
            "test_wrapper/logdog_wrapper.py",
-           "//third_party/android_tools/sdk/build-tools/23.0.1/aapt",
-           "//third_party/android_tools/sdk/build-tools/23.0.1/dexdump",
-           "//third_party/android_tools/sdk/build-tools/23.0.1/lib/libc++.so",
-           "//third_party/android_tools/sdk/build-tools/23.0.1/split-select",
+           "//third_party/android_tools/sdk/build-tools/24.0.2/aapt",
+           "//third_party/android_tools/sdk/build-tools/24.0.2/dexdump",
+           "//third_party/android_tools/sdk/build-tools/24.0.2/lib64/libc++.so",
+           "//third_party/android_tools/sdk/build-tools/24.0.2/split-select",
            "//third_party/android_tools/sdk/platform-tools/adb",
            "//third_party/catapult/third_party/gsutil/",
            "//third_party/catapult/devil/devil/devil_dependencies.json",
            "//third_party/proguard/lib/proguard.jar",
          ]
-  data_deps = [
-    "//tools/swarming_client:isolate_py",
-  ]
+}
+
+group("logdog_wrapper_py") {
+  _py_files = read_file("test_wrapper/logdog_wrapper.pydeps", "list lines")
+
+  # Filter out comments.
+  set_sources_assignment_filter([ "#*" ])
+  sources = _py_files
+
+  data = sources
 }
 
 # Create wrapper scripts in out/bin that takes care of setting the
@@ -134,7 +141,6 @@ _scripts_to_wrap = [
   # TODO(agrieve): Once GYP is no more, delete the checked-in adb_gdb_* scripts
   # and generated a script for each android_apk() that has a native library.
   "adb_gdb_android_webview_shell",
-  "adb_gdb_blimp_client",
   "adb_gdb_chrome_public",
   "adb_gdb_content_shell",
   "adb_gdb_cronet_sample",

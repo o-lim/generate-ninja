@@ -52,6 +52,14 @@ class BuildSettings {
   const SourceFile& build_config_file() const { return build_config_file_; }
   void set_build_config_file(const SourceFile& f) { build_config_file_ = f; }
 
+  // Path to a file containing the default text to use when running `gn args`.
+  const SourceFile& arg_file_template_path() const {
+    return arg_file_template_path_;
+  }
+  void set_arg_file_template_path(const SourceFile& f) {
+    arg_file_template_path_ = f;
+  }
+
   // The build directory is the root of all output files. The default toolchain
   // files go into here, and non-default toolchains will have separate
   // toolchain-specific root directories inside this.
@@ -95,18 +103,6 @@ class BuildSettings {
     exec_script_whitelist_ = std::move(list);
   }
 
-  // When set (the default), code should perform normal validation of inputs
-  // and structures, like undefined or possibly incorrectly used things. For
-  // some interrogation commands, we don't care about this and actually want
-  // to allow the user to check the structure of the build to solve their
-  // problem, and these checks are undesirable.
-  bool check_for_bad_items() const {
-    return check_for_bad_items_;
-  }
-  void set_check_for_bad_items(bool c) {
-    check_for_bad_items_ = c;
-  }
-
  private:
   base::FilePath root_path_;
   std::string root_path_utf8_;
@@ -114,6 +110,7 @@ class BuildSettings {
   base::FilePath python_path_;
 
   SourceFile build_config_file_;
+  SourceFile arg_file_template_path_;
   SourceDir build_dir_;
   Args build_args_;
 
@@ -121,8 +118,6 @@ class BuildSettings {
   PrintCallback print_callback_;
 
   std::unique_ptr<std::set<SourceFile>> exec_script_whitelist_;
-
-  bool check_for_bad_items_;
 
   BuildSettings& operator=(const BuildSettings& other);  // Disallow.
 };

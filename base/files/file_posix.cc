@@ -11,7 +11,7 @@
 #include <unistd.h>
 
 #include "base/logging.h"
-#include "base/metrics/sparse_histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
@@ -321,7 +321,7 @@ int64_t File::GetLength() {
 
   stat_wrapper_t file_info;
   if (CallFstat(file_.get(), &file_info))
-    return false;
+    return -1;
 
   return file_info.st_size;
 }

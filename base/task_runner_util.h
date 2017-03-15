@@ -5,36 +5,16 @@
 #ifndef BASE_TASK_RUNNER_UTIL_H_
 #define BASE_TASK_RUNNER_UTIL_H_
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/callback.h"
 #include "base/logging.h"
+#include "base/post_task_and_reply_with_result_internal.h"
 #include "base/task_runner.h"
 
 namespace base {
-
-namespace internal {
-
-// Adapts a function that produces a result via a return value to
-// one that returns via an output parameter.
-template <typename ReturnType>
-void ReturnAsParamAdapter(const Callback<ReturnType(void)>& func,
-                          ReturnType* result) {
-  *result = func.Run();
-}
-
-// Adapts a T* result to a callblack that expects a T.
-template <typename TaskReturnType, typename ReplyArgType>
-void ReplyAdapter(const Callback<void(ReplyArgType)>& callback,
-                  TaskReturnType* result) {
-  // TODO(ajwong): Remove this conditional and add a DCHECK to enforce that
-  // |reply| must be non-null in PostTaskAndReplyWithResult() below after
-  // current code that relies on this API softness has been removed.
-  // http://crbug.com/162712
-  if (!callback.is_null())
-    callback.Run(std::move(*result));
-}
-
-}  // namespace internal
 
 // When you have these methods
 //
@@ -51,18 +31,18 @@ void ReplyAdapter(const Callback<void(ReplyArgType)>& callback,
 //     Bind(&DoWorkAndReturn),
 //     Bind(&Callback));
 template <typename TaskReturnType, typename ReplyArgType>
-bool PostTaskAndReplyWithResult(
-    TaskRunner* task_runner,
-    const tracked_objects::Location& from_here,
-    const Callback<TaskReturnType(void)>& task,
-    const Callback<void(ReplyArgType)>& reply) {
+bool PostTaskAndReplyWithResult(TaskRunner* task_runner,
+                                const tracked_objects::Location& from_here,
+                                Callback<TaskReturnType()> task,
+                                Callback<void(ReplyArgType)> reply) {
+  DCHECK(task);
+  DCHECK(reply);
   TaskReturnType* result = new TaskReturnType();
   return task_runner->PostTaskAndReply(
-      from_here,
-      base::Bind(&internal::ReturnAsParamAdapter<TaskReturnType>, task,
-                 result),
-      base::Bind(&internal::ReplyAdapter<TaskReturnType, ReplyArgType>, reply,
-                 base::Owned(result)));
+      from_here, base::Bind(&internal::ReturnAsParamAdapter<TaskReturnType>,
+                            std::move(task), result),
+      base::Bind(&internal::ReplyAdapter<TaskReturnType, ReplyArgType>,
+                 std::move(reply), base::Owned(result)));
 }
 
 }  // namespace base

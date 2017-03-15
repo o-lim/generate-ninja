@@ -102,63 +102,91 @@ void GetContextForValue(const Value& value,
   }
 }
 
-void PrintArgHelp(const base::StringPiece& name, const Value& value) {
-  OutputString(name.as_string(), DECORATION_YELLOW);
-  OutputString("  Default = " + value.ToString(true) + "\n");
-
+// Prints the value and origin for a default value. Default values always list
+// an origin and if there is no origin, print a message about it being
+// internally set. Overrides can't be internally set so the location handling
+// is a bit different.
+//
+// The default value also contains the docstring.
+void PrintDefaultValueInfo(base::StringPiece name, const Value& value) {
+  OutputString(value.ToString(true) + "\n");
   if (value.origin()) {
     std::string location, comment;
     GetContextForValue(value, &location, &comment);
-    OutputString("    " + location + "\n" + comment);
+    OutputString("      From " + location + "\n");
+    if (!comment.empty())
+      OutputString("\n" + comment);
   } else {
-    OutputString("    (Internally set; try `gn help " + name.as_string() +
+    OutputString("      (Internally set; try `gn help " + name.as_string() +
                  "`.)\n");
+  }
+}
+
+// Override value is null if there is no override.
+void PrintArgHelp(const base::StringPiece& name,
+                  const Args::ValueWithOverride& val) {
+  OutputString(name.as_string(), DECORATION_YELLOW);
+  OutputString("\n");
+
+  if (val.has_override) {
+    // Override present, print both it and the default.
+    OutputString("    Current value = " + val.override_value.ToString(true) +
+                 "\n");
+    if (val.override_value.origin()) {
+      std::string location, comment;
+      GetContextForValue(val.override_value, &location, &comment);
+      OutputString("      From " + location + "\n");
+    }
+    OutputString("    Overridden from the default = ");
+    PrintDefaultValueInfo(name, val.default_value);
+  } else {
+    // No override.
+    OutputString("    Current value (from the default) = ");
+    PrintDefaultValueInfo(name, val.default_value);
   }
 }
 
 int ListArgs(const std::string& build_dir) {
   Setup* setup = new Setup;
-  setup->build_settings().set_check_for_bad_items(false);
   if (!setup->DoSetup(build_dir, false) || !setup->Run())
     return 1;
 
-  Scope::KeyValueMap build_args;
-  setup->build_settings().build_args().MergeDeclaredArguments(&build_args);
-
-  // Find all of the arguments we care about. Use a regular map so they're
-  // sorted nicely when we write them out.
-  std::map<base::StringPiece, Value> sorted_args;
+  Args::ValueWithOverrideMap args =
+      setup->build_settings().build_args().GetAllArguments();
   std::string list_value =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(kSwitchList);
-  if (list_value.empty()) {
-    // List all values.
-    for (const auto& arg : build_args)
-      sorted_args.insert(arg);
-  } else {
+  if (!list_value.empty()) {
     // List just the one specified as the parameter to --list.
-    Scope::KeyValueMap::const_iterator found_arg = build_args.find(list_value);
-    if (found_arg == build_args.end()) {
+    auto found = args.find(list_value);
+    if (found == args.end()) {
       Err(Location(), "Unknown build argument.",
           "You asked for \"" + list_value + "\" which I didn't find in any "
           "build file\nassociated with this build.").PrintToStdout();
       return 1;
     }
-    sorted_args.insert(*found_arg);
+
+    // Delete everything from the map except the one requested.
+    Args::ValueWithOverrideMap::value_type preserved = *found;
+    args.clear();
+    args.insert(preserved);
   }
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(kSwitchShort)) {
-    // Short key=value output.
-    for (const auto& arg : sorted_args) {
+    // Short <key>=<current_value> output.
+    for (const auto& arg : args) {
       OutputString(arg.first.as_string());
       OutputString(" = ");
-      OutputString(arg.second.ToString(true));
+      if (arg.second.has_override)
+        OutputString(arg.second.override_value.ToString(true));
+      else
+        OutputString(arg.second.default_value.ToString(true));
       OutputString("\n");
     }
     return 0;
   }
 
   // Long output.
-  for (const auto& arg : sorted_args) {
+  for (const auto& arg : args) {
     PrintArgHelp(arg.first, arg.second);
     OutputString("\n");
   }
@@ -200,9 +228,9 @@ bool RunEditor(const base::FilePath& file_to_edit) {
 #else  // POSIX
 
 bool RunEditor(const base::FilePath& file_to_edit) {
-  const char* editor_ptr = getenv("VISUAL");
+  const char* editor_ptr = getenv("GN_EDITOR");
   if (!editor_ptr)
-    editor_ptr = getenv("GN_EDITOR");
+    editor_ptr = getenv("VISUAL");
   if (!editor_ptr)
     editor_ptr = getenv("EDITOR");
   if (!editor_ptr)
@@ -231,7 +259,6 @@ int EditArgsFile(const std::string& build_dir) {
     // Scope the setup. We only use it for some basic state. We'll do the
     // "real" build below in the gen command.
     Setup setup;
-    setup.build_settings().set_check_for_bad_items(false);
     // Don't fill build arguments. We're about to edit the file which supplies
     // these in the first place.
     setup.set_fill_arguments(false);
@@ -241,16 +268,32 @@ int EditArgsFile(const std::string& build_dir) {
     // Ensure the file exists. Need to normalize path separators since on
     // Windows they can come out as forward slashes here, and that confuses some
     // of the commands.
+    BuildSettings build_settings = setup.build_settings();
     base::FilePath arg_file =
-        setup.build_settings().GetFullPath(setup.GetBuildArgFile())
-        .NormalizePathSeparators();
+        build_settings.GetFullPath(setup.GetBuildArgFile())
+            .NormalizePathSeparators();
     if (!base::PathExists(arg_file)) {
       std::string argfile_default_contents =
-          "# Build arguments go here. Examples:\n"
-          "#   is_component_build = true\n"
-          "#   is_debug = false\n"
+          "# Build arguments go here.\n"
           "# See \"gn args <out_dir> --list\" for available build "
           "arguments.\n";
+
+      SourceFile template_path = build_settings.arg_file_template_path();
+      if (!template_path.is_null()) {
+        base::FilePath full_path =
+            build_settings.GetFullPath(template_path).NormalizePathSeparators();
+        if (!base::PathExists(full_path)) {
+          Err err =
+              Err(Location(), std::string("Can't load arg_file_template:\n  ") +
+                                  template_path.value());
+          err.PrintToStdout();
+          return 1;
+        }
+
+        // Ignore the return code; if the read fails (unlikely), we'll just
+        // use the default contents.
+        base::ReadFileToString(full_path, &argfile_default_contents);
+      }
 #if defined(OS_WIN)
       // Use Windows lineendings for this file since it will often open in
       // Notepad which can't handle Unix ones.
@@ -280,62 +323,59 @@ extern const char kArgs[] = "args";
 extern const char kArgs_HelpShort[] =
     "args: Display or configure arguments declared by the build.";
 extern const char kArgs_Help[] =
-    "gn args <out_dir> [--list] [--short] [--args]\n"
-    "\n"
-    "  See also \"gn help buildargs\" for a more high-level overview of how\n"
-    "  build arguments work.\n"
-    "\n"
-    "Usage\n"
-    "  gn args <out_dir>\n"
-    "      Open the arguments for the given build directory in an editor\n"
-    "      (as specified by the EDITOR environment variable). If the given\n"
-    "      build directory doesn't exist, it will be created and an empty\n"
-    "      args file will be opened in the editor. You would type something\n"
-    "      like this into that file:\n"
-    "          enable_doom_melon=false\n"
-    "          os=\"android\"\n"
-    "\n"
-    "      Note: you can edit the build args manually by editing the file\n"
-    "      \"args.gn\" in the build directory and then running\n"
-    "      \"gn gen <out_dir>\".\n"
-    "\n"
-    "  gn args <out_dir> --list[=<exact_arg>] [--short]\n"
-    "      Lists all build arguments available in the current configuration,\n"
-    "      or, if an exact_arg is specified for the list flag, just that one\n"
-    "      build argument.\n"
-    "\n"
-    "      The output will list the declaration location, default value, and\n"
-    "      comment preceeding the declaration. If --short is specified,\n"
-    "      only the names and values will be printed.\n"
-    "\n"
-    "      If the out_dir is specified, the build configuration will be\n"
-    "      taken from that build directory. The reason this is needed is that\n"
-    "      the definition of some arguments is dependent on the build\n"
-    "      configuration, so setting some values might add, remove, or change\n"
-    "      the default values for other arguments. Specifying your exact\n"
-    "      configuration allows the proper arguments to be displayed.\n"
-    "\n"
-    "      Instead of specifying the out_dir, you can also use the\n"
-    "      command-line flag to specify the build configuration:\n"
-    "        --args=<exact list of args to use>\n"
-    "\n"
-    "Examples\n"
-    "  gn args out/Debug\n"
-    "    Opens an editor with the args for out/Debug.\n"
-    "\n"
-    "  gn args out/Debug --list --short\n"
-    "    Prints all arguments with their default values for the out/Debug\n"
-    "    build.\n"
-    "\n"
-    "  gn args out/Debug --list=target_cpu\n"
-    "    Prints information about the \"target_cpu\" argument for the "
-        "out/Debug\n"
-    "    build.\n"
-    "\n"
-    "  gn args --list --args=\"os=\\\"android\\\" enable_doom_melon=true\"\n"
-    "    Prints all arguments with the default values for a build with the\n"
-    "    given arguments set (which may affect the values of other\n"
-    "    arguments).\n";
+    R"(gn args <out_dir> [--list] [--short] [--args]
+
+  See also "gn help buildargs" for a more high-level overview of how
+  build arguments work.
+
+Usage
+
+  gn args <out_dir>
+      Open the arguments for the given build directory in an editor. If the
+      given build directory doesn't exist, it will be created and an empty args
+      file will be opened in the editor. You would type something like this
+      into that file:
+          enable_doom_melon=false
+          os="android"
+
+      To find your editor on Posix, GN will search the environment variables in
+      order: GN_EDITOR, VISUAL, and EDITOR. On Windows GN will open the command
+      associated with .txt files.
+
+      Note: you can edit the build args manually by editing the file "args.gn"
+      in the build directory and then running "gn gen <out_dir>".
+
+  gn args <out_dir> --list[=<exact_arg>] [--short]
+      Lists all build arguments available in the current configuration, or, if
+      an exact_arg is specified for the list flag, just that one build
+      argument.
+
+      The output will list the declaration location, current value for the
+      build, default value (if different than the current value), and comment
+      preceeding the declaration.
+
+      If --short is specified, only the names and current values will be
+      printed.
+
+Examples
+
+  gn args out/Debug
+    Opens an editor with the args for out/Debug.
+
+  gn args out/Debug --list --short
+    Prints all arguments with their default values for the out/Debug
+    build.
+
+  gn args out/Debug --list=target_cpu
+    Prints information about the "target_cpu" argument for the "
+   "out/Debug
+    build.
+
+  gn args --list --args="os=\"android\" enable_doom_melon=true"
+    Prints all arguments with the default values for a build with the
+    given arguments set (which may affect the values of other
+    arguments).
+)";
 
 int RunArgs(const std::vector<std::string>& args) {
   if (args.size() != 1) {

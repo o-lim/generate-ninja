@@ -9,8 +9,7 @@
 #include "base/files/file_util.h"
 #include "tools/gn/filesystem_utils.h"
 
-BuildSettings::BuildSettings()
-    : check_for_bad_items_(true) {
+BuildSettings::BuildSettings() {
 }
 
 BuildSettings::BuildSettings(const BuildSettings& other)
@@ -19,10 +18,9 @@ BuildSettings::BuildSettings(const BuildSettings& other)
       secondary_source_path_(other.secondary_source_path_),
       python_path_(other.python_path_),
       build_config_file_(other.build_config_file_),
+      arg_file_template_path_(other.arg_file_template_path_),
       build_dir_(other.build_dir_),
-      build_args_(other.build_args_),
-      check_for_bad_items_(true) {
-}
+      build_args_(other.build_args_) {}
 
 BuildSettings::~BuildSettings() {
 }

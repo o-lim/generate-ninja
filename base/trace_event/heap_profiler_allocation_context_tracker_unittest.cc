@@ -27,13 +27,25 @@ const char kEclair[] = "Eclair";
 const char kFroyo[] = "Froyo";
 const char kGingerbread[] = "Gingerbread";
 
+const char kFilteringTraceConfig[] =
+    "{"
+    "  \"event_filters\": ["
+    "    {"
+    "      \"excluded_categories\": [],"
+    "      \"filter_args\": {},"
+    "      \"filter_predicate\": \"heap_profiler_predicate\","
+    "      \"included_categories\": [\"*\"]"
+    "    }"
+    "  ]"
+    "}";
+
 // Asserts that the fixed-size array |expected_backtrace| matches the backtrace
 // in |AllocationContextTracker::GetContextSnapshot|.
 template <size_t N>
 void AssertBacktraceEquals(const StackFrame(&expected_backtrace)[N]) {
-  AllocationContext ctx =
-      AllocationContextTracker::GetInstanceForCurrentThread()
-          ->GetContextSnapshot();
+  AllocationContext ctx;
+  ASSERT_TRUE(AllocationContextTracker::GetInstanceForCurrentThread()
+                  ->GetContextSnapshot(&ctx));
 
   auto* actual = std::begin(ctx.backtrace.frames);
   auto* actual_bottom = actual + ctx.backtrace.frame_count;
@@ -53,9 +65,9 @@ void AssertBacktraceEquals(const StackFrame(&expected_backtrace)[N]) {
 
 void AssertBacktraceContainsOnlyThreadName() {
   StackFrame t = StackFrame::FromThreadName(kThreadName);
-  AllocationContext ctx =
-      AllocationContextTracker::GetInstanceForCurrentThread()
-          ->GetContextSnapshot();
+  AllocationContext ctx;
+  ASSERT_TRUE(AllocationContextTracker::GetInstanceForCurrentThread()
+                  ->GetContextSnapshot(&ctx));
 
   ASSERT_EQ(1u, ctx.backtrace.frame_count);
   ASSERT_EQ(t, ctx.backtrace.frames[0]);
@@ -68,15 +80,15 @@ class AllocationContextTrackerTest : public testing::Test {
         AllocationContextTracker::CaptureMode::PSEUDO_STACK);
     // Enabling memory-infra category sets default memory dump config which
     // includes filters for capturing pseudo stack.
-    TraceConfig config(MemoryDumpManager::kTraceCategory, "");
-    TraceLog::GetInstance()->SetEnabled(config, TraceLog::RECORDING_MODE);
+    TraceConfig config(kFilteringTraceConfig);
+    TraceLog::GetInstance()->SetEnabled(config, TraceLog::FILTERING_MODE);
     AllocationContextTracker::SetCurrentThreadName(kThreadName);
   }
 
   void TearDown() override {
     AllocationContextTracker::SetCaptureMode(
         AllocationContextTracker::CaptureMode::DISABLED);
-    TraceLog::GetInstance()->SetDisabled();
+    TraceLog::GetInstance()->SetDisabled(TraceLog::FILTERING_MODE);
   }
 };
 
@@ -231,9 +243,9 @@ TEST_F(AllocationContextTrackerTest, BacktraceTakesTop) {
 
   {
     TRACE_EVENT0("Testing", kGingerbread);
-    AllocationContext ctx =
-        AllocationContextTracker::GetInstanceForCurrentThread()
-            ->GetContextSnapshot();
+    AllocationContext ctx;
+    ASSERT_TRUE(AllocationContextTracker::GetInstanceForCurrentThread()
+                    ->GetContextSnapshot(&ctx));
 
     // The pseudo stack relies on pointer equality, not deep string comparisons.
     ASSERT_EQ(t, ctx.backtrace.frames[0]);
@@ -242,38 +254,54 @@ TEST_F(AllocationContextTrackerTest, BacktraceTakesTop) {
   }
 
   {
-    AllocationContext ctx =
-        AllocationContextTracker::GetInstanceForCurrentThread()
-            ->GetContextSnapshot();
+    AllocationContext ctx;
+    ASSERT_TRUE(AllocationContextTracker::GetInstanceForCurrentThread()
+                    ->GetContextSnapshot(&ctx));
     ASSERT_EQ(t, ctx.backtrace.frames[0]);
     ASSERT_EQ(c, ctx.backtrace.frames[1]);
     ASSERT_EQ(f, ctx.backtrace.frames[11]);
   }
 }
 
-TEST_F(AllocationContextTrackerTest, TrackTaskContext) {
+TEST_F(AllocationContextTrackerTest, TrackCategoryName) {
   const char kContext1[] = "context1";
   const char kContext2[] = "context2";
   {
     // The context from the scoped task event should be used as type name.
     TRACE_HEAP_PROFILER_API_SCOPED_TASK_EXECUTION event1(kContext1);
-    AllocationContext ctx1 =
-        AllocationContextTracker::GetInstanceForCurrentThread()
-            ->GetContextSnapshot();
+    AllocationContext ctx1;
+    ASSERT_TRUE(AllocationContextTracker::GetInstanceForCurrentThread()
+                    ->GetContextSnapshot(&ctx1));
     ASSERT_EQ(kContext1, ctx1.type_name);
 
     // In case of nested events, the last event's context should be used.
     TRACE_HEAP_PROFILER_API_SCOPED_TASK_EXECUTION event2(kContext2);
-    AllocationContext ctx2 =
-        AllocationContextTracker::GetInstanceForCurrentThread()
-            ->GetContextSnapshot();
+    AllocationContext ctx2;
+    ASSERT_TRUE(AllocationContextTracker::GetInstanceForCurrentThread()
+                    ->GetContextSnapshot(&ctx2));
     ASSERT_EQ(kContext2, ctx2.type_name);
   }
 
+  {
+    // Type should be category name of the last seen trace event.
+    TRACE_EVENT0("Testing", kCupcake);
+    AllocationContext ctx1;
+    ASSERT_TRUE(AllocationContextTracker::GetInstanceForCurrentThread()
+                    ->GetContextSnapshot(&ctx1));
+    ASSERT_EQ("Testing", std::string(ctx1.type_name));
+
+    TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("Testing"), kCupcake);
+    AllocationContext ctx2;
+    ASSERT_TRUE(AllocationContextTracker::GetInstanceForCurrentThread()
+                    ->GetContextSnapshot(&ctx2));
+    ASSERT_EQ(TRACE_DISABLED_BY_DEFAULT("Testing"),
+              std::string(ctx2.type_name));
+  }
+
   // Type should be nullptr without task event.
-  AllocationContext ctx =
-      AllocationContextTracker::GetInstanceForCurrentThread()
-          ->GetContextSnapshot();
+  AllocationContext ctx;
+  ASSERT_TRUE(AllocationContextTracker::GetInstanceForCurrentThread()
+                  ->GetContextSnapshot(&ctx));
   ASSERT_FALSE(ctx.type_name);
 }
 
@@ -281,13 +309,9 @@ TEST_F(AllocationContextTrackerTest, IgnoreAllocationTest) {
   TRACE_EVENT0("Testing", kCupcake);
   TRACE_EVENT0("Testing", kDonut);
   HEAP_PROFILER_SCOPED_IGNORE;
-  AllocationContext ctx =
-      AllocationContextTracker::GetInstanceForCurrentThread()
-          ->GetContextSnapshot();
-  const StringPiece kTracingOverhead("tracing_overhead");
-  ASSERT_EQ(kTracingOverhead,
-            static_cast<const char*>(ctx.backtrace.frames[0].value));
-  ASSERT_EQ(1u, ctx.backtrace.frame_count);
+  AllocationContext ctx;
+  ASSERT_FALSE(AllocationContextTracker::GetInstanceForCurrentThread()
+                   ->GetContextSnapshot(&ctx));
 }
 
 }  // namespace trace_event

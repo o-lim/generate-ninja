@@ -11,35 +11,51 @@ namespace {
 
 using base::allocator::AllocatorDispatch;
 
-void* TCMalloc(const AllocatorDispatch*, size_t size) {
+void* TCMalloc(const AllocatorDispatch*, size_t size, void* context) {
   return tc_malloc(size);
 }
 
-void* TCCalloc(const AllocatorDispatch*, size_t n, size_t size) {
+void* TCCalloc(const AllocatorDispatch*, size_t n, size_t size, void* context) {
   return tc_calloc(n, size);
 }
 
-void* TCMemalign(const AllocatorDispatch*, size_t alignment, size_t size) {
+void* TCMemalign(const AllocatorDispatch*,
+                 size_t alignment,
+                 size_t size,
+                 void* context) {
   return tc_memalign(alignment, size);
 }
 
-void* TCRealloc(const AllocatorDispatch*, void* address, size_t size) {
+void* TCRealloc(const AllocatorDispatch*,
+                void* address,
+                size_t size,
+                void* context) {
   return tc_realloc(address, size);
 }
 
-void TCFree(const AllocatorDispatch*, void* address) {
+void TCFree(const AllocatorDispatch*, void* address, void* context) {
   tc_free(address);
+}
+
+size_t TCGetSizeEstimate(const AllocatorDispatch*,
+                         void* address,
+                         void* context) {
+  return tc_malloc_size(address);
 }
 
 }  // namespace
 
 const AllocatorDispatch AllocatorDispatch::default_dispatch = {
-    &TCMalloc,   /* alloc_function */
-    &TCCalloc,   /* alloc_zero_initialized_function */
-    &TCMemalign, /* alloc_aligned_function */
-    &TCRealloc,  /* realloc_function */
-    &TCFree,     /* free_function */
-    nullptr,     /* next */
+    &TCMalloc,          /* alloc_function */
+    &TCCalloc,          /* alloc_zero_initialized_function */
+    &TCMemalign,        /* alloc_aligned_function */
+    &TCRealloc,         /* realloc_function */
+    &TCFree,            /* free_function */
+    &TCGetSizeEstimate, /* get_size_estimate_function */
+    nullptr,            /* batch_malloc_function */
+    nullptr,            /* batch_free_function */
+    nullptr,            /* free_definite_size_function */
+    nullptr,            /* next */
 };
 
 // In the case of tcmalloc we have also to route the diagnostic symbols,

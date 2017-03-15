@@ -94,6 +94,14 @@ bool ExcludeHiddenFilesFilter(const base::FilePath& file_path) {
 namespace zip {
 
 bool Unzip(const base::FilePath& src_file, const base::FilePath& dest_dir) {
+  return UnzipWithFilterCallback(src_file, dest_dir,
+                                 base::Bind(&ExcludeNoFilesFilter), true);
+}
+
+bool UnzipWithFilterCallback(const base::FilePath& src_file,
+                             const base::FilePath& dest_dir,
+                             const FilterCallback& filter_cb,
+                             bool log_skipped_files) {
   ZipReader reader;
   if (!reader.Open(src_file)) {
     DLOG(WARNING) << "Failed to open " << src_file.value();
@@ -109,11 +117,17 @@ bool Unzip(const base::FilePath& src_file, const base::FilePath& dest_dir) {
                     << reader.current_entry_info()->file_path().value();
       return false;
     }
-    if (!reader.ExtractCurrentEntryIntoDirectory(dest_dir)) {
-      DLOG(WARNING) << "Failed to extract "
+    if (filter_cb.Run(reader.current_entry_info()->file_path())) {
+      if (!reader.ExtractCurrentEntryIntoDirectory(dest_dir)) {
+        DLOG(WARNING) << "Failed to extract "
+                      << reader.current_entry_info()->file_path().value();
+        return false;
+      }
+    } else if (log_skipped_files) {
+      DLOG(WARNING) << "Skipped file "
                     << reader.current_entry_info()->file_path().value();
-      return false;
     }
+
     if (!reader.AdvanceToNextEntry()) {
       DLOG(WARNING) << "Failed to advance to the next file";
       return false;

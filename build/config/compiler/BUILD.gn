@@ -16,9 +16,6 @@ if (current_cpu == "arm" || current_cpu == "arm64") {
 if (current_cpu == "mipsel" || current_cpu == "mips64el") {
   import("//build/config/mips.gni")
 }
-if (is_win) {
-  import("//build/config/win/visual_studio_version.gni")
-}
 if (is_mac) {
   import("//build/config/mac/symbols.gni")
 }
@@ -80,6 +77,24 @@ declare_args() {
   # of binutils can cause linker warning.
   # See: https://bugs.chromium.org/p/chromium/issues/detail?id=457359
   fatal_linker_warnings = true
+
+  # Build with C++ RTTI enabled. Chromium builds without RTTI by default,
+  # but some sanitizers are known to require it, like CFI diagnostics
+  # and UBsan variants.
+  use_rtti = use_cfi_diag || is_ubsan_vptr || is_ubsan_security
+
+  # AFDO (Automatic Feedback Directed Optimizer) is a form of profile-guided
+  # optimization that GCC supports. It used by ChromeOS in their official
+  # builds. To use it, set auto_profile_path to the path to a file containing
+  # the needed gcov profiling data.
+  auto_profile_path = ""
+
+  # Optimize for coverage guided fuzzing (balance between speed and number of
+  # branches)
+  optimize_for_fuzzing = false
+
+  # Optimize symbol files for maximizing goma cache hit rate.
+  strip_absolute_paths_from_debug_symbols = false
 }
 
 if (is_clang && !is_nacl) {
@@ -169,10 +184,6 @@ config("compiler") {
     # --------------------------------
     cflags += [ "-fno-strict-aliasing" ]  # See http://crbug.com/32204
     cflags_cc += [
-      # If this is removed then remove the corresponding /Zc:threadSafeInit- for
-      # Windows.
-      "-fno-threadsafe-statics",
-
       # Not exporting C++ inline functions can generally be applied anywhere
       # so we do so here. Normal function visibility is controlled by
       # //build/config/gcc:symbol_visibility_hidden.
@@ -211,6 +222,26 @@ config("compiler") {
     }
   }
 
+  # Eliminate build metadata (__DATE__, __TIME__ and __TIMESTAMP__) for
+  # deterministic build.  See https://crbug.com/314403
+  if (!is_official_build) {
+    if (is_win && !is_clang) {
+      cflags += [
+        "/wd4117",  # Trying to define or undefine a predefined macro.
+        "/D__DATE__=",
+        "/D__TIME__=",
+        "/D__TIMESTAMP__=",
+      ]
+    } else {
+      cflags += [
+        "-Wno-builtin-macro-redefined",
+        "-D__DATE__=",
+        "-D__TIME__=",
+        "-D__TIMESTAMP__=",
+      ]
+    }
+  }
+
   if (is_clang && is_debug) {
     # Allow comparing the address of references and 'this' against 0
     # in debug builds. Technically, these can never be null in
@@ -227,7 +258,7 @@ config("compiler") {
     # when turning clang on or off. (defines are passed via the command line,
     # and build system rebuild things when their commandline changes). Nothing
     # should ever read this define.
-    defines += [ "CR_CLANG_REVISION=$clang_revision" ]
+    defines += [ "CR_CLANG_REVISION=\"$clang_revision\"" ]
   }
 
   # Non-Mac Posix compiler flags setup.
@@ -282,32 +313,50 @@ config("compiler") {
       "-Wl,-z,now",
       "-Wl,-z,relro",
     ]
-    if (!using_sanitizer && !use_cfi_diag) {
-      ldflags += [ "-Wl,-z,defs" ]
+    if (!using_sanitizer) {
+      if (!use_cfi_diag) {
+        ldflags += [ "-Wl,-z,defs" ]
+      }
+
+      # Functions interposed by the sanitizers can make ld think
+      # that some libraries aren't needed when they actually are,
+      # http://crbug.com/234010. As workaround, disable --as-needed.
+      if (!is_nacl && !is_android) {
+        # TODO(pcc): Fix linker bug which requires us to link pthread
+        # unconditionally here (crbug.com/623236).
+        ldflags += [
+          "-Wl,--no-as-needed",
+          "-lpthread",
+        ]
+      }
+      ldflags += [ "-Wl,--as-needed" ]
     }
   }
 
   # Linux-specific compiler flags setup.
   # ------------------------------------
+  if (is_android && is_clang) {
+    _rebased_android_toolchain_root =
+        rebase_path(android_toolchain_root, root_build_dir)
+
+    # Let clang find the linker in the NDK.
+    ldflags += [ "--gcc-toolchain=$_rebased_android_toolchain_root" ]
+  }
+
   if (is_posix && use_lld && !is_nacl) {
     ldflags += [ "-fuse-ld=lld" ]
   } else if (use_gold) {
     ldflags += [ "-fuse-ld=gold" ]
     if (is_android) {
-      if (is_clang) {
-        _rebased_android_toolchain_root =
-            rebase_path(android_toolchain_root, root_build_dir)
-
-        # Let clang find the ld.gold in the NDK.
-        ldflags += [ "--gcc-toolchain=$_rebased_android_toolchain_root" ]
-      }
-
       # Use -mstackrealign due to a bug on ia32 Jelly Bean.
       # See crbug.com/521527
       if (current_cpu == "x86") {
         cflags += [ "-mstackrealign" ]
       }
     } else {
+      # On Android, this isn't needed.  gcc in the NDK knows to look next to
+      # it with -fuse-ld=gold, and clang gets a --gcc-toolchain flag passed
+      # above.
       ldflags += [ "-B$gold_path" ]
 
       if (linux_use_bundled_binutils) {
@@ -337,12 +386,6 @@ config("compiler") {
     # Gold is the default linker for the bundled binutils so we explicitly
     # enable the bfd linker when use_gold is not set.
     ldflags += [ "-fuse-ld=bfd" ]
-  } else if (is_android && is_clang &&
-             (current_cpu == "mipsel" || current_cpu == "mips64el")) {
-    # Let clang find the ld.bfd in the NDK.
-    _rebased_android_toolchain_root =
-        rebase_path(android_toolchain_root, root_build_dir)
-    ldflags += [ "--gcc-toolchain=$_rebased_android_toolchain_root" ]
   }
 
   if (is_posix && (use_gold || (use_lld && !is_nacl)) && !using_sanitizer &&
@@ -353,10 +396,13 @@ config("compiler") {
     # Additionally, on cast Android x86, --icf=all causes issues.
     if (is_android && current_cpu == "x86") {
       ldflags += [ "-Wl,--icf=none" ]
-    } else if (is_clang || is_chromeos ||
+    } else if ((is_clang && !is_android) || is_chromeos ||
                (current_cpu != "x86" && current_cpu != "x64")) {
+      # TODO(thakis): Remove `!is_android` above once our gold has been rolled
+      # with the fix for https://sourceware.org/bugzilla/show_bug.cgi?id=17704
+      # merged.  See also https://crbug.com/663886
       ldflags += [ "-Wl,--icf=all" ]
-    } else if (!is_android) {
+    } else if (!is_android || is_clang) {
       ldflags += [ "-Wl,--icf=safe" ]
     }
   }
@@ -382,7 +428,7 @@ config("compiler") {
   # clang-cl (used if is_win) doesn't expose this flag.
   # Currently disabled for nacl since its toolchain lacks this flag (too old).
   # TODO(zforman): Once nacl's toolchain is updated, remove check.
-  if (is_clang && is_linux) {
+  if (is_clang && is_linux && strip_absolute_paths_from_debug_symbols) {
     absolute_path = rebase_path("//.")
     cflags += [ "-fdebug-prefix-map=$absolute_path=." ]
   }
@@ -404,34 +450,8 @@ config("compiler") {
   }
 
   if (is_mac) {
-    # Tell the compiler to use libc++'s headers and the linker to link
-    # against libc++.  The latter part normally requires OS X 10.7,
-    # but we still support running on 10.6.  How does this work?  Two
-    # parts:
-    # 1. Chromium's clang doesn't error on -mmacosx-version-min=10.6
-    #    combined with -stdlib=libc++ (it normally silently produced a
-    #    binary that doesn't run on 10.6)
-    # 2. Further down, library_dirs is set to
-    #    third_party/libc++-static, which contains a static
-    #    libc++.a library.  The linker then links against that instead
-    #    of against /usr/lib/libc++.dylib when it sees the -lc++ flag
-    #    added by the driver.
-    #
-    # In component builds, just link to the system libc++.  This has
-    # the effect of making everything depend on libc++, which means
-    # component-build binaries won't run on 10.6 (no libc++ there),
-    # but for a developer-only configuration that's ok.  (We don't
-    # want to raise the deployment target yet so that official and
-    # dev builds have the same deployment target.  This affects
-    # things like which functions are considered deprecated.)
     cflags_cc += [ "-stdlib=libc++" ]
     ldflags += [ "-stdlib=libc++" ]
-    if (!is_component_build && !is_asan) {
-      ldflags += [
-        "-L",
-        rebase_path("//third_party/libc++-static", root_build_dir),
-      ]
-    }
   }
 
   # Add flags for link-time optimization. These flags enable
@@ -443,18 +463,40 @@ config("compiler") {
   # TODO(pcc): Make this conditional on is_official_build rather than on gn
   # flags for specific features.
   if (!is_debug && (allow_posix_link_time_opt || is_cfi) && !is_nacl) {
-    cflags += [ "-flto" ]
-    ldflags += [ "-flto" ]
+    if (use_thin_lto) {
+      cflags += [ "-flto=thin" ]
+      ldflags += [ "-flto=thin" ]
 
-    # Apply a lower LTO optimization level as the default is too slow.
-    if (is_linux) {
+      # Limit the parallelism to avoid too agressive competition between
+      # linker jobs. This is still suboptimal to a potential dynamic
+      # resource allocation scheme, but should be good enough.
       if (use_lld) {
-        ldflags += [ "-Wl,--lto-O1" ]
+        ldflags += [ "-Wl,--thinlto-jobs=8" ]
       } else {
-        ldflags += [ "-Wl,-plugin-opt,O1" ]
+        ldflags += [ "-Wl,-plugin-opt,jobs=8" ]
       }
-    } else if (is_mac) {
-      ldflags += [ "-Wl,-mllvm,-O1" ]
+    } else {
+      # Note: ThinLTO does not currently have this feature implemented
+      # For Full LTO, it provides a measurable runtime speedup of Chrome.
+      cflags += [
+        "-flto",
+        "-fwhole-program-vtables",
+      ]
+      ldflags += [
+        "-flto",
+        "-fwhole-program-vtables",
+      ]
+
+      # Apply a lower LTO optimization level as the default is too slow.
+      if (is_linux) {
+        if (use_lld) {
+          ldflags += [ "-Wl,--lto-O1" ]
+        } else {
+          ldflags += [ "-Wl,-plugin-opt,O1" ]
+        }
+      } else if (is_mac) {
+        ldflags += [ "-Wl,-mllvm,-O1" ]
+      }
     }
 
     # Work-around for http://openradar.appspot.com/20356002
@@ -469,9 +511,6 @@ config("compiler") {
     if (is_linux) {
       ldflags += [ "-Wl,-plugin-opt,-function-sections" ]
     }
-
-    cflags += [ "-fwhole-program-vtables" ]
-    ldflags += [ "-fwhole-program-vtables" ]
   }
 
   # Pass the same C/C++ flags to the objective C/C++ compiler.
@@ -484,6 +523,16 @@ config("compiler") {
   if (is_posix) {
     asmflags += cflags
     asmflags += cflags_c
+  }
+}
+
+# This is separate from :compiler (and not even a sub-config there)
+# so that some targets can remove it from the list with:
+#   configs -= [ "//build/config/compiler:pthread" ]
+config("pthread") {
+  if (is_linux) {
+    cflags = [ "-pthread" ]
+    ldflags = [ "-pthread" ]
   }
 }
 
@@ -525,13 +574,6 @@ config("compiler_cpu_abi") {
           "-march=$arm_arch",
           "-mfloat-abi=$arm_float_abi",
         ]
-        if (arm_use_thumb) {
-          cflags += [ "-mthumb" ]
-          if (is_android && !is_clang) {
-            # Clang doesn't support this option.
-            cflags += [ "-mthumb-interwork" ]
-          }
-        }
       }
       if (arm_tune != "") {
         cflags += [ "-mtune=$arm_tune" ]
@@ -542,12 +584,6 @@ config("compiler_cpu_abi") {
         ldflags += [ "--target=aarch64-linux-gnu" ]
       }
     } else if (current_cpu == "mipsel" && !is_nacl) {
-      if (is_clang) {
-        # Temporarily needed due to unsupported MIPS macro instructions
-        # in inline asm code in third_party projects (libwebp and webrtc).
-        # TODO(lmilko) Enable integrated-as.
-        cflags += [ "-fno-integrated-as" ]
-      }
       if (mips_arch_variant == "r6") {
         if (is_clang) {
           cflags += [
@@ -571,8 +607,6 @@ config("compiler_cpu_abi") {
           cflags += [
             "-mmsa",
             "-mfp64",
-            "-msched-weight",
-            "-mload-store-pairs",
           ]
         }
       } else if (mips_arch_variant == "r2") {
@@ -655,8 +689,6 @@ config("compiler_cpu_abi") {
           cflags += [
             "-mmsa",
             "-mfp64",
-            "-msched-weight",
-            "-mload-store-pairs",
           ]
         }
       } else if (mips_arch_variant == "r2") {
@@ -760,6 +792,25 @@ config("compiler_arm_fpu") {
   }
 }
 
+config("compiler_arm_thumb") {
+  if (current_cpu == "arm" && arm_use_thumb && is_posix &&
+      !(is_mac || is_ios || is_nacl)) {
+    cflags = [ "-mthumb" ]
+    if (is_android && !is_clang) {
+      # Clang doesn't support this option.
+      cflags += [ "-mthumb-interwork" ]
+    }
+  }
+}
+
+config("compiler_arm") {
+  if (current_cpu == "arm" && is_chromeos) {
+    # arm is normally the default mode for clang, but on chromeos a wrapper
+    # is used to pass -mthumb, and therefor change the default.
+    cflags = [ "-marm" ]
+  }
+}
+
 # runtime_library -------------------------------------------------------------
 #
 # Sets the runtime library and associated options.
@@ -806,11 +857,20 @@ config("runtime_library") {
 config("default_warnings") {
   cflags = []
   cflags_cc = []
+  ldflags = []
 
   if (is_win) {
     if (treat_warnings_as_errors) {
       cflags += [ "/WX" ]
     }
+    if (fatal_linker_warnings) {
+      ldflags += [ "/WX" ]
+    }
+
+    cflags += [
+      # Assume UTF-8 by default to avoid code page dependencies.
+      "/utf-8",
+    ]
 
     cflags += [
       # Warnings permanently disabled:
@@ -896,28 +956,20 @@ config("default_warnings") {
       "/wd4459",
     ]
 
-    if (visual_studio_version == "2015") {
+    cflags += [
+      # C4312 is a VS 2015 64-bit warning for integer to larger pointer.
+      # TODO(brucedawson): fix warnings, crbug.com/554200
+      "/wd4312",
+    ]
+
+    if (current_cpu == "x86") {
       cflags += [
-        # C4312 is a VS 2015 64-bit warning for integer to larger pointer.
-        # TODO(brucedawson): fix warnings, crbug.com/554200
-        "/wd4312",
-
-        # TODO(brucedawson): http://crbug.com/593448 - C4595 is an 'illegal
-        # inline operator new' warning that is new in VS 2015 Update 2.
-        # This is equivalent to clang's no-inline-new-delete warning.
-        # See http://bugs.icu-project.org/trac/ticket/11122
-        "/wd4595",
+        # VC++ 2015 changes 32-bit size_t truncation warnings from 4244 to
+        # 4267. Example: short TruncTest(size_t x) { return x; }
+        # Since we disable 4244 we need to disable 4267 during migration.
+        # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+        "/wd4267",
       ]
-
-      if (current_cpu == "x86") {
-        cflags += [
-          # VC++ 2015 changes 32-bit size_t truncation warnings from 4244 to
-          # 4267. Example: short TruncTest(size_t x) { return x; }
-          # Since we disable 4244 we need to disable 4267 during migration.
-          # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-          "/wd4267",
-        ]
-      }
     }
 
     # VS xtree header file needs to be patched or 4702 (unreachable code
@@ -930,7 +982,6 @@ config("default_warnings") {
 
     # Building with Clang on Windows is a work in progress and very
     # experimental. See crbug.com/82385.
-    # Keep this in sync with the similar block in build/common.gypi
     if (is_clang) {
       cflags += [
         # TODO(hans): Make this list shorter eventually, http://crbug.com/504657
@@ -945,6 +996,12 @@ config("default_warnings") {
       # availability is newer than the deployment target. This is not
       # required when compiling Chrome for iOS.
       cflags += [ "-Wpartial-availability" ]
+    }
+
+    if (is_ios) {
+      # When compiling Objective-C, warns if a selector named via @selector has
+      # not been defined in any visible interface.
+      cflags += [ "-Wundeclared-selector" ]
     }
 
     # Suppress warnings about ABI changes on ARM (Clang doesn't give this
@@ -1027,7 +1084,10 @@ config("default_warnings") {
         "-Wno-shift-negative-value",
       ]
     }
-    if (!is_nacl && !use_xcode_clang) {
+
+    # use_xcode_clang only refers to the iOS toolchain, host binaries use
+    # chromium's clang always.
+    if (!is_nacl && (!use_xcode_clang || current_toolchain == host_toolchain)) {
       # Flags NaCl (Clang 3.7) and Xcode 7.3 (Clang clang-703.0.31) do not
       # recognize.
       cflags += [
@@ -1039,6 +1099,12 @@ config("default_warnings") {
 
         # TODO(hans): https://crbug.com/637306
         "-Wno-address-of-packed-member",
+
+        # TODO(hans): https://crbug.com/681136
+        "-Wno-unused-lambda-capture",
+
+        # TODO(thakis ): https://crbug.com/683349
+        "-Wno-user-defined-warnings",
       ]
     }
   }
@@ -1056,6 +1122,11 @@ config("chromium_code") {
     cflags = [ "-Wall" ]
     if (treat_warnings_as_errors) {
       cflags += [ "-Werror" ]
+
+      # The compiler driver can sometimes (rarely) emit warnings before calling
+      # the actual linker.  Make sure these warnings are treated as errors as
+      # well.
+      ldflags = [ "-Werror" ]
     }
     if (is_clang) {
       # Enable -Wextra for chromium_code when we control the compiler.
@@ -1082,9 +1153,7 @@ config("chromium_code") {
       defines += [ "_FORTIFY_SOURCE=2" ]
     }
 
-    if (is_mac) {
-      # Warn if automatic synthesis is triggered. This triggers numerous
-      # warnings for internal iOS directories.
+    if (is_mac || is_ios) {
       cflags_objc = [ "-Wobjc-missing-property-synthesis" ]
       cflags_objcc = [ "-Wobjc-missing-property-synthesis" ]
     }
@@ -1114,6 +1183,7 @@ config("no_chromium_code") {
     # code. crbug.com/589724
     if (treat_warnings_as_errors && is_clang) {
       cflags += [ "-Werror" ]
+      ldflags = [ "-Werror" ]
     }
     if (is_clang && !is_nacl) {
       # TODO(thakis): Remove !is_nacl once
@@ -1151,9 +1221,10 @@ config("rtti") {
     cflags_cc = [ "-frtti" ]
   }
 }
+
 config("no_rtti") {
-  # CFI diagnostics and UBsan vptr require RTTI.
-  if (!use_cfi_diag && !is_ubsan_vptr && !is_ubsan_security) {
+  # Some sanitizer configs may require RTTI to be left enabled globally
+  if (!use_rtti) {
     if (is_win) {
       cflags_cc = [ "/GR-" ]
     } else {
@@ -1238,18 +1309,36 @@ if (is_win) {
       "/Gw",
     ]
   }
-  common_optimize_on_ldflags = [ "/OPT:ICF" ]  # Redundant COMDAT folding.
-  if (is_official_build) {
-    common_optimize_on_ldflags += [
-      "/OPT:REF",  # Remove unreferenced data.
-      "/LTCG",  # Link-time code generation.
+  common_optimize_on_ldflags = []
 
-      # Set the number of LTCG code-gen threads to eight. The default is four.
-      # This gives a 5-10% link speedup.
-      "/cgthreads:8",
-    ]
-    if (full_wpo_on_official) {
-      arflags = [ "/LTCG" ]
+  # /OPT:ICF is not desirable in Debug builds, since code-folding can result in
+  # misleading symbols in stack traces. It is also incompatible with
+  # incremental linking, which we enable for both Debug and component builds.
+  if (!is_debug && !is_component_build) {
+    common_optimize_on_ldflags += [ "/OPT:ICF" ]  # Redundant COMDAT folding.
+  }
+
+  if (is_official_build) {
+    common_optimize_on_ldflags += [ "/OPT:REF" ]  # Remove unreferenced data.
+    if (!use_lld) {
+      common_optimize_on_ldflags += [
+        # Set the number of LTCG code-gen threads to eight. The default is four.
+        # This gives a 5-10% link speedup.
+        "/cgthreads:8",
+      ]
+      if (use_incremental_wpo) {
+        # Incremental Link-time code generation.
+        common_optimize_on_ldflags += [ "/LTCG:INCREMENTAL" ]
+      } else {
+        common_optimize_on_ldflags += [ "/LTCG" ]  # Link-time code generation.
+      }
+      if (full_wpo_on_official) {
+        if (use_incremental_wpo) {
+          arflags = [ "/LTCG:INCREMENTAL" ]
+        } else {
+          arflags = [ "/LTCG" ]
+        }
+      }
     }
   }
 } else {
@@ -1292,21 +1381,6 @@ if (is_win) {
       "-Wl,-O1",
       "-Wl,--gc-sections",
     ]
-
-    if (!using_sanitizer) {
-      # Functions interposed by the sanitizers can make ld think
-      # that some libraries aren't needed when they actually are,
-      # http://crbug.com/234010. As workaround, disable --as-needed.
-      if (!is_nacl && !is_android) {
-        # TODO(pcc): Fix linker bug which requires us to link pthread
-        # unconditionally here (crbug.com/623236).
-        common_optimize_on_ldflags += [
-          "-Wl,--no-as-needed",
-          "-lpthread",
-        ]
-      }
-      common_optimize_on_ldflags += [ "-Wl,--as-needed" ]
-    }
   }
 }
 
@@ -1362,6 +1436,8 @@ config("optimize_no_wpo") {
   } else if (optimize_for_size) {
     # Favor size over speed.
     cflags = [ "-Os" ] + common_optimize_on_cflags
+  } else if (optimize_for_fuzzing) {
+    cflags = [ "-O1" ] + common_optimize_on_cflags
   } else {
     cflags = [ "-O2" ] + common_optimize_on_cflags
   }
@@ -1374,19 +1450,12 @@ config("no_optimize") {
     cflags = [
       "/Od",  # Disable optimization.
       "/Ob0",  # Disable all inlining (on by default).
+      "/GF",  # Enable string pooling (off by default).
     ]
   } else if (is_android && !android_full_debug) {
     # On Android we kind of optimize some things that don't affect debugging
     # much even when optimization is disabled to get the binary size down.
-    cflags = [
-      "-Os",
-      "-fdata-sections",
-      "-ffunction-sections",
-    ]
-
-    # Don't use gc-sections since it can cause links to succeed when they
-    # actually shouldn't. http://crbug.com/159847
-    ldflags = common_optimize_on_ldflags - [ "-Wl,--gc-sections" ]
+    cflags = [ "-Os" ]
   } else {
     cflags = [ "-O0" ]
     ldflags = []
@@ -1414,18 +1483,22 @@ config("optimize_max") {
       # build also specifies /Ot, /Oi, and /GF, but these are implied by /O2.
       cflags = [ "/O2" ] + common_optimize_on_cflags
 
-      # TODO(thakis): Remove is_clang here, https://crbug.com/598772
-      if (is_official_build && !is_clang) {
-        cflags += [
-          "/GL",  # Whole program optimization.
+      if (is_official_build) {
+        if (!is_clang) {
+          cflags += [
+            "/GL",  # Whole program optimization.
 
-          # Disable Warning 4702 ("Unreachable code") for the WPO/PGO builds.
-          # Probably anything that this would catch that wouldn't be caught in a
-          # normal build isn't going to actually be a bug, so the incremental
-          # value of C4702 for PGO builds is likely very small.
-          "/wd4702",
-        ]
+            # Disable Warning 4702 ("Unreachable code") for the WPO/PGO builds.
+            # Probably anything that this would catch that wouldn't be caught
+            # in a normal build isn't going to actually be a bug, so the
+            # incremental value of C4702 for PGO builds is likely very small.
+            "/wd4702",
+          ]
+        }
+        # TODO(crbug.com/598772): Enable -flto for Clang.
       }
+    } else if (optimize_for_fuzzing) {
+      cflags = [ "-O1" ] + common_optimize_on_cflags
     } else {
       cflags = [ "-O2" ] + common_optimize_on_cflags
     }
@@ -1469,10 +1542,18 @@ config("optimize_speed") {
           "/wd4702",
         ]
       }
+    } else if (optimize_for_fuzzing) {
+      cflags = [ "-O1" ] + common_optimize_on_cflags
     } else {
       cflags = [ "-O3" ] + common_optimize_on_cflags
     }
   }
+}
+
+config("optimize_fuzzing") {
+  cflags = [ "-O1" ] + common_optimize_on_cflags
+  ldflags = common_optimize_on_ldflags
+  visibility = [ ":default_optimization" ]
 }
 
 # The default optimization applied to all targets. This will be equivalent to
@@ -1484,8 +1565,23 @@ config("default_optimization") {
     configs = [ "//build/config/nacl:irt_optimize" ]
   } else if (is_debug) {
     configs = [ ":no_optimize" ]
+  } else if (optimize_for_fuzzing) {
+    assert(!is_win, "Fuzzing optimize level not supported on Windows")
+    configs = [ ":optimize_fuzzing" ]
   } else {
     configs = [ ":optimize" ]
+  }
+}
+
+# GCC supports a form of profile-guided optimization called AFDO, which
+# is used by ChromeOS in their official builds. However,
+# //base/allocator:tcmalloc currently doesn't work correctly with AFDO
+# so we provide separate config so that the flag can be disabled per-target.
+# TODO(crbug.com/633719): Remove this config once tcmalloc works with AFDO
+# or we remove tcmalloc or we stop using AFDO.
+config("afdo") {
+  if (auto_profile_path != "" && current_toolchain == default_toolchain) {
+    cflags = [ "-fauto-profile=${auto_profile_path}" ]
   }
 }
 
@@ -1503,16 +1599,30 @@ config("default_optimization") {
 # Full symbols.
 config("symbols") {
   if (is_win) {
-    import("//build/toolchain/goma.gni")
-    cflags = [ "/Zi" ]  # Produce PDB file, no edit and continue.
+    if (use_goma) {
+      # Note that this requires is_win_fastlink, enforced elsewhere.
+      cflags = [ "/Z7" ]  # Debug information in the .obj files.
+    } else {
+      cflags = [ "/Zi" ]  # Produce PDB file, no edit and continue.
+    }
 
-    if (is_win_fastlink && visual_studio_version != "2013") {
+    if (is_win_fastlink) {
       # Tell VS 2015+ to create a PDB that references debug
       # information in .obj and .lib files instead of copying
       # it all. This flag is incompatible with /PROFILE
       ldflags = [ "/DEBUG:FASTLINK" ]
     } else {
       ldflags = [ "/DEBUG" ]
+    }
+
+    if (is_clang) {
+      # /DEBUG:FASTLINK requires every object file to have standalone debug
+      # information.
+      if (is_win_fastlink) {
+        cflags += [ "-fstandalone-debug" ]
+      } else {
+        cflags += [ "-fno-standalone-debug" ]
+      }
     }
   } else {
     if (is_mac || is_ios) {
@@ -1525,6 +1635,14 @@ config("symbols") {
         # dump_syms, so this is still required (https://crbug.com/622406).
         cflags += [ "-fno-standalone-debug" ]
       }
+    } else if (is_android) {
+      # Breakpad can't handle DWARF 4 symbols properly yet, so use DWARF 3
+      # explicitly on android where we are hitting https://crbug.com/638485.
+      # The arguments MUST be in this order because of a gcc arg parsing bug.
+      cflags = [
+        "-gdwarf-3",
+        "-g2",
+      ]
     } else {
       cflags = [ "-g2" ]
     }
@@ -1541,16 +1659,19 @@ config("minimal_symbols") {
   if (is_win) {
     # Linker symbols for backtraces only.
     cflags = []
-    if (is_win_fastlink && visual_studio_version != "2013") {
-      # Tell VS 2015+ to create a PDB that references debug
-      # information in .obj and .lib files instead of copying
-      # it all. This flag is incompatible with /PROFILE
-      ldflags = [ "/DEBUG:FASTLINK" ]
-    } else {
-      ldflags = [ "/DEBUG" ]
-    }
+    ldflags = [ "/DEBUG" ]
   } else {
-    cflags = [ "-g1" ]
+    if (is_android) {
+      # Breakpad can't handle DWARF 4 symbols properly yet, so use DWARF 3
+      # explicitly on android where we are hitting https://crbug.com/638485.
+      # The arguments MUST be in this order because of a gcc arg parsing bug.
+      cflags = [
+        "-gdwarf-3",
+        "-g1",
+      ]
+    } else {
+      cflags = [ "-g1" ]
+    }
     if (use_debug_fission) {
       cflags += [ "-gsplit-dwarf" ]
     }

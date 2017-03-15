@@ -9,6 +9,8 @@
 #include <memory>
 
 #include "base/json/json_reader.h"
+#include "base/memory/ptr_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -17,8 +19,9 @@ namespace internal {
 
 class JSONParserTest : public testing::Test {
  public:
-  JSONParser* NewTestParser(const std::string& input) {
-    JSONParser* parser = new JSONParser(JSON_PARSE_RFC);
+  JSONParser* NewTestParser(const std::string& input,
+                            int options = JSON_PARSE_RFC) {
+    JSONParser* parser = new JSONParser(options);
     parser->start_pos_ = input.data();
     parser->pos_ = parser->start_pos_;
     parser->end_pos_ = parser->start_pos_ + input.length();
@@ -105,7 +108,7 @@ TEST_F(JSONParserTest, ConsumeLiterals) {
   // Literal |false|.
   input = "false,|";
   parser.reset(NewTestParser(input));
-  value.reset(parser->ConsumeLiteral());
+  value = parser->ConsumeLiteral();
   EXPECT_EQ('e', *parser->pos_);
 
   TestLastThree(parser.get());
@@ -117,13 +120,13 @@ TEST_F(JSONParserTest, ConsumeLiterals) {
   // Literal |null|.
   input = "null,|";
   parser.reset(NewTestParser(input));
-  value.reset(parser->ConsumeLiteral());
+  value = parser->ConsumeLiteral();
   EXPECT_EQ('l', *parser->pos_);
 
   TestLastThree(parser.get());
 
   ASSERT_TRUE(value.get());
-  EXPECT_TRUE(value->IsType(Value::TYPE_NULL));
+  EXPECT_TRUE(value->IsType(Value::Type::NONE));
 }
 
 TEST_F(JSONParserTest, ConsumeNumbers) {
@@ -143,7 +146,7 @@ TEST_F(JSONParserTest, ConsumeNumbers) {
   // Negative integer.
   input = "-1234,|";
   parser.reset(NewTestParser(input));
-  value.reset(parser->ConsumeNumber());
+  value = parser->ConsumeNumber();
   EXPECT_EQ('4', *parser->pos_);
 
   TestLastThree(parser.get());
@@ -155,7 +158,7 @@ TEST_F(JSONParserTest, ConsumeNumbers) {
   // Double.
   input = "12.34,|";
   parser.reset(NewTestParser(input));
-  value.reset(parser->ConsumeNumber());
+  value = parser->ConsumeNumber();
   EXPECT_EQ('4', *parser->pos_);
 
   TestLastThree(parser.get());
@@ -168,7 +171,7 @@ TEST_F(JSONParserTest, ConsumeNumbers) {
   // Scientific.
   input = "42e3,|";
   parser.reset(NewTestParser(input));
-  value.reset(parser->ConsumeNumber());
+  value = parser->ConsumeNumber();
   EXPECT_EQ('3', *parser->pos_);
 
   TestLastThree(parser.get());
@@ -180,7 +183,7 @@ TEST_F(JSONParserTest, ConsumeNumbers) {
   // Negative scientific.
   input = "314159e-5,|";
   parser.reset(NewTestParser(input));
-  value.reset(parser->ConsumeNumber());
+  value = parser->ConsumeNumber();
   EXPECT_EQ('5', *parser->pos_);
 
   TestLastThree(parser.get());
@@ -192,7 +195,7 @@ TEST_F(JSONParserTest, ConsumeNumbers) {
   // Positive scientific.
   input = "0.42e+3,|";
   parser.reset(NewTestParser(input));
-  value.reset(parser->ConsumeNumber());
+  value = parser->ConsumeNumber();
   EXPECT_EQ('3', *parser->pos_);
 
   TestLastThree(parser.get());
@@ -243,14 +246,14 @@ TEST_F(JSONParserTest, ErrorMessages) {
   EXPECT_EQ(JSONReader::JSON_UNEXPECTED_DATA_AFTER_ROOT, error_code);
 
   std::string nested_json;
-  for (int i = 0; i < 101; ++i) {
+  for (int i = 0; i < 201; ++i) {
     nested_json.insert(nested_json.begin(), '[');
     nested_json.append(1, ']');
   }
   root = JSONReader::ReadAndReturnError(nested_json, JSON_PARSE_RFC,
                                         &error_code, &error_message);
   EXPECT_FALSE(root.get());
-  EXPECT_EQ(JSONParser::FormatErrorMessage(1, 100, JSONReader::kTooMuchNesting),
+  EXPECT_EQ(JSONParser::FormatErrorMessage(1, 200, JSONReader::kTooMuchNesting),
             error_message);
   EXPECT_EQ(JSONReader::JSON_TOO_MUCH_NESTING, error_code);
 
@@ -321,6 +324,70 @@ TEST_F(JSONParserTest, DecodeUnicodeNonCharacter) {
   EXPECT_FALSE(JSONReader::Read("[\"\\ufdd0\"]"));
   EXPECT_FALSE(JSONReader::Read("[\"\\ufffe\"]"));
   EXPECT_FALSE(JSONReader::Read("[\"\\ud83f\\udffe\"]"));
+}
+
+TEST_F(JSONParserTest, DecodeNegativeEscapeSequence) {
+  EXPECT_FALSE(JSONReader::Read("[\"\\x-A\"]"));
+  EXPECT_FALSE(JSONReader::Read("[\"\\u-00A\"]"));
+}
+
+// Verifies invalid utf-8 characters are replaced.
+TEST_F(JSONParserTest, ReplaceInvalidCharacters) {
+  const std::string bogus_char = "󿿿";
+  const std::string quoted_bogus_char = "\"" + bogus_char + "\"";
+  std::unique_ptr<JSONParser> parser(
+      NewTestParser(quoted_bogus_char, JSON_REPLACE_INVALID_CHARACTERS));
+  std::unique_ptr<Value> value(parser->ConsumeString());
+  ASSERT_TRUE(value.get());
+  std::string str;
+  EXPECT_TRUE(value->GetAsString(&str));
+  EXPECT_EQ(kUnicodeReplacementString, str);
+}
+
+TEST_F(JSONParserTest, ParseNumberErrors) {
+  const struct {
+    const char* input;
+    bool parse_success;
+    double value;
+  } kCases[] = {
+      // clang-format off
+      {"1", true, 1},
+      {"2.", false, 0},
+      {"42", true, 42},
+      {"6e", false, 0},
+      {"43e2", true, 4300},
+      {"43e-", false, 0},
+      {"9e-3", true, 0.009},
+      {"2e+", false, 0},
+      {"2e+2", true, 200},
+      // clang-format on
+  };
+
+  for (unsigned int i = 0; i < arraysize(kCases); ++i) {
+    auto test_case = kCases[i];
+    SCOPED_TRACE(StringPrintf("case %u: \"%s\"", i, test_case.input));
+
+    // MSan will do a better job detecting over-read errors if the input is
+    // not nul-terminated on the heap.
+    size_t str_len = strlen(test_case.input);
+    auto non_nul_termianted = MakeUnique<char[]>(str_len);
+    memcpy(non_nul_termianted.get(), test_case.input, str_len);
+
+    StringPiece string_piece(non_nul_termianted.get(), str_len);
+    std::unique_ptr<Value> result = JSONReader::Read(string_piece);
+    if (test_case.parse_success) {
+      EXPECT_TRUE(result);
+    } else {
+      EXPECT_FALSE(result);
+    }
+
+    if (!result)
+      continue;
+
+    double double_value = 0;
+    EXPECT_TRUE(result->GetAsDouble(&double_value));
+    EXPECT_EQ(test_case.value, double_value);
+  }
 }
 
 }  // namespace internal

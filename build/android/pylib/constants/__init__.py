@@ -37,28 +37,28 @@ PACKAGE_INFO.update({
     'chromecast_shell': chrome.PackageInfo(
         'com.google.android.apps.mediashell',
         'com.google.android.apps.mediashell.MediaShellActivity',
-        '/data/local/tmp/castshell-command-line',
+        'castshell-command-line',
         None),
     'android_webview_shell': chrome.PackageInfo(
         'org.chromium.android_webview.shell',
         'org.chromium.android_webview.shell.AwShellActivity',
-        '/data/local/tmp/android-webview-command-line',
+        'android-webview-command-line',
         None),
     'gtest': chrome.PackageInfo(
         'org.chromium.native_test',
         'org.chromium.native_test.NativeUnitTestActivity',
-        '/data/local/tmp/chrome-native-tests-command-line',
+        'chrome-native-tests-command-line',
         None),
     'components_browsertests': chrome.PackageInfo(
         'org.chromium.components_browsertests_apk',
         ('org.chromium.components_browsertests_apk' +
          '.ComponentsBrowserTestsActivity'),
-        '/data/local/tmp/chrome-native-tests-command-line',
+        'chrome-native-tests-command-line',
         None),
     'content_browsertests': chrome.PackageInfo(
         'org.chromium.content_browsertests_apk',
         'org.chromium.content_browsertests_apk.ContentBrowserTestsActivity',
-        '/data/local/tmp/chrome-native-tests-command-line',
+        'chrome-native-tests-command-line',
         None),
     'chromedriver_webview_shell': chrome.PackageInfo(
         'org.chromium.chromedriver_webview_shell',
@@ -96,7 +96,7 @@ DEVICE_PERF_OUTPUT_DIR = (
 SCREENSHOTS_DIR = os.path.join(DIR_SOURCE_ROOT, 'out_screenshots')
 
 ANDROID_SDK_VERSION = version_codes.MARSHMALLOW
-ANDROID_SDK_BUILD_TOOLS_VERSION = '23.0.1'
+ANDROID_SDK_BUILD_TOOLS_VERSION = '24.0.2'
 ANDROID_SDK_ROOT = os.path.join(DIR_SOURCE_ROOT,
                                 'third_party', 'android_tools', 'sdk')
 ANDROID_SDK_TOOLS = os.path.join(ANDROID_SDK_ROOT,
@@ -140,9 +140,9 @@ PYTHON_UNIT_TEST_SUITES = {
 }
 
 LOCAL_MACHINE_TESTS = ['junit', 'python']
-VALID_ENVIRONMENTS = ['local', 'remote_device']
+VALID_ENVIRONMENTS = ['local']
 VALID_TEST_TYPES = ['gtest', 'instrumentation', 'junit', 'linker', 'monkey',
-                    'perf', 'python', 'uirobot']
+                    'perf', 'python']
 VALID_DEVICE_TYPES = ['Android', 'iOS']
 
 

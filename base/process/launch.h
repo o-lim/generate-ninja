@@ -154,6 +154,11 @@ struct BASE_EXPORT LaunchOptions {
 #endif  // defined(OS_LINUX)
 
 #if defined(OS_POSIX)
+  // If not empty, launch the specified executable instead of
+  // cmdline.GetProgram(). This is useful when it is necessary to pass a custom
+  // argv[0].
+  base::FilePath real_path;
+
   // If non-null, a delegate to be run immediately prior to executing the new
   // program in the child process.
   //
@@ -270,6 +275,12 @@ BASE_EXPORT bool GetAppOutputWithExitCode(const CommandLine& cl,
 BASE_EXPORT void RaiseProcessToHighPriority();
 
 #if defined(OS_MACOSX)
+// An implementation of LaunchProcess() that uses posix_spawn() instead of
+// fork()+exec(). This does not support the |pre_exec_delegate| and
+// |current_directory| options.
+Process LaunchProcessPosixSpawn(const std::vector<std::string>& argv,
+                                const LaunchOptions& options);
+
 // Restore the default exception handler, setting it to Apple Crash Reporter
 // (ReportCrash).  When forking and execing a new process, the child will
 // inherit the parent's exception ports, which may be set to the Breakpad

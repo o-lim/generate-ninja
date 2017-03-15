@@ -118,14 +118,16 @@ void HistogramBase::WriteJSON(std::string* output) const {
   root.SetInteger("flags", flags());
   root.Set("params", std::move(parameters));
   root.Set("buckets", std::move(buckets));
-  root.SetInteger("pid", GetCurrentProcId());
+  root.SetInteger("pid", GetUniqueIdForProcess());
   serializer.Serialize(root);
 }
 
 // static
 void HistogramBase::EnableActivityReportHistogram(
     const std::string& process_type) {
-  DCHECK(!report_histogram_);
+  if (report_histogram_)
+    return;
+
   size_t existing = StatisticsRecorder::GetHistogramCount();
   if (existing != 0) {
     DVLOG(1) << existing
@@ -173,12 +175,7 @@ void HistogramBase::WriteAsciiBucketGraph(double current_size,
 
 const std::string HistogramBase::GetSimpleAsciiBucketRange(
     Sample sample) const {
-  std::string result;
-  if (kHexRangePrintingFlag & flags())
-    StringAppendF(&result, "%#x", sample);
-  else
-    StringAppendF(&result, "%d", sample);
-  return result;
+  return StringPrintf("%d", sample);
 }
 
 void HistogramBase::WriteAsciiBucketValue(Count current,

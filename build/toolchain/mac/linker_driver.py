@@ -52,6 +52,13 @@ def Main(args):
   if len(args) < 2:
     raise RuntimeError("Usage: linker_driver.py [linker-invocation]")
 
+  for i in xrange(len(args)):
+    if args[i] != '--developer_dir':
+      continue
+    os.environ['DEVELOPER_DIR'] = args[i + 1]
+    del args[i:i+2]
+    break
+
   # Collect arguments to the linker driver (this script) and remove them from
   # the arguments being passed to the compiler driver.
   linker_driver_actions = {}
@@ -130,8 +137,8 @@ def RunDsymUtil(dsym_path_prefix, full_args):
     raise ValueError('Unspecified dSYM output file')
 
   linker_out = _FindLinkerOutput(full_args)
-  (head, tail) = os.path.split(linker_out)
-  dsym_out = os.path.join(dsym_path_prefix, tail + '.dSYM')
+  base = os.path.basename(linker_out)
+  dsym_out = os.path.join(dsym_path_prefix, base + '.dSYM')
 
   # Remove old dSYMs before invoking dsymutil.
   _RemovePath(dsym_out)
@@ -155,8 +162,8 @@ def RunSaveUnstripped(unstripped_path_prefix, full_args):
     raise ValueError('Unspecified unstripped output file')
 
   linker_out = _FindLinkerOutput(full_args)
-  (head, tail) = os.path.split(linker_out)
-  unstripped_out = os.path.join(unstripped_path_prefix, tail + '.unstripped')
+  base = os.path.basename(linker_out)
+  unstripped_out = os.path.join(unstripped_path_prefix, base + '.unstripped')
 
   shutil.copyfile(linker_out, unstripped_out)
   return [unstripped_out]

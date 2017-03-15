@@ -9,6 +9,7 @@ import android.os.StrictMode;
 import android.os.SystemClock;
 
 import org.chromium.base.annotations.JNINamespace;
+import org.chromium.base.annotations.MainDex;
 import org.chromium.base.annotations.SuppressFBWarnings;
 
 import java.io.File;
@@ -34,6 +35,7 @@ import java.util.Map;
  *          all early events are dropped.
  */
 @JNINamespace("base::android")
+@MainDex
 public class EarlyTraceEvent {
     // Must be kept in sync with the native kAndroidTraceConfigFile.
     private static final String TRACE_CONFIG_FILENAME = "/data/local/chrome-trace-config.json";
@@ -164,7 +166,7 @@ public class EarlyTraceEvent {
     }
 
     private static void dumpEvents(List<Event> events) {
-        long nativeNowUs = nativeGetTimeTicksNowUs();
+        long nativeNowUs = TimeUtils.nativeGetTimeTicksNowUs();
         long javaNowUs = SystemClock.elapsedRealtime() * 1000;
         long offsetMs = (nativeNowUs - javaNowUs) / 1000;
         for (Event event : events) {
@@ -173,7 +175,6 @@ public class EarlyTraceEvent {
         }
     }
 
-    private static native long nativeGetTimeTicksNowUs();
     private static native void nativeRecordEarlyEvent(
             String name, long beginTimeMs, long endTimeMs, int threadId);
 }

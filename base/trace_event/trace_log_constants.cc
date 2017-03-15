@@ -14,20 +14,13 @@ const TraceLog::InternalTraceOptions
     TraceLog::kInternalRecordUntilFull = 1 << 0;
 const TraceLog::InternalTraceOptions
     TraceLog::kInternalRecordContinuously = 1 << 1;
-const TraceLog::InternalTraceOptions
-    TraceLog::kInternalEnableSampling = 1 << 2;
+// 1 << 2 is reserved for the DEPRECATED kInternalEnableSampling. DO NOT USE.
 const TraceLog::InternalTraceOptions
     TraceLog::kInternalEchoToConsole = 1 << 3;
 const TraceLog::InternalTraceOptions
     TraceLog::kInternalRecordAsMuchAsPossible = 1 << 4;
 const TraceLog::InternalTraceOptions
     TraceLog::kInternalEnableArgumentFilter = 1 << 5;
-
-// TraceEventFilter predicate names used in trace config.
-const char* const TraceLog::TraceEventFilter::kEventWhitelistPredicate =
-    "event_whitelist_predicate";
-const char* const TraceLog::TraceEventFilter::kHeapProfilerPredicate =
-    "heap_profiler_predicate";
 
 }  // namespace trace_event
 }  // namespace base

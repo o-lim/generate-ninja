@@ -117,4 +117,14 @@ TEST_F(HistogramTesterTest, TestGetAllSamples_NoSamples) {
   EXPECT_THAT(tester.GetAllSamples(kHistogram5), IsEmpty());
 }
 
+TEST_F(HistogramTesterTest, TestGetTotalCountsForPrefix) {
+  HistogramTester tester;
+  UMA_HISTOGRAM_ENUMERATION("Test1.Test2.Test3", 2, 5);
+
+  // Regression check for bug https://crbug.com/659977.
+  EXPECT_TRUE(tester.GetTotalCountsForPrefix("Test2.").empty());
+
+  EXPECT_EQ(1u, tester.GetTotalCountsForPrefix("Test1.").size());
+}
+
 }  // namespace base

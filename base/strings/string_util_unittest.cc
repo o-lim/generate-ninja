@@ -676,6 +676,10 @@ TEST(StringUtilTest, JoinString) {
   std::vector<std::string> parts;
   EXPECT_EQ(std::string(), JoinString(parts, separator));
 
+  parts.push_back(std::string());
+  EXPECT_EQ(std::string(), JoinString(parts, separator));
+  parts.clear();
+
   parts.push_back("a");
   EXPECT_EQ("a", JoinString(parts, separator));
 
@@ -694,6 +698,10 @@ TEST(StringUtilTest, JoinString16) {
   std::vector<string16> parts;
   EXPECT_EQ(string16(), JoinString(parts, separator));
 
+  parts.push_back(string16());
+  EXPECT_EQ(string16(), JoinString(parts, separator));
+  parts.clear();
+
   parts.push_back(ASCIIToUTF16("a"));
   EXPECT_EQ(ASCIIToUTF16("a"), JoinString(parts, separator));
 
@@ -705,6 +713,108 @@ TEST(StringUtilTest, JoinString16) {
   EXPECT_EQ(ASCIIToUTF16("a, b, c, "), JoinString(parts, separator));
   parts.push_back(ASCIIToUTF16(" "));
   EXPECT_EQ(ASCIIToUTF16("a|b|c|| "), JoinString(parts, ASCIIToUTF16("|")));
+}
+
+TEST(StringUtilTest, JoinStringPiece) {
+  std::string separator(", ");
+  std::vector<StringPiece> parts;
+  EXPECT_EQ(std::string(), JoinString(parts, separator));
+
+  // Test empty first part (https://crbug.com/698073).
+  parts.push_back(StringPiece());
+  EXPECT_EQ(std::string(), JoinString(parts, separator));
+  parts.clear();
+
+  parts.push_back("a");
+  EXPECT_EQ("a", JoinString(parts, separator));
+
+  parts.push_back("b");
+  parts.push_back("c");
+  EXPECT_EQ("a, b, c", JoinString(parts, separator));
+
+  parts.push_back(StringPiece());
+  EXPECT_EQ("a, b, c, ", JoinString(parts, separator));
+  parts.push_back(" ");
+  EXPECT_EQ("a|b|c|| ", JoinString(parts, "|"));
+}
+
+TEST(StringUtilTest, JoinStringPiece16) {
+  string16 separator = ASCIIToUTF16(", ");
+  std::vector<StringPiece16> parts;
+  EXPECT_EQ(string16(), JoinString(parts, separator));
+
+  // Test empty first part (https://crbug.com/698073).
+  parts.push_back(StringPiece16());
+  EXPECT_EQ(string16(), JoinString(parts, separator));
+  parts.clear();
+
+  const string16 kA = ASCIIToUTF16("a");
+  parts.push_back(kA);
+  EXPECT_EQ(ASCIIToUTF16("a"), JoinString(parts, separator));
+
+  const string16 kB = ASCIIToUTF16("b");
+  parts.push_back(kB);
+  const string16 kC = ASCIIToUTF16("c");
+  parts.push_back(kC);
+  EXPECT_EQ(ASCIIToUTF16("a, b, c"), JoinString(parts, separator));
+
+  parts.push_back(StringPiece16());
+  EXPECT_EQ(ASCIIToUTF16("a, b, c, "), JoinString(parts, separator));
+  const string16 kSpace = ASCIIToUTF16(" ");
+  parts.push_back(kSpace);
+  EXPECT_EQ(ASCIIToUTF16("a|b|c|| "), JoinString(parts, ASCIIToUTF16("|")));
+}
+
+TEST(StringUtilTest, JoinStringInitializerList) {
+  std::string separator(", ");
+  EXPECT_EQ(std::string(), JoinString({}, separator));
+
+  // Test empty first part (https://crbug.com/698073).
+  EXPECT_EQ(std::string(), JoinString({StringPiece()}, separator));
+
+  // With const char*s.
+  EXPECT_EQ("a", JoinString({"a"}, separator));
+  EXPECT_EQ("a, b, c", JoinString({"a", "b", "c"}, separator));
+  EXPECT_EQ("a, b, c, ", JoinString({"a", "b", "c", StringPiece()}, separator));
+  EXPECT_EQ("a|b|c|| ", JoinString({"a", "b", "c", StringPiece(), " "}, "|"));
+
+  // With std::strings.
+  const std::string kA = "a";
+  const std::string kB = "b";
+  EXPECT_EQ("a, b", JoinString({kA, kB}, separator));
+
+  // With StringPieces.
+  const StringPiece kPieceA = kA;
+  const StringPiece kPieceB = kB;
+  EXPECT_EQ("a, b", JoinString({kPieceA, kPieceB}, separator));
+}
+
+TEST(StringUtilTest, JoinStringInitializerList16) {
+  string16 separator = ASCIIToUTF16(", ");
+  EXPECT_EQ(string16(), JoinString({}, separator));
+
+  // Test empty first part (https://crbug.com/698073).
+  EXPECT_EQ(string16(), JoinString({StringPiece16()}, separator));
+
+  // With string16s.
+  const string16 kA = ASCIIToUTF16("a");
+  EXPECT_EQ(ASCIIToUTF16("a"), JoinString({kA}, separator));
+
+  const string16 kB = ASCIIToUTF16("b");
+  const string16 kC = ASCIIToUTF16("c");
+  EXPECT_EQ(ASCIIToUTF16("a, b, c"), JoinString({kA, kB, kC}, separator));
+
+  EXPECT_EQ(ASCIIToUTF16("a, b, c, "),
+            JoinString({kA, kB, kC, StringPiece16()}, separator));
+  const string16 kSpace = ASCIIToUTF16(" ");
+  EXPECT_EQ(
+      ASCIIToUTF16("a|b|c|| "),
+      JoinString({kA, kB, kC, StringPiece16(), kSpace}, ASCIIToUTF16("|")));
+
+  // With StringPiece16s.
+  const StringPiece16 kPieceA = kA;
+  const StringPiece16 kPieceB = kB;
+  EXPECT_EQ(ASCIIToUTF16("a, b"), JoinString({kPieceA, kPieceB}, separator));
 }
 
 TEST(StringUtilTest, StartsWith) {

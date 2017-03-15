@@ -13,26 +13,34 @@ from __future__ import print_function
 import argparse
 import os
 import sys
+import warnings
 import zipfile
 
 
 def main():
   parser = argparse.ArgumentParser(description="Generate fuzzer config.")
-  parser.add_argument('--corpus', required=True)
-  parser.add_argument('--output', required=True)
-  parser.add_argument('--fuzzer', required=True)
+  parser.add_argument('corpus_directories', metavar='corpus_dir', type=str,
+                      nargs='+')
+  parser.add_argument('--output', metavar='output_archive_name.zip',
+                      required=True)
   args = parser.parse_args()
 
   corpus_files = []
 
-  for (dirpath, _, filenames) in os.walk(args.corpus):
-    for filename in filenames:
-      full_filename = os.path.join(dirpath, filename)
-      corpus_files.append(full_filename)
+  for directory in args.corpus_directories:
+    for (dirpath, _, filenames) in os.walk(directory):
+      for filename in filenames:
+        full_filename = os.path.join(dirpath, filename)
+        corpus_files.append(full_filename)
 
   with zipfile.ZipFile(args.output, 'w') as z:
-    for corpus_file in corpus_files:
-        z.write(corpus_file, os.path.basename(corpus_file))
+    # Turn warnings into errors to interrupt the build: crbug.com/653920.
+    with warnings.catch_warnings():
+      warnings.simplefilter("error")
+      for i, corpus_file in enumerate(corpus_files):
+        # To avoid duplication of filenames inside the archive, use numbers.
+        arcname = '%016d' % i
+        z.write(corpus_file, arcname)
 
 
 if __name__ == '__main__':

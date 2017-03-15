@@ -9,18 +9,33 @@ import threading
 
 class ResultType(object):
   """Class enumerating test types."""
+  # The test passed.
   PASS = 'PASS'
+
+  # The test was intentionally skipped.
   SKIP = 'SKIP'
+
+  # The test failed.
   FAIL = 'FAIL'
+
+  # The test caused the containing process to crash.
   CRASH = 'CRASH'
+
+  # The test timed out.
   TIMEOUT = 'TIMEOUT'
+
+  # The test ran, but we couldn't determine what happened.
   UNKNOWN = 'UNKNOWN'
+
+  # The test did not run.
+  NOTRUN = 'NOTRUN'
 
   @staticmethod
   def GetTypes():
     """Get a list of all test types."""
     return [ResultType.PASS, ResultType.SKIP, ResultType.FAIL,
-            ResultType.CRASH, ResultType.TIMEOUT, ResultType.UNKNOWN]
+            ResultType.CRASH, ResultType.TIMEOUT, ResultType.UNKNOWN,
+            ResultType.NOTRUN]
 
 
 class BaseTestResult(object):
@@ -41,7 +56,7 @@ class BaseTestResult(object):
     self._test_type = test_type
     self._duration = duration
     self._log = log
-    self._tombstones = None
+    self._links = {}
 
   def __str__(self):
     return self._name
@@ -89,18 +104,30 @@ class BaseTestResult(object):
     """Get the test log."""
     return self._log
 
-  def SetTombstones(self, tombstones):
-    self._tombstones = tombstones
+  def SetLink(self, name, link_url):
+    """Set link with test result data."""
+    self._links[name] = link_url
 
-  def GetTombstones(self):
-    return self._tombstones
+  def GetLinks(self):
+    """Get dict containing links to test result data."""
+    return self._links
+
 
 class TestRunResults(object):
   """Set of results for a test run."""
 
   def __init__(self):
+    self._links = {}
     self._results = set()
     self._results_lock = threading.RLock()
+
+  def SetLink(self, name, link_url):
+    """Add link with test run results data."""
+    self._links[name] = link_url
+
+  def GetLinks(self):
+    """Get dict containing links to test run result data."""
+    return self._links
 
   def GetLogs(self):
     """Get the string representation of all test logs."""

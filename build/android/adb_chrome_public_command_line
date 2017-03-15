@@ -13,5 +13,4 @@
 # To remove all Chrome flags, pass an empty string for the flags:
 #   adb_chrome_public_command_line ""
 
-exec $(dirname $0)/adb_command_line.py --device-path \
-    /data/local/chrome-command-line "$@"
+exec $(dirname $0)/adb_command_line.py --name chrome-command-line "$@"

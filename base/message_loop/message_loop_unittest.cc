@@ -106,10 +106,11 @@ void RunTest_AbortDontRunMoreTasks(bool delayed) {
   java_thread->Start();
 
   if (delayed) {
-    java_thread->message_loop()->PostDelayedTask(
+    java_thread->message_loop()->task_runner()->PostDelayedTask(
         FROM_HERE, Bind(&AbortMessagePump), TimeDelta::FromMilliseconds(10));
   } else {
-    java_thread->message_loop()->PostTask(FROM_HERE, Bind(&AbortMessagePump));
+    java_thread->message_loop()->task_runner()->PostTask(
+        FROM_HERE, Bind(&AbortMessagePump));
   }
 
   // Wait to ensure we catch the correct exception (and don't crash)
@@ -455,7 +456,7 @@ void RunTest_RecursiveSupport2(MessageLoop::Type message_loop_type) {
 
 void PostNTasksThenQuit(int posts_remaining) {
   if (posts_remaining > 1) {
-    MessageLoop::current()->task_runner()->PostTask(
+    ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, Bind(&PostNTasksThenQuit, posts_remaining - 1));
   } else {
     MessageLoop::current()->QuitWhenIdle();
@@ -613,9 +614,6 @@ RUN_MESSAGE_LOOP_TESTS(UI, &TypeUIMessagePumpFactory);
 RUN_MESSAGE_LOOP_TESTS(IO, &TypeIOMessagePumpFactory);
 
 #if defined(OS_WIN)
-// Additional set of tests for GPU version of UI message loop.
-RUN_MESSAGE_LOOP_TESTS(GPU, &MessagePumpForGpu::CreateMessagePumpForGpu);
-
 TEST(MessageLoopTest, PostDelayedTask_SharedTimer_SubPump) {
   RunTest_PostDelayedTask_SharedTimer_SubPump();
 }
@@ -741,7 +739,7 @@ TEST(MessageLoopTest, FileDescriptorWatcherOutlivesMessageLoop) {
   int fd = pipefds[1];
   {
     // Arrange for controller to live longer than message loop.
-    MessageLoopForIO::FileDescriptorWatcher controller;
+    MessageLoopForIO::FileDescriptorWatcher controller(FROM_HERE);
     {
       MessageLoopForIO message_loop;
 
@@ -768,7 +766,7 @@ TEST(MessageLoopTest, FileDescriptorWatcherDoubleStop) {
     // Arrange for message loop to live longer than controller.
     MessageLoopForIO message_loop;
     {
-      MessageLoopForIO::FileDescriptorWatcher controller;
+      MessageLoopForIO::FileDescriptorWatcher controller(FROM_HERE);
 
       QuitDelegate delegate;
       message_loop.WatchFileDescriptor(fd,
@@ -868,10 +866,10 @@ TEST(MessageLoopTest, ThreadMainTaskRunner) {
   scoped_refptr<Foo> foo(new Foo());
   std::string a("a");
   ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, Bind(
-      &Foo::Test1ConstRef, foo.get(), a));
+      &Foo::Test1ConstRef, foo, a));
 
   // Post quit task;
-  MessageLoop::current()->task_runner()->PostTask(
+  ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       Bind(&MessageLoop::QuitWhenIdle, Unretained(MessageLoop::current())));
 
@@ -997,7 +995,7 @@ TEST(MessageLoopTest, OriginalRunnerWorks) {
 
   scoped_refptr<Foo> foo(new Foo());
   original_runner->PostTask(FROM_HERE,
-                            Bind(&Foo::Test1ConstRef, foo.get(), "a"));
+                            Bind(&Foo::Test1ConstRef, foo, "a"));
   RunLoop().RunUntilIdle();
   EXPECT_EQ(1, foo->test_count());
 }

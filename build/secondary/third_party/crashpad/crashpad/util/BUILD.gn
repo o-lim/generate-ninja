@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/toolchain/toolchain.gni")
+
 if (is_mac) {
   import("//build/config/sysroot.gni")
 }
@@ -32,6 +34,16 @@ if (is_mac) {
 
     args = [ "{{source}}" ]
     args += rebase_path(outputs, root_build_dir)
+    if (!use_system_xcode) {
+      args += [
+        "--developer-dir",
+        hermetic_xcode_path,
+      ]
+    }
+    args += [
+      "--sdk",
+      mac_sdk_path,
+    ]
   }
 }
 
@@ -58,6 +70,8 @@ static_library("util") {
     "mac/service_management.h",
     "mac/xattr.cc",
     "mac/xattr.h",
+    "misc/address_sanitizer.h",
+    "misc/arraysize_unsafe.h",
     "misc/clock.h",
     "misc/clock_mac.cc",
     "misc/clock_posix.cc",
@@ -66,6 +80,8 @@ static_library("util") {
     "misc/initialization_state.h",
     "misc/initialization_state_dcheck.cc",
     "misc/initialization_state_dcheck.h",
+    "misc/metrics.cc",
+    "misc/metrics.h",
     "misc/pdb_structures.cc",
     "misc/pdb_structures.h",
     "misc/random_string.cc",
@@ -76,8 +92,12 @@ static_library("util") {
     "misc/tri_state.h",
     "misc/uuid.cc",
     "misc/uuid.h",
+    "misc/zlib.cc",
+    "misc/zlib.h",
     "net/http_body.cc",
     "net/http_body.h",
+    "net/http_body_gzip.cc",
+    "net/http_body_gzip.h",
     "net/http_headers.cc",
     "net/http_headers.h",
     "net/http_multipart_builder.cc",
@@ -100,6 +120,8 @@ static_library("util") {
     "posix/drop_privileges.h",
     "posix/process_info.h",
     "posix/process_info_mac.cc",
+    "posix/signals.cc",
+    "posix/signals.h",
     "posix/symbolic_constants_posix.cc",
     "posix/symbolic_constants_posix.h",
     "stdlib/aligned_allocator.cc",
@@ -144,6 +166,8 @@ static_library("util") {
     "win/get_module_information.h",
     "win/handle.cc",
     "win/handle.h",
+    "win/initial_client_data.cc",
+    "win/initial_client_data.h",
     "win/module_version.cc",
     "win/module_version.h",
     "win/nt_internals.cc",
@@ -161,6 +185,9 @@ static_library("util") {
     "win/scoped_local_alloc.h",
     "win/scoped_process_suspend.cc",
     "win/scoped_process_suspend.h",
+    "win/session_end_watcher.cc",
+    "win/session_end_watcher.h",
+    "win/termination_codes.h",
     "win/time.cc",
     "win/time.h",
     "win/xp_compat.h",
@@ -216,13 +243,11 @@ static_library("util") {
   deps = [
     "//base",
     "//third_party/crashpad/crashpad/compat",
+    "//third_party/crashpad/crashpad/third_party/zlib",
   ]
 
   if (is_win) {
-    libs = [
-      "rpcrt4.lib",
-      "winhttp.lib",
-    ]
+    libs = [ "winhttp.lib" ]
     cflags = [
       "/wd4201",  # nonstandard extension used : nameless struct/union.
       "/wd4577",  # 'noexcept' used with no exception handling mode specified.

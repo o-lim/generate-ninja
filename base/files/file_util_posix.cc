@@ -185,6 +185,19 @@ bool DetermineDevShmExecutable() {
 #endif  // defined(OS_LINUX)
 #endif  // !defined(OS_NACL_NONSFI)
 
+#if !defined(OS_MACOSX)
+// Appends |mode_char| to |mode| before the optional character set encoding; see
+// https://www.gnu.org/software/libc/manual/html_node/Opening-Streams.html for
+// details.
+std::string AppendModeCharacter(StringPiece mode, char mode_char) {
+  std::string result(mode.as_string());
+  size_t comma_pos = result.find(',');
+  result.insert(comma_pos == std::string::npos ? result.length() : comma_pos, 1,
+                mode_char);
+  return result;
+}
+#endif
+
 }  // namespace
 
 #if !defined(OS_NACL_NONSFI)
@@ -276,11 +289,8 @@ bool CopyDirectory(const FilePath& from_path,
   FilePath real_from_path = MakeAbsoluteFilePath(from_path);
   if (real_from_path.empty())
     return false;
-  if (real_to_path.value().size() >= real_from_path.value().size() &&
-      real_to_path.value().compare(0, real_from_path.value().size(),
-                                   real_from_path.value()) == 0) {
+  if (real_to_path == real_from_path || real_from_path.IsParent(real_to_path))
     return false;
-  }
 
   int traverse_type = FileEnumerator::FILES | FileEnumerator::SHOW_SYM_LINKS;
   if (recursive)
@@ -351,6 +361,29 @@ bool CopyDirectory(const FilePath& from_path,
 }
 #endif  // !defined(OS_NACL_NONSFI)
 
+bool CreateLocalNonBlockingPipe(int fds[2]) {
+#if defined(OS_LINUX)
+  return pipe2(fds, O_CLOEXEC | O_NONBLOCK) == 0;
+#else
+  int raw_fds[2];
+  if (pipe(raw_fds) != 0)
+    return false;
+  ScopedFD fd_out(raw_fds[0]);
+  ScopedFD fd_in(raw_fds[1]);
+  if (!SetCloseOnExec(fd_out.get()))
+    return false;
+  if (!SetCloseOnExec(fd_in.get()))
+    return false;
+  if (!SetNonBlocking(fd_out.get()))
+    return false;
+  if (!SetNonBlocking(fd_in.get()))
+    return false;
+  fds[0] = fd_out.release();
+  fds[1] = fd_in.release();
+  return true;
+#endif
+}
+
 bool SetNonBlocking(int fd) {
   const int flags = fcntl(fd, F_GETFL);
   if (flags == -1)
@@ -358,6 +391,21 @@ bool SetNonBlocking(int fd) {
   if (flags & O_NONBLOCK)
     return true;
   if (HANDLE_EINTR(fcntl(fd, F_SETFL, flags | O_NONBLOCK)) == -1)
+    return false;
+  return true;
+}
+
+bool SetCloseOnExec(int fd) {
+#if defined(OS_NACL_NONSFI)
+  const int flags = 0;
+#else
+  const int flags = fcntl(fd, F_GETFD);
+  if (flags == -1)
+    return false;
+  if (flags & FD_CLOEXEC)
+    return true;
+#endif  // defined(OS_NACL_NONSFI)
+  if (HANDLE_EINTR(fcntl(fd, F_SETFD, flags | FD_CLOEXEC)) == -1)
     return false;
   return true;
 }
@@ -675,11 +723,29 @@ bool GetFileInfo(const FilePath& file_path, File::Info* results) {
 #endif  // !defined(OS_NACL_NONSFI)
 
 FILE* OpenFile(const FilePath& filename, const char* mode) {
+  // 'e' is unconditionally added below, so be sure there is not one already
+  // present before a comma in |mode|.
+  DCHECK(
+      strchr(mode, 'e') == nullptr ||
+      (strchr(mode, ',') != nullptr && strchr(mode, 'e') > strchr(mode, ',')));
   ThreadRestrictions::AssertIOAllowed();
   FILE* result = NULL;
+#if defined(OS_MACOSX)
+  // macOS does not provide a mode character to set O_CLOEXEC; see
+  // https://developer.apple.com/legacy/library/documentation/Darwin/Reference/ManPages/man3/fopen.3.html.
+  const char* the_mode = mode;
+#else
+  std::string mode_with_e(AppendModeCharacter(mode, 'e'));
+  const char* the_mode = mode_with_e.c_str();
+#endif
   do {
-    result = fopen(filename.value().c_str(), mode);
+    result = fopen(filename.value().c_str(), the_mode);
   } while (!result && errno == EINTR);
+#if defined(OS_MACOSX)
+  // Mark the descriptor as close-on-exec.
+  if (result)
+    SetCloseOnExec(fileno(result));
+#endif
   return result;
 }
 

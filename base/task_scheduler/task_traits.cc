@@ -8,20 +8,29 @@
 
 #include <ostream>
 
+#include "base/logging.h"
+#include "base/task_scheduler/scoped_set_task_priority_for_current_thread.h"
+
 namespace base {
 
 // Do not rely on defaults hard-coded below beyond the guarantees described in
 // the header; anything else is subject to change. Tasks should explicitly
 // request defaults if the behavior is critical to the task.
 TaskTraits::TaskTraits()
-    : with_file_io_(false),
-      priority_(TaskPriority::BACKGROUND),
+    : may_block_(false),
+      with_base_sync_primitives_(false),
+      priority_(internal::GetTaskPriorityForCurrentThread()),
       shutdown_behavior_(TaskShutdownBehavior::SKIP_ON_SHUTDOWN) {}
 
 TaskTraits::~TaskTraits() = default;
 
-TaskTraits& TaskTraits::WithFileIO() {
-  with_file_io_ = true;
+TaskTraits& TaskTraits::MayBlock() {
+  may_block_ = true;
+  return *this;
+}
+
+TaskTraits& TaskTraits::WithBaseSyncPrimitives() {
+  with_base_sync_primitives_ = true;
   return *this;
 }
 
@@ -36,34 +45,41 @@ TaskTraits& TaskTraits::WithShutdownBehavior(
   return *this;
 }
 
-std::ostream& operator<<(std::ostream& os, const TaskPriority& task_priority) {
+const char* TaskPriorityToString(TaskPriority task_priority) {
   switch (task_priority) {
     case TaskPriority::BACKGROUND:
-      os << "BACKGROUND";
-      break;
+      return "BACKGROUND";
     case TaskPriority::USER_VISIBLE:
-      os << "USER_VISIBLE";
-      break;
+      return "USER_VISIBLE";
     case TaskPriority::USER_BLOCKING:
-      os << "USER_BLOCKING";
-      break;
+      return "USER_BLOCKING";
   }
+  NOTREACHED();
+  return "";
+}
+
+const char* TaskShutdownBehaviorToString(
+    TaskShutdownBehavior shutdown_behavior) {
+  switch (shutdown_behavior) {
+    case TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN:
+      return "CONTINUE_ON_SHUTDOWN";
+    case TaskShutdownBehavior::SKIP_ON_SHUTDOWN:
+      return "SKIP_ON_SHUTDOWN";
+    case TaskShutdownBehavior::BLOCK_SHUTDOWN:
+      return "BLOCK_SHUTDOWN";
+  }
+  NOTREACHED();
+  return "";
+}
+
+std::ostream& operator<<(std::ostream& os, const TaskPriority& task_priority) {
+  os << TaskPriorityToString(task_priority);
   return os;
 }
 
 std::ostream& operator<<(std::ostream& os,
                          const TaskShutdownBehavior& shutdown_behavior) {
-  switch (shutdown_behavior) {
-    case TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN:
-      os << "CONTINUE_ON_SHUTDOWN";
-      break;
-    case TaskShutdownBehavior::SKIP_ON_SHUTDOWN:
-      os << "SKIP_ON_SHUTDOWN";
-      break;
-    case TaskShutdownBehavior::BLOCK_SHUTDOWN:
-      os << "BLOCK_SHUTDOWN";
-      break;
-  }
+  os << TaskShutdownBehaviorToString(shutdown_behavior);
   return os;
 }
 

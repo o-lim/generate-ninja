@@ -16,6 +16,7 @@
 #include <ostream>
 
 #include "base/logging.h"
+#include "base/numerics/safe_math.h"
 #include "build/build_config.h"
 
 #if defined(OS_ANDROID)
@@ -25,7 +26,6 @@
 #endif
 
 #if !defined(OS_MACOSX)
-#include "base/lazy_instance.h"
 #include "base/synchronization/lock.h"
 #endif
 
@@ -34,8 +34,10 @@ namespace {
 #if !defined(OS_MACOSX)
 // This prevents a crash on traversing the environment global and looking up
 // the 'TZ' variable in libc. See: crbug.com/390567.
-base::LazyInstance<base::Lock>::Leaky
-    g_sys_time_to_time_struct_lock = LAZY_INSTANCE_INITIALIZER;
+base::Lock* GetSysTimeToTimeStructLock() {
+  static auto* lock = new base::Lock();
+  return lock;
+}
 
 // Define a system-specific SysTime that wraps either to a time_t or
 // a time64_t depending on the host system, and associated convertion.
@@ -44,7 +46,7 @@ base::LazyInstance<base::Lock>::Leaky
 typedef time64_t SysTime;
 
 SysTime SysTimeFromTimeStruct(struct tm* timestruct, bool is_local) {
-  base::AutoLock locked(g_sys_time_to_time_struct_lock.Get());
+  base::AutoLock locked(*GetSysTimeToTimeStructLock());
   if (is_local)
     return mktime64(timestruct);
   else
@@ -52,7 +54,7 @@ SysTime SysTimeFromTimeStruct(struct tm* timestruct, bool is_local) {
 }
 
 void SysTimeToTimeStruct(SysTime t, struct tm* timestruct, bool is_local) {
-  base::AutoLock locked(g_sys_time_to_time_struct_lock.Get());
+  base::AutoLock locked(*GetSysTimeToTimeStructLock());
   if (is_local)
     localtime64_r(&t, timestruct);
   else
@@ -63,7 +65,7 @@ void SysTimeToTimeStruct(SysTime t, struct tm* timestruct, bool is_local) {
 typedef time_t SysTime;
 
 SysTime SysTimeFromTimeStruct(struct tm* timestruct, bool is_local) {
-  base::AutoLock locked(g_sys_time_to_time_struct_lock.Get());
+  base::AutoLock locked(*GetSysTimeToTimeStructLock());
   if (is_local)
     return mktime(timestruct);
   else
@@ -71,7 +73,7 @@ SysTime SysTimeFromTimeStruct(struct tm* timestruct, bool is_local) {
 }
 
 void SysTimeToTimeStruct(SysTime t, struct tm* timestruct, bool is_local) {
-  base::AutoLock locked(g_sys_time_to_time_struct_lock.Get());
+  base::AutoLock locked(*GetSysTimeToTimeStructLock());
   if (is_local)
     localtime_r(&t, timestruct);
   else
@@ -80,10 +82,19 @@ void SysTimeToTimeStruct(SysTime t, struct tm* timestruct, bool is_local) {
 #endif  // OS_ANDROID
 
 int64_t ConvertTimespecToMicros(const struct timespec& ts) {
-  base::CheckedNumeric<int64_t> result(ts.tv_sec);
-  result *= base::Time::kMicrosecondsPerSecond;
-  result += (ts.tv_nsec / base::Time::kNanosecondsPerMicrosecond);
-  return result.ValueOrDie();
+  // On 32-bit systems, the calculation cannot overflow int64_t.
+  // 2**32 * 1000000 + 2**64 / 1000 < 2**63
+  if (sizeof(ts.tv_sec) <= 4 && sizeof(ts.tv_nsec) <= 8) {
+    int64_t result = ts.tv_sec;
+    result *= base::Time::kMicrosecondsPerSecond;
+    result += (ts.tv_nsec / base::Time::kNanosecondsPerMicrosecond);
+    return result;
+  } else {
+    base::CheckedNumeric<int64_t> result(ts.tv_sec);
+    result *= base::Time::kMicrosecondsPerSecond;
+    result += (ts.tv_nsec / base::Time::kNanosecondsPerMicrosecond);
+    return result.ValueOrDie();
+  }
 }
 
 // Helper function to get results from clock_gettime() and convert to a
@@ -109,6 +120,12 @@ int64_t ClockNow(clockid_t clk_id) {
 }  // namespace
 
 namespace base {
+
+// static
+TimeDelta TimeDelta::FromTimeSpec(const timespec& ts) {
+  return TimeDelta(ts.tv_sec * Time::kMicrosecondsPerSecond +
+                   ts.tv_nsec / Time::kNanosecondsPerMicrosecond);
+}
 
 struct timespec TimeDelta::ToTimeSpec() const {
   int64_t microseconds = InMicroseconds();
@@ -212,22 +229,30 @@ void Time::Explode(bool is_local, Exploded* exploded) const {
 
 // static
 bool Time::FromExploded(bool is_local, const Exploded& exploded, Time* time) {
+  CheckedNumeric<int> month = exploded.month;
+  month--;
+  CheckedNumeric<int> year = exploded.year;
+  year -= 1900;
+  if (!month.IsValid() || !year.IsValid()) {
+    *time = Time(0);
+    return false;
+  }
+
   struct tm timestruct;
-  timestruct.tm_sec    = exploded.second;
-  timestruct.tm_min    = exploded.minute;
-  timestruct.tm_hour   = exploded.hour;
-  timestruct.tm_mday   = exploded.day_of_month;
-  timestruct.tm_mon    = exploded.month - 1;
-  timestruct.tm_year   = exploded.year - 1900;
-  timestruct.tm_wday   = exploded.day_of_week;  // mktime/timegm ignore this
-  timestruct.tm_yday   = 0;     // mktime/timegm ignore this
-  timestruct.tm_isdst  = -1;    // attempt to figure it out
+  timestruct.tm_sec = exploded.second;
+  timestruct.tm_min = exploded.minute;
+  timestruct.tm_hour = exploded.hour;
+  timestruct.tm_mday = exploded.day_of_month;
+  timestruct.tm_mon = month.ValueOrDie();
+  timestruct.tm_year = year.ValueOrDie();
+  timestruct.tm_wday = exploded.day_of_week;  // mktime/timegm ignore this
+  timestruct.tm_yday = 0;                     // mktime/timegm ignore this
+  timestruct.tm_isdst = -1;                   // attempt to figure it out
 #if !defined(OS_NACL) && !defined(OS_SOLARIS)
-  timestruct.tm_gmtoff = 0;     // not a POSIX field, so mktime/timegm ignore
-  timestruct.tm_zone   = NULL;  // not a POSIX field, so mktime/timegm ignore
+  timestruct.tm_gmtoff = 0;   // not a POSIX field, so mktime/timegm ignore
+  timestruct.tm_zone = NULL;  // not a POSIX field, so mktime/timegm ignore
 #endif
 
-  int64_t milliseconds;
   SysTime seconds;
 
   // Certain exploded dates do not really exist due to daylight saving times,
@@ -265,6 +290,7 @@ bool Time::FromExploded(bool is_local, const Exploded& exploded, Time* time) {
   // return is the best that can be done here.  It's not ideal, but it's better
   // than failing here or ignoring the overflow case and treating each time
   // overflow as one second prior to the epoch.
+  int64_t milliseconds = 0;
   if (seconds == -1 &&
       (exploded.year < 1969 || exploded.year > 1970)) {
     // If exploded.year is 1969 or 1970, take -1 as correct, with the
@@ -297,13 +323,25 @@ bool Time::FromExploded(bool is_local, const Exploded& exploded, Time* time) {
       milliseconds += (kMillisecondsPerSecond - 1);
     }
   } else {
-    milliseconds = seconds * kMillisecondsPerSecond + exploded.millisecond;
+    base::CheckedNumeric<int64_t> checked_millis = seconds;
+    checked_millis *= kMillisecondsPerSecond;
+    checked_millis += exploded.millisecond;
+    if (!checked_millis.IsValid()) {
+      *time = base::Time(0);
+      return false;
+    }
+    milliseconds = checked_millis.ValueOrDie();
   }
 
-  // Adjust from Unix (1970) to Windows (1601) epoch.
-  base::Time converted_time =
-      Time((milliseconds * kMicrosecondsPerMillisecond) +
-           kWindowsEpochDeltaMicroseconds);
+  // Adjust from Unix (1970) to Windows (1601) epoch avoiding overflows.
+  base::CheckedNumeric<int64_t> checked_microseconds_win_epoch = milliseconds;
+  checked_microseconds_win_epoch *= kMicrosecondsPerMillisecond;
+  checked_microseconds_win_epoch += kWindowsEpochDeltaMicroseconds;
+  if (!checked_microseconds_win_epoch.IsValid()) {
+    *time = base::Time(0);
+    return false;
+  }
+  base::Time converted_time(checked_microseconds_win_epoch.ValueOrDie());
 
   // If |exploded.day_of_month| is set to 31 on a 28-30 day month, it will
   // return the first day of the next month. Thus round-trip the time and
