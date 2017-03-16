@@ -15,36 +15,38 @@
 //
 // CancelableCallback (base/cancelable_callback.h) and WeakPtr binding are
 // preferred solutions for canceling a task. However, they don't support
-// cancelation from another thread. This is sometimes a performance critical
+// cancelation from another sequence. This is sometimes a performance critical
 // requirement. E.g. We need to cancel database lookup task on DB thread when
 // user changes inputed text. If it is performance critical to do a best effort
-// cancelation of a task, then CancelableTaskTracker is appropriate,
-// otherwise use one of the other mechanisms.
+// cancelation of a task, then CancelableTaskTracker is appropriate, otherwise
+// use one of the other mechanisms.
 //
 // THREAD-SAFETY:
 //
-// 1. CancelableTaskTracker objects are not thread safe. They must
-// be created, used, and destroyed on the originating thread that posts the
-// task. It's safe to destroy a CancelableTaskTracker while there
-// are outstanding tasks. This is commonly used to cancel all outstanding
-// tasks.
+// 1. A CancelableTaskTracker object must be created, used, and destroyed on a
+//    single sequence.
 //
-// 2. Both task and reply are deleted on the originating thread.
+// 2. It's safe to destroy a CancelableTaskTracker while there are outstanding
+//    tasks. This is commonly used to cancel all outstanding tasks.
 //
-// 3. IsCanceledCallback is thread safe and can be run or deleted on any
-// thread.
+// 3. Both task and reply are deleted on the originating sequence.
+//
+// 4. IsCanceledCallback can be run or deleted on any sequence.
 #ifndef BASE_TASK_CANCELABLE_TASK_TRACKER_H_
 #define BASE_TASK_CANCELABLE_TASK_TRACKER_H_
 
 #include <stdint.h>
 
+#include <utility>
+
 #include "base/base_export.h"
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/task_runner_util.h"
-#include "base/threading/thread_checker.h"
+#include "base/post_task_and_reply_with_result_internal.h"
+#include "base/sequence_checker.h"
 
 namespace tracked_objects {
 class Location;
@@ -74,25 +76,21 @@ class BASE_EXPORT CancelableTaskTracker {
 
   TaskId PostTaskAndReply(base::TaskRunner* task_runner,
                           const tracked_objects::Location& from_here,
-                          const base::Closure& task,
-                          const base::Closure& reply);
+                          base::Closure task,
+                          base::Closure reply);
 
   template <typename TaskReturnType, typename ReplyArgType>
-  TaskId PostTaskAndReplyWithResult(
-      base::TaskRunner* task_runner,
-      const tracked_objects::Location& from_here,
-      const base::Callback<TaskReturnType(void)>& task,
-      const base::Callback<void(ReplyArgType)>& reply) {
+  TaskId PostTaskAndReplyWithResult(base::TaskRunner* task_runner,
+                                    const tracked_objects::Location& from_here,
+                                    base::Callback<TaskReturnType()> task,
+                                    base::Callback<void(ReplyArgType)> reply) {
     TaskReturnType* result = new TaskReturnType();
     return PostTaskAndReply(
-        task_runner,
-        from_here,
+        task_runner, from_here,
         base::Bind(&base::internal::ReturnAsParamAdapter<TaskReturnType>,
-                   task,
-                   base::Unretained(result)),
+                   std::move(task), base::Unretained(result)),
         base::Bind(&base::internal::ReplyAdapter<TaskReturnType, ReplyArgType>,
-                   reply,
-                   base::Owned(result)));
+                   std::move(reply), base::Owned(result)));
   }
 
   // Creates a tracked TaskId and an associated IsCanceledCallback. Client can
@@ -130,7 +128,7 @@ class BASE_EXPORT CancelableTaskTracker {
   base::hash_map<TaskId, base::CancellationFlag*> task_flags_;
 
   TaskId next_id_;
-  base::ThreadChecker thread_checker_;
+  SequenceChecker sequence_checker_;
 
   base::WeakPtrFactory<CancelableTaskTracker> weak_factory_;
 

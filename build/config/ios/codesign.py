@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import argparse
+import datetime
 import fnmatch
 import glob
 import os
@@ -65,7 +66,8 @@ class ProvisioningProfile(object):
     """Initializes the ProvisioningProfile with data from profile file."""
     self._path = provisioning_profile_path
     self._data = plistlib.readPlistFromString(subprocess.check_output([
-        'xcrun', 'security', 'cms', '-D', '-i', provisioning_profile_path]))
+        'xcrun', 'security', 'cms', '-D', '-u', 'certUsageAnyCA',
+        '-i', provisioning_profile_path]))
 
   @property
   def path(self):
@@ -83,6 +85,10 @@ class ProvisioningProfile(object):
   def entitlements(self):
     return self._data.get('Entitlements', {})
 
+  @property
+  def expiration_date(self):
+    return self._data.get('ExpirationDate', datetime.datetime.now())
+
   def ValidToSignBundle(self, bundle_identifier):
     """Checks whether the provisioning profile can sign bundle_identifier.
 
@@ -97,9 +103,8 @@ class ProvisioningProfile(object):
         '%s.%s' % (self.team_identifier, bundle_identifier),
         self.application_identifier_pattern)
 
-  def Install(self, bundle):
-    """Copies mobile provisioning profile info the bundle."""
-    installation_path = os.path.join(bundle.path, 'embedded.mobileprovision')
+  def Install(self, installation_path):
+    """Copies mobile provisioning profile info to |installation_path|."""
     shutil.copy2(self.path, installation_path)
 
 
@@ -158,26 +163,41 @@ def FindProvisioningProfile(bundle_identifier, required):
       os.path.join(GetProvisioningProfilesDir(), '*.mobileprovision'))
 
   # Iterate over all installed mobile provisioning profiles and filter those
-  # that can be used to sign the bundle.
+  # that can be used to sign the bundle, ignoring expired ones.
+  now = datetime.datetime.now()
   valid_provisioning_profiles = []
+  one_hour = datetime.timedelta(0, 3600)
   for provisioning_profile_path in provisioning_profile_paths:
     provisioning_profile = ProvisioningProfile(provisioning_profile_path)
+    if provisioning_profile.expiration_date - now < one_hour:
+      sys.stderr.write(
+          'Warning: ignoring expired provisioning profile: %s.\n' %
+          provisioning_profile_path)
+      continue
     if provisioning_profile.ValidToSignBundle(bundle_identifier):
       valid_provisioning_profiles.append(provisioning_profile)
 
   if not valid_provisioning_profiles:
     if required:
       sys.stderr.write(
-          'No mobile provisioning profile found for "%s".\n' %
+          'Error: no mobile provisioning profile found for "%s".\n' %
           bundle_identifier)
       sys.exit(1)
     return None
 
   # Select the most specific mobile provisioning profile, i.e. the one with
-  # the longest application identifier pattern.
-  return max(
+  # the longest application identifier pattern (prefer the one with the latest
+  # expiration date as a secondary criteria).
+  selected_provisioning_profile = max(
       valid_provisioning_profiles,
-      key=lambda p: len(p.application_identifier_pattern))
+      key=lambda p: (len(p.application_identifier_pattern), p.expiration_date))
+
+  one_week = datetime.timedelta(7)
+  if selected_provisioning_profile.expiration_date - now < 2 * one_week:
+    sys.stderr.write(
+        'Warning: selected provisioning profile will expire soon: %s' %
+        selected_provisioning_profile.path)
+  return selected_provisioning_profile
 
 
 def CodeSignBundle(bundle_path, identity, extra_args):
@@ -232,7 +252,6 @@ def GenerateEntitlements(path, provisioning_profile, bundle_identifier):
 
 
 class Action(object):
-
   """Class implementing one action supported by the script."""
 
   @classmethod
@@ -243,7 +262,6 @@ class Action(object):
 
 
 class CodeSignBundleAction(Action):
-
   """Class implementing the code-sign-bundle action."""
 
   name = 'code-sign-bundle'
@@ -266,12 +284,12 @@ class CodeSignBundleAction(Action):
         '--framework', '-F', action='append', default=[], dest='frameworks',
         help='install and resign system framework')
     parser.add_argument(
-        '--disable-code-signature', action='store_false', dest='sign',
+        '--disable-code-signature', action='store_true', dest='no_signature',
         help='disable code signature')
     parser.add_argument(
         '--platform', '-t', required=True,
         help='platform the signed bundle is targetting')
-    parser.set_defaults(sign=True)
+    parser.set_defaults(no_signature=False)
 
   @staticmethod
   def _Execute(args):
@@ -280,19 +298,16 @@ class CodeSignBundleAction(Action):
 
     bundle = Bundle(args.path)
 
-    # Find mobile provisioning profile and embeds it into the bundle (if a code
-    # signing identify has been provided, fails if no valid mobile provisioning
-    # is found).
-    provisioning_profile_required = args.identity != '-'
-    provisioning_profile = FindProvisioningProfile(
-        bundle.identifier, provisioning_profile_required)
-    if provisioning_profile and args.platform != 'iphonesimulator':
-      provisioning_profile.Install(bundle)
+    # Delete existing embedded mobile provisioning.
+    embedded_provisioning_profile = os.path.join(
+        bundle.path, 'embedded.mobileprovision')
+    if os.path.isfile(embedded_provisioning_profile):
+      os.unlink(embedded_provisioning_profile)
 
     # Delete existing code signature.
     signature_file = os.path.join(args.path, '_CodeSignature', 'CodeResources')
     if os.path.isfile(signature_file):
-      os.unlink(signature_file)
+      shutil.rmtree(os.path.dirname(signature_file))
 
     # Install system frameworks if requested.
     for framework_path in args.frameworks:
@@ -303,13 +318,20 @@ class CodeSignBundleAction(Action):
       os.unlink(bundle.binary_path)
     shutil.copy(args.binary, bundle.binary_path)
 
-    if not args.sign:
+    if args.no_signature:
       return
 
-    # Embeds entitlements into the code signature (if code signing identify has
-    # been provided).
     codesign_extra_args = []
+
+    # Find mobile provisioning profile and embeds it into the bundle (if a code
+    # signing identify has been provided, fails if no valid mobile provisioning
+    # is found).
+    provisioning_profile_required = args.identity != '-'
+    provisioning_profile = FindProvisioningProfile(
+        bundle.identifier, provisioning_profile_required)
     if provisioning_profile and args.platform != 'iphonesimulator':
+      provisioning_profile.Install(embedded_provisioning_profile)
+
       temporary_entitlements_file = tempfile.NamedTemporaryFile(suffix='.xcent')
       codesign_extra_args.extend(
           ['--entitlements', temporary_entitlements_file.name])
@@ -321,8 +343,49 @@ class CodeSignBundleAction(Action):
     CodeSignBundle(bundle.path, args.identity, codesign_extra_args)
 
 
-class GenerateEntitlementsAction(Action):
+class CodeSignFileAction(Action):
+  """Class implementing code signature for a single file."""
 
+  name = 'code-sign-file'
+  help = 'code-sign a single file'
+
+  @staticmethod
+  def _Register(parser):
+    parser.add_argument(
+        'path', help='path to the file to codesign')
+    parser.add_argument(
+        '--identity', '-i', required=True,
+        help='identity to use to codesign')
+    parser.add_argument(
+        '--output', '-o',
+        help='if specified copy the file to that location before signing it')
+    parser.set_defaults(sign=True)
+
+  @staticmethod
+  def _Execute(args):
+    if not args.identity:
+      args.identity = '-'
+
+    install_path = args.path
+    if args.output:
+
+      if os.path.isfile(args.output):
+        os.unlink(args.output)
+      elif os.path.isdir(args.output):
+        shutil.rmtree(args.output)
+
+      if os.path.isfile(args.path):
+        shutil.copy(args.path, args.output)
+      elif os.path.isdir(args.path):
+        shutil.copytree(args.path, args.output)
+
+      install_path = args.output
+
+    CodeSignBundle(install_path, args.identity,
+      ['--deep', '--preserve-metadata=identifier,entitlements'])
+
+
+class GenerateEntitlementsAction(Action):
   """Class implementing the generate-entitlements action."""
 
   name = 'generate-entitlements'
@@ -351,12 +414,22 @@ class GenerateEntitlementsAction(Action):
 
 def Main():
   parser = argparse.ArgumentParser('codesign iOS bundles')
+  parser.add_argument('--developer_dir', required=False,
+                      help='Path to Xcode.')
   subparsers = parser.add_subparsers()
 
-  for action in [ CodeSignBundleAction, GenerateEntitlementsAction ]:
+  actions = [
+      CodeSignBundleAction,
+      CodeSignFileAction,
+      GenerateEntitlementsAction,
+  ]
+
+  for action in actions:
     action.Register(subparsers)
 
   args = parser.parse_args()
+  if args.developer_dir:
+    os.environ['DEVELOPER_DIR'] = args.developer_dir
   args.func(args)
 
 

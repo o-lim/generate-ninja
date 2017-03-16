@@ -63,8 +63,10 @@ syn keyword     gnVariable sys_include_switch testonly visibility
 hi def link     gnVariable          Keyword
 
 " Strings
-syn region      gnString start=+L\="+ skip=+\\\\\|\\"+ end=+"+ contains=@Spell
+syn region      gnString start=+L\="+ skip=+\\\\\|\\"+ end=+"+ contains=@Spell,gnTargetName
+syn match       gnTargetName '\v:[^"]+' contained
 hi def link     gnString            String
+hi def link     gnTargetName        Special
 
 " Comments
 syn keyword     gnTodo              contained TODO FIXME XXX BUG NOTE

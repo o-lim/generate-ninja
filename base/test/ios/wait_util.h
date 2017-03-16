@@ -9,32 +9,24 @@
 #include "base/time/time.h"
 
 namespace base {
-
-class MessageLoop;
-
 namespace test {
 namespace ios {
 
-// Returns the time spent in running |action| plus waiting until |condition| is
-// met.
-// Performs |action| and then spins run loop and runs the |message_loop| until
-// |condition| block returns true.
-// |action| may be nil if no action needs to be performed before the wait loop.
-// |message_loop| can be null if there is no need to spin the message loop.
-// |condition| may be nil if there is no condition to wait for: the run loop
-// will spin until timeout is reached.
-// |timeout| parameter sets the maximum wait time. If |timeout| is zero,
-// a reasonable default will be used.
+// Runs |action| if non-nil. Then, until either |condition| is true or |timeout|
+// expires, repetitively runs the current NSRunLoop and the current MessageLoop
+// (if |run_message_loop| is true). |condition| may be nil if there is no
+// condition to wait for; the NSRunLoop and current MessageLoop will be run run
+// until |timeout| expires. DCHECKs if |condition| is non-nil and |timeout|
+// expires before |condition| becomes true. If |timeout| is zero, a reasonable
+// default is used. Returns the time spent in the function.
 TimeDelta TimeUntilCondition(ProceduralBlock action,
                              ConditionBlock condition,
-                             MessageLoop* message_loop,
+                             bool run_message_loop,
                              TimeDelta timeout);
 
-// Waits until |condition| is met. A |message_loop| to spin and a |timeout| can
-// be optionally passed; if |timeout| is zero, a reasonable default will be
-// used.
+// Same as TimeUntilCondition, but doesn't run an action.
 void WaitUntilCondition(ConditionBlock condition,
-                        MessageLoop* message_loop,
+                        bool run_message_loop,
                         TimeDelta timeout);
 void WaitUntilCondition(ConditionBlock condition);
 

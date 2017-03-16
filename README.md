@@ -50,7 +50,6 @@ Furthermore, this fork adds some minor features as well as some minor bug fixes:
  - Fix help messages title for GN commands
  - Fix duplicate pch ninja rules
  - Fix errors when root build dir equals source root
- - Fix `-`(minus) operator
  - Fix `--all-toolchains` flag for `gn ls` and `gn refs`
  - Fix action targets not using substitutions
  - Support source substitutions for binary targets

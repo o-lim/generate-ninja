@@ -44,6 +44,7 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
       {
         'annotations': {'Feature': {'value': ['Foo']}},
         'class': 'org.chromium.test.SampleTest',
+        'superclass': 'java.lang.Object',
         'methods': [
           {
             'annotations': {'SmallTest': None},
@@ -58,6 +59,7 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
       {
         'annotations': {'Feature': {'value': ['Bar']}},
         'class': 'org.chromium.test.SampleTest2',
+        'superclass': 'java.lang.Object',
         'methods': [
           {
             'annotations': {'SmallTest': None},
@@ -75,6 +77,7 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
         },
         'class': 'org.chromium.test.SampleTest',
         'method': 'testMethod1',
+        'is_junit4': True,
       },
       {
         'annotations': {
@@ -83,6 +86,7 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
         },
         'class': 'org.chromium.test.SampleTest',
         'method': 'testMethod2',
+        'is_junit4': True,
       },
       {
         'annotations': {
@@ -91,9 +95,12 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
         },
         'class': 'org.chromium.test.SampleTest2',
         'method': 'testMethod1',
+        'is_junit4': True,
       },
     ]
 
+    o._test_jar = 'path/to/test.jar'
+    o._test_runner_junit4 = 'J4Runner'
     with mock.patch(_INSTRUMENTATION_TEST_INSTANCE_PATH % '_GetTestsFromPickle',
                     return_value=raw_tests):
       actual_tests = o.GetTests()
@@ -106,6 +113,7 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
       {
         'annotations': {'Feature': {'value': ['Foo']}},
         'class': 'org.chromium.test.SampleTest',
+        'superclass': 'java.lang.Object',
         'methods': [
           {
             'annotations': {'SmallTest': None},
@@ -126,11 +134,14 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
           'SmallTest': None,
         },
         'class': 'org.chromium.test.SampleTest',
+        'is_junit4': True,
         'method': 'testMethod1',
       },
     ]
 
     o._test_filter = 'org.chromium.test.SampleTest.testMethod1'
+    o._test_jar = 'path/to/test.jar'
+    o._test_runner_junit4 = 'J4Runner'
     with mock.patch(_INSTRUMENTATION_TEST_INSTANCE_PATH % '_GetTestsFromPickle',
                     return_value=raw_tests):
       actual_tests = o.GetTests()
@@ -143,6 +154,7 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
       {
         'annotations': {'Feature': {'value': ['Foo']}},
         'class': 'org.chromium.test.SampleTest',
+        'superclass': 'java.lang.Object',
         'methods': [
           {
             'annotations': {'SmallTest': None},
@@ -157,6 +169,7 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
       {
         'annotations': {'Feature': {'value': ['Bar']}},
         'class': 'org.chromium.test.SampleTest2',
+        'superclass': 'java.lang.Object',
         'methods': [
           {
             'annotations': {'SmallTest': None},
@@ -173,24 +186,27 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
           'SmallTest': None,
         },
         'class': 'org.chromium.test.SampleTest2',
+        'is_junit4': True,
         'method': 'testMethod1',
       },
     ]
 
     o._test_filter = 'org.chromium.test.SampleTest2.*'
+    o._test_jar = 'path/to/test.jar'
+    o._test_runner_junit4 = 'J4Runner'
     with mock.patch(_INSTRUMENTATION_TEST_INSTANCE_PATH % '_GetTestsFromPickle',
                     return_value=raw_tests):
       actual_tests = o.GetTests()
 
     self.assertEquals(actual_tests, expected_tests)
 
-  @unittest.skip('crbug.com/623047')
   def testGetTests_negativeGtestFilter(self):
     o = self.createTestInstance()
     raw_tests = [
       {
         'annotations': {'Feature': {'value': ['Foo']}},
         'class': 'org.chromium.test.SampleTest',
+        'superclass': 'java.lang.Object',
         'methods': [
           {
             'annotations': {'SmallTest': None},
@@ -205,6 +221,7 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
       {
         'annotations': {'Feature': {'value': ['Bar']}},
         'class': 'org.chromium.test.SampleTest2',
+        'superclass': 'java.lang.Object',
         'methods': [
           {
             'annotations': {'SmallTest': None},
@@ -213,9 +230,6 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
         ],
       }
     ]
-
-    o._GetTestsFromPickle = mock.MagicMock(return_value=raw_tests)
-    o._test_filter = '*-org.chromium.test.SampleTest.testMethod1'
 
     expected_tests = [
       {
@@ -224,6 +238,7 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
           'MediumTest': None,
         },
         'class': 'org.chromium.test.SampleTest',
+        'is_junit4': True,
         'method': 'testMethod2',
       },
       {
@@ -232,11 +247,18 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
           'SmallTest': None,
         },
         'class': 'org.chromium.test.SampleTest2',
+        'is_junit4': True,
         'method': 'testMethod1',
       },
     ]
 
-    actual_tests = o.GetTests()
+    o._test_filter = '*-org.chromium.test.SampleTest.testMethod1'
+    o._test_jar = 'path/to/test.jar'
+    o._test_runner_junit4 = 'J4Runner'
+    with mock.patch(_INSTRUMENTATION_TEST_INSTANCE_PATH % '_GetTestsFromPickle',
+                    return_value=raw_tests):
+      actual_tests = o.GetTests()
+
     self.assertEquals(actual_tests, expected_tests)
 
   def testGetTests_annotationFilter(self):
@@ -245,6 +267,7 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
       {
         'annotations': {'Feature': {'value': ['Foo']}},
         'class': 'org.chromium.test.SampleTest',
+        'superclass': 'java.lang.Object',
         'methods': [
           {
             'annotations': {'SmallTest': None},
@@ -259,6 +282,7 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
       {
         'annotations': {'Feature': {'value': ['Bar']}},
         'class': 'org.chromium.test.SampleTest2',
+        'superclass': 'java.lang.Object',
         'methods': [
           {
             'annotations': {'SmallTest': None},
@@ -275,6 +299,7 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
           'SmallTest': None,
         },
         'class': 'org.chromium.test.SampleTest',
+        'is_junit4': True,
         'method': 'testMethod1',
       },
       {
@@ -283,11 +308,14 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
           'SmallTest': None,
         },
         'class': 'org.chromium.test.SampleTest2',
+        'is_junit4': True,
         'method': 'testMethod1',
       },
     ]
 
     o._annotations = [('SmallTest', None)]
+    o._test_jar = 'path/to/test.jar'
+    o._test_runner_junit4 = 'J4Runner'
     with mock.patch(_INSTRUMENTATION_TEST_INSTANCE_PATH % '_GetTestsFromPickle',
                     return_value=raw_tests):
       actual_tests = o.GetTests()
@@ -300,6 +328,7 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
       {
         'annotations': {'Feature': {'value': ['Foo']}},
         'class': 'org.chromium.test.SampleTest',
+        'superclass': 'junit.framework.TestCase',
         'methods': [
           {
             'annotations': {'SmallTest': None},
@@ -314,6 +343,7 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
       {
         'annotations': {'Feature': {'value': ['Bar']}},
         'class': 'org.chromium.test.SampleTest2',
+        'superclass': 'junit.framework.TestCase',
         'methods': [
           {
             'annotations': {'SmallTest': None},
@@ -330,11 +360,14 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
           'MediumTest': None,
         },
         'class': 'org.chromium.test.SampleTest',
+        'is_junit4': False,
         'method': 'testMethod2',
       },
     ]
 
     o._excluded_annotations = [('SmallTest', None)]
+    o._test_jar = 'path/to/test.jar'
+    o._test_runner_junit4 = 'J4Runner'
     with mock.patch(_INSTRUMENTATION_TEST_INSTANCE_PATH % '_GetTestsFromPickle',
                     return_value=raw_tests):
       actual_tests = o.GetTests()
@@ -347,6 +380,7 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
       {
         'annotations': {'Feature': {'value': ['Foo']}},
         'class': 'org.chromium.test.SampleTest',
+        'superclass': 'junit.framework.TestCase',
         'methods': [
           {
             'annotations': {
@@ -367,6 +401,7 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
       {
         'annotations': {'Feature': {'value': ['Bar']}},
         'class': 'org.chromium.test.SampleTest2',
+        'superclass': 'junit.framework.TestCase',
         'methods': [
           {
             'annotations': {
@@ -387,11 +422,14 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
           'TestValue': '1',
         },
         'class': 'org.chromium.test.SampleTest',
+        'is_junit4': False,
         'method': 'testMethod1',
       },
     ]
 
     o._annotations = [('TestValue', '1')]
+    o._test_jar = 'path/to/test.jar'
+    o._test_runner_junit4 = 'J4Runner'
     with mock.patch(_INSTRUMENTATION_TEST_INSTANCE_PATH % '_GetTestsFromPickle',
                     return_value=raw_tests):
       actual_tests = o.GetTests()
@@ -404,6 +442,7 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
       {
         'annotations': {'Feature': {'value': ['Foo']}},
         'class': 'org.chromium.test.SampleTest',
+        'superclass': 'java.lang.Object',
         'methods': [
           {
             'annotations': {'SmallTest': None},
@@ -418,6 +457,7 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
       {
         'annotations': {'Feature': {'value': ['Bar']}},
         'class': 'org.chromium.test.SampleTest2',
+        'superclass': 'java.lang.Object',
         'methods': [
           {
             'annotations': {'SmallTest': None},
@@ -434,11 +474,14 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
           'SmallTest': None,
         },
         'class': 'org.chromium.test.SampleTest2',
+        'is_junit4': True,
         'method': 'testMethod1',
       },
     ]
 
     o._annotations = [('Feature', 'Bar')]
+    o._test_jar = 'path/to/test.jar'
+    o._test_runner_junit4 = 'J4Runner'
     with mock.patch(_INSTRUMENTATION_TEST_INSTANCE_PATH % '_GetTestsFromPickle',
                     return_value=raw_tests):
       actual_tests = o.GetTests()
@@ -451,6 +494,7 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
       {
         'annotations': {'Feature': {'value': ['Foo']}},
         'class': 'org.chromium.test.SampleTest',
+        'superclass': 'junit.framework.TestCase',
         'methods': [
           {
             'annotations': {'SmallTest': None},
@@ -468,6 +512,7 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
       {
         'annotations': {'Feature': {'value': ['Bar']}},
         'class': 'org.chromium.test.SampleTest2',
+        'superclass': 'junit.framework.TestCase',
         'methods': [
           {
             'annotations': {'SmallTest': None},
@@ -484,6 +529,7 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
           'MediumTest': None,
         },
         'class': 'org.chromium.test.SampleTest',
+        'is_junit4': False,
         'method': 'testMethod2',
       },
       {
@@ -492,11 +538,14 @@ class InstrumentationTestInstanceTest(unittest.TestCase):
           'SmallTest': None,
         },
         'class': 'org.chromium.test.SampleTest2',
+        'is_junit4': False,
         'method': 'testMethod1',
       },
     ]
 
     o._annotations = [('Feature', 'Bar'), ('Feature', 'Baz')]
+    o._test_jar = 'path/to/test.jar'
+    o._test_runner_junit4 = 'J4Runner'
     with mock.patch(_INSTRUMENTATION_TEST_INSTANCE_PATH % '_GetTestsFromPickle',
                     return_value=raw_tests):
       actual_tests = o.GetTests()

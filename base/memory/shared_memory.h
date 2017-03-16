@@ -34,31 +34,32 @@ class FilePath;
 
 // Options for creating a shared memory object.
 struct BASE_EXPORT SharedMemoryCreateOptions {
-  SharedMemoryCreateOptions();
-
-#if !(defined(OS_MACOSX) && !defined(OS_IOS))
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+  // The type of OS primitive that should back the SharedMemory object.
+  SharedMemoryHandle::Type type = SharedMemoryHandle::MACH;
+#else
   // DEPRECATED (crbug.com/345734):
   // If NULL, the object is anonymous.  This pointer is owned by the caller
   // and must live through the call to Create().
-  const std::string* name_deprecated;
+  const std::string* name_deprecated = nullptr;
 
   // DEPRECATED (crbug.com/345734):
   // If true, and the shared memory already exists, Create() will open the
   // existing shared memory and ignore the size parameter.  If false,
   // shared memory must not exist.  This flag is meaningless unless
   // name_deprecated is non-NULL.
-  bool open_existing_deprecated;
-#endif  // !(defined(OS_MACOSX) && !defined(OS_IOS))
+  bool open_existing_deprecated = false;
+#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
 
   // Size of the shared memory object to be created.
   // When opening an existing object, this has no effect.
-  size_t size;
+  size_t size = 0;
 
   // If true, mappings might need to be made executable later.
-  bool executable;
+  bool executable = false;
 
   // If true, the file can be shared read-only to a process.
-  bool share_read_only;
+  bool share_read_only = false;
 };
 
 // Platform abstraction for shared memory.  Provides a C++ wrapper
@@ -103,7 +104,7 @@ class BASE_EXPORT SharedMemory {
   // The caller is responsible for destroying the duplicated OS primitive.
   static SharedMemoryHandle DuplicateHandle(const SharedMemoryHandle& handle);
 
-#if defined(OS_POSIX) && !(defined(OS_MACOSX) && !defined(OS_IOS))
+#if defined(OS_POSIX)
   // This method requires that the SharedMemoryHandle is backed by a POSIX fd.
   static int GetFdFromSharedMemoryHandle(const SharedMemoryHandle& handle);
 #endif
@@ -194,6 +195,13 @@ class BASE_EXPORT SharedMemory {
   // identifier is not portable.
   SharedMemoryHandle handle() const;
 
+  // Returns the underlying OS handle for this segment. The caller also gets
+  // ownership of the handle. This is logically equivalent to:
+  //   SharedMemoryHandle dup = DuplicateHandle(handle());
+  //   Close();
+  //   return dup;
+  SharedMemoryHandle TakeHandle();
+
   // Closes the open shared memory segment. The memory will remain mapped if
   // it was previously mapped.
   // It is safe to call Close repeatedly.
@@ -247,16 +255,36 @@ class BASE_EXPORT SharedMemory {
     return ShareToProcessCommon(process, new_handle, true, SHARE_CURRENT_MODE);
   }
 
+#if defined(OS_POSIX) && (!defined(OS_MACOSX) || defined(OS_IOS)) && \
+    !defined(OS_NACL)
+  using UniqueId = std::pair<dev_t, ino_t>;
+
+  struct UniqueIdHash {
+    size_t operator()(const UniqueId& id) const {
+      return HashInts(id.first, id.second);
+    }
+  };
+
+  // Returns a unique ID for this shared memory's handle. Note this function may
+  // access file system and be slow.
+  bool GetUniqueId(UniqueId* id) const;
+#endif
+
  private:
 #if defined(OS_POSIX) && !defined(OS_NACL) && !defined(OS_ANDROID) && \
-    !(defined(OS_MACOSX) && !defined(OS_IOS))
-  bool PrepareMapFile(ScopedFILE fp, ScopedFD readonly);
+    (!defined(OS_MACOSX) || defined(OS_IOS))
   bool FilePathForMemoryName(const std::string& mem_name, FilePath* path);
 #endif
+
   enum ShareMode {
     SHARE_READONLY,
     SHARE_CURRENT_MODE,
   };
+
+#if defined(OS_MACOSX)
+  bool Share(SharedMemoryHandle* new_handle, ShareMode share_mode);
+#endif
+
   bool ShareToProcessCommon(ProcessHandle process,
                             SharedMemoryHandle* new_handle,
                             bool close_self,
@@ -271,6 +299,12 @@ class BASE_EXPORT SharedMemory {
 #elif defined(OS_MACOSX) && !defined(OS_IOS)
   // The OS primitive that backs the shared memory region.
   SharedMemoryHandle shm_;
+
+  // The mechanism by which the memory is mapped. Only valid if |memory_| is not
+  // |nullptr|.
+  SharedMemoryHandle::Type mapped_memory_mechanism_;
+
+  int readonly_mapped_file_;
 #elif defined(OS_POSIX)
   int                mapped_file_;
   int                readonly_mapped_file_;
@@ -282,6 +316,7 @@ class BASE_EXPORT SharedMemory {
 
   DISALLOW_COPY_AND_ASSIGN(SharedMemory);
 };
+
 }  // namespace base
 
 #endif  // BASE_MEMORY_SHARED_MEMORY_H_

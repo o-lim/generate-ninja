@@ -8,8 +8,10 @@
 #include <sched.h>
 #include <stddef.h>
 
+#include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/threading/platform_thread_internal_posix.h"
 #include "base/threading/thread_id_name_manager.h"
 #include "base/tracked_objects.h"
@@ -18,11 +20,68 @@
 #if !defined(OS_NACL)
 #include <pthread.h>
 #include <sys/prctl.h>
+#include <sys/resource.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
 #endif
 
 namespace base {
+namespace {
+#if !defined(OS_NACL)
+const FilePath::CharType kCgroupDirectory[] =
+    FILE_PATH_LITERAL("/sys/fs/cgroup");
+
+FilePath ThreadPriorityToCgroupDirectory(const FilePath& cgroup_filepath,
+                                         ThreadPriority priority) {
+  switch (priority) {
+    case ThreadPriority::NORMAL:
+      return cgroup_filepath;
+    case ThreadPriority::BACKGROUND:
+      return cgroup_filepath.Append(FILE_PATH_LITERAL("non-urgent"));
+    case ThreadPriority::DISPLAY:
+    case ThreadPriority::REALTIME_AUDIO:
+      return cgroup_filepath.Append(FILE_PATH_LITERAL("urgent"));
+  }
+  NOTREACHED();
+  return FilePath();
+}
+
+void SetThreadCgroup(PlatformThreadId thread_id,
+                     const FilePath& cgroup_directory) {
+  FilePath tasks_filepath = cgroup_directory.Append(FILE_PATH_LITERAL("tasks"));
+  std::string tid = IntToString(thread_id);
+  int bytes_written = WriteFile(tasks_filepath, tid.c_str(), tid.size());
+  if (bytes_written != static_cast<int>(tid.size())) {
+    DVLOG(1) << "Failed to add " << tid << " to " << tasks_filepath.value();
+  }
+}
+
+void SetThreadCgroupForThreadPriority(PlatformThreadId thread_id,
+                                      const FilePath& cgroup_filepath,
+                                      ThreadPriority priority) {
+  // Append "chrome" suffix.
+  FilePath cgroup_directory = ThreadPriorityToCgroupDirectory(
+      cgroup_filepath.Append(FILE_PATH_LITERAL("chrome")), priority);
+
+  // Silently ignore request if cgroup directory doesn't exist.
+  if (!DirectoryExists(cgroup_directory))
+    return;
+
+  SetThreadCgroup(thread_id, cgroup_directory);
+}
+
+void SetThreadCgroupsForThreadPriority(PlatformThreadId thread_id,
+                                       ThreadPriority priority) {
+  FilePath cgroup_filepath(kCgroupDirectory);
+  SetThreadCgroupForThreadPriority(
+      thread_id, cgroup_filepath.Append(FILE_PATH_LITERAL("cpuset")), priority);
+  SetThreadCgroupForThreadPriority(
+      thread_id, cgroup_filepath.Append(FILE_PATH_LITERAL("schedtune")),
+      priority);
+}
+#endif
+}  // namespace
 
 namespace internal {
 
@@ -41,6 +100,7 @@ const ThreadPriorityToNiceValuePair kThreadPriorityToNiceValueMap[4] = {
 
 bool SetCurrentThreadPriorityForPlatform(ThreadPriority priority) {
 #if !defined(OS_NACL)
+  SetThreadCgroupsForThreadPriority(PlatformThread::CurrentId(), priority);
   return priority == ThreadPriority::REALTIME_AUDIO &&
          pthread_setschedparam(pthread_self(), SCHED_RR, &kRealTimePrio) == 0;
 #else
@@ -89,6 +149,25 @@ void PlatformThread::SetName(const std::string& name) {
     DPLOG(ERROR) << "prctl(PR_SET_NAME)";
 #endif  //  !defined(OS_NACL)
 }
+
+#if !defined(OS_NACL)
+// static
+void PlatformThread::SetThreadPriority(PlatformThreadId thread_id,
+                                       ThreadPriority priority) {
+  // Changing current main threads' priority is not permitted in favor of
+  // security, this interface is restricted to change only non-main thread
+  // priority.
+  CHECK_NE(thread_id, getpid());
+
+  SetThreadCgroupsForThreadPriority(thread_id, priority);
+
+  const int nice_setting = internal::ThreadPriorityToNiceValue(priority);
+  if (setpriority(PRIO_PROCESS, thread_id, nice_setting)) {
+    DVPLOG(1) << "Failed to set nice value of thread (" << thread_id << ") to "
+              << nice_setting;
+  }
+}
+#endif  //  !defined(OS_NACL)
 
 void InitThreading() {}
 

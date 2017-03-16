@@ -412,6 +412,19 @@ def ExtractNatives(contents, ptr_type):
   return natives
 
 
+def IsMainDexJavaClass(contents):
+  """Returns "true" if the class is annotated with "@MainDex", "false" if not.
+
+  JNI registration doesn't always need to be completed for non-browser processes
+  since most Java code is only used by the browser process. Classes that are
+  needed by non-browser processes must explicitly be annotated with @MainDex
+  to force JNI registration.
+  """
+  re_maindex = re.compile(r'@MainDex[\s\S]*class\s+\w+\s*{')
+  found = re.search(re_maindex, contents)
+  return 'true' if found else 'false'
+
+
 def GetStaticCastForReturnType(return_type):
   type_map = { 'String' : 'jstring',
                'java/lang/String' : 'jstring',
@@ -518,9 +531,15 @@ RE_SCOPED_JNI_TYPES = re.compile('jobject|jclass|jstring|jthrowable|.*Array')
 RE_CALLED_BY_NATIVE = re.compile(
     '@CalledByNative(?P<Unchecked>(Unchecked)*?)(?:\("(?P<annotation>.*)"\))?'
     '\s+(?P<prefix>[\w ]*?)'
+    '(:?\s*@\w+)?'  # Ignore annotations in return types.
     '\s*(?P<return_type>\S+?)'
     '\s+(?P<name>\w+)'
     '\s*\((?P<params>[^\)]*)\)')
+
+
+# Removes empty lines that are indented (i.e. start with 2x spaces).
+def RemoveIndentedEmptyLines(string):
+  return re.sub('^(?: {2})+$\n', '', string, flags=re.MULTILINE)
 
 
 def ExtractCalledByNatives(contents):
@@ -628,8 +647,8 @@ class JNIFromJavaP(object):
                           value=value.group('value')))
 
     self.inl_header_file_generator = InlHeaderFileGenerator(
-        self.namespace, self.fully_qualified_class, [],
-        self.called_by_natives, self.constant_fields, options)
+        self.namespace, self.fully_qualified_class, [], self.called_by_natives,
+        self.constant_fields, options)
 
   def GetContent(self):
     return self.inl_header_file_generator.GetContent()
@@ -663,12 +682,13 @@ class JNIFromJavaSource(object):
     jni_namespace = ExtractJNINamespace(contents) or options.namespace
     natives = ExtractNatives(contents, options.ptr_type)
     called_by_natives = ExtractCalledByNatives(contents)
+    maindex = IsMainDexJavaClass(contents)
     if len(natives) == 0 and len(called_by_natives) == 0:
       raise SyntaxError('Unable to find any JNI methods for %s.' %
                         fully_qualified_class)
     inl_header_file_generator = InlHeaderFileGenerator(
-        jni_namespace, fully_qualified_class, natives, called_by_natives,
-        [], options)
+        jni_namespace, fully_qualified_class, natives, called_by_natives, [],
+        options, maindex)
     self.content = inl_header_file_generator.GetContent()
 
   @classmethod
@@ -704,7 +724,7 @@ class InlHeaderFileGenerator(object):
   """Generates an inline header file for JNI integration."""
 
   def __init__(self, namespace, fully_qualified_class, natives,
-               called_by_natives, constant_fields, options):
+               called_by_natives, constant_fields, options, maindex='false'):
     self.namespace = namespace
     self.fully_qualified_class = fully_qualified_class
     self.class_name = self.fully_qualified_class.split('/')[-1]
@@ -712,6 +732,7 @@ class InlHeaderFileGenerator(object):
     self.called_by_natives = called_by_natives
     self.header_guard = fully_qualified_class.replace('/', '_') + '_JNI'
     self.constant_fields = constant_fields
+    self.maindex = maindex
     self.options = options
 
 
@@ -856,8 +877,9 @@ ${NATIVES}
     early_exit = ''
     if self.options.native_exports_optional:
       early_exit = """\
-  if (base::android::IsManualJniRegistrationDisabled()) return true;
-"""
+  if (jni_generator::ShouldSkipJniRegistration(%s))
+    return true;
+""" % self.maindex
 
     values = {'REGISTER_NATIVES_SIGNATURE': signature,
               'EARLY_EXIT': early_exit,
@@ -1000,6 +1022,9 @@ ${NATIVES}
       post_call = '.Release()'
       return_declaration = ('base::android::ScopedJavaLocalRef<' + return_type +
                             '>')
+    profiling_entered_native = ''
+    if self.options.enable_profiling:
+      profiling_entered_native = 'JNI_LINK_SAVED_FRAME_POINTER;'
     values = {
         'RETURN': return_type,
         'RETURN_DECLARATION': return_declaration,
@@ -1009,6 +1034,7 @@ ${NATIVES}
         'PARAMS_IN_CALL': params_in_call,
         'POST_CALL': post_call,
         'STUB_NAME': self.GetStubName(native),
+        'PROFILING_ENTERED_NATIVE': profiling_entered_native,
     }
 
     if is_method:
@@ -1021,9 +1047,8 @@ ${NATIVES}
           'P0_TYPE': native.p0_type,
       })
       template = Template("""\
-extern "C" __attribute__((visibility("default")))
-${RETURN} ${STUB_NAME}(JNIEnv* env,
-    ${PARAMS_IN_STUB}) {
+JNI_GENERATOR_EXPORT ${RETURN} ${STUB_NAME}(JNIEnv* env, ${PARAMS_IN_STUB}) {
+  ${PROFILING_ENTERED_NATIVE}
   ${P0_TYPE}* native = reinterpret_cast<${P0_TYPE}*>(${PARAM0_NAME});
   CHECK_NATIVE_PTR(env, jcaller, native, "${NAME}"${OPTIONAL_ERROR_RETURN});
   return native->${NAME}(${PARAMS_IN_CALL})${POST_CALL};
@@ -1033,13 +1058,13 @@ ${RETURN} ${STUB_NAME}(JNIEnv* env,
       template = Template("""
 static ${RETURN_DECLARATION} ${NAME}(JNIEnv* env, ${PARAMS});
 
-extern "C" __attribute__((visibility("default")))
-${RETURN} ${STUB_NAME}(JNIEnv* env, ${PARAMS_IN_STUB}) {
+JNI_GENERATOR_EXPORT ${RETURN} ${STUB_NAME}(JNIEnv* env, ${PARAMS_IN_STUB}) {
+  ${PROFILING_ENTERED_NATIVE}
   return ${NAME}(${PARAMS_IN_CALL})${POST_CALL};
 }
 """)
 
-    return template.substitute(values)
+    return RemoveIndentedEmptyLines(template.substitute(values))
 
   def GetArgument(self, param):
     if param.datatype == 'int':
@@ -1092,6 +1117,9 @@ ${RETURN} ${STUB_NAME}(JNIEnv* env, ${PARAMS_IN_STUB}) {
         return_clause = 'return ' + return_type + '(env, ret);'
       else:
         return_clause = 'return ret;'
+    profiling_leaving_native = ''
+    if self.options.enable_profiling:
+      profiling_leaving_native = 'JNI_SAVE_FRAME_POINTER;'
     return {
         'JAVA_CLASS': java_class,
         'RETURN_TYPE': return_type,
@@ -1107,7 +1135,8 @@ ${RETURN} ${STUB_NAME}(JNIEnv* env, ${PARAMS_IN_STUB}) {
         'PARAMS_IN_CALL': params_in_call,
         'METHOD_ID_VAR_NAME': called_by_native.method_id_var_name,
         'CHECK_EXCEPTION': check_exception,
-        'GET_METHOD_ID_IMPL': self.GetMethodIDImpl(called_by_native)
+        'GET_METHOD_ID_IMPL': self.GetMethodIDImpl(called_by_native),
+        'PROFILING_LEAVING_NATIVE': profiling_leaving_native,
     }
 
 
@@ -1128,6 +1157,7 @@ ${FUNCTION_HEADER}
       ${JAVA_CLASS}_clazz(env)${OPTIONAL_ERROR_RETURN});
   jmethodID method_id =
     ${GET_METHOD_ID_IMPL}
+  ${PROFILING_LEAVING_NATIVE}
   ${RETURN_DECLARATION}
      ${PRE_CALL}env->${ENV_CALL}(${FIRST_PARAM_IN_CALL},
           method_id${PARAMS_IN_CALL})${POST_CALL};
@@ -1142,7 +1172,7 @@ ${FUNCTION_HEADER}
           function_header_with_unused_template.substitute(values))
     else:
       values['FUNCTION_HEADER'] = function_header_template.substitute(values)
-    return template.substitute(values)
+    return RemoveIndentedEmptyLines(template.substitute(values))
 
   def GetKMethodArrayEntry(self, native):
     template = Template('    { "native${NAME}", ${JNI_SIGNATURE}, ' +
@@ -1362,6 +1392,8 @@ See SampleForTests.java for more details.
   option_parser.add_option('--native_exports_optional', action='store_true',
                            help='Support both explicit and native method'
                            'registration.')
+  option_parser.add_option('--enable_profiling', action='store_true',
+                           help='Add additional profiling instrumentation.')
   options, args = option_parser.parse_args(argv)
   if options.jar_file:
     input_file = ExtractJarInputFile(options.jar_file, options.input_file,
@@ -1379,9 +1411,7 @@ See SampleForTests.java for more details.
   GenerateJNIHeader(input_file, output_file, options)
 
   if options.depfile:
-    build_utils.WriteDepfile(
-        options.depfile,
-        build_utils.GetPythonDependencies())
+    build_utils.WriteDepfile(options.depfile, output_file)
 
 
 if __name__ == '__main__':

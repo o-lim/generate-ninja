@@ -136,8 +136,7 @@ class BASE_EXPORT ProcessMetrics {
   // memory currently allocated to a process that cannot be shared. Returns
   // false on platform specific error conditions.  Note: |private_bytes|
   // returns 0 on unsupported OSes: prior to XP SP2.
-  bool GetMemoryBytes(size_t* private_bytes,
-                      size_t* shared_bytes);
+  bool GetMemoryBytes(size_t* private_bytes, size_t* shared_bytes) const;
   // Fills a CommittedKBytes with both resident and paged
   // memory usage as per definition of CommittedBytes.
   void GetCommittedKBytes(CommittedKBytes* usage) const;
@@ -145,6 +144,9 @@ class BASE_EXPORT ProcessMetrics {
   // usage in bytes, as per definition of WorkingSetBytes. Note that this
   // function is somewhat expensive on Windows (a few ms per process).
   bool GetWorkingSetKBytes(WorkingSetKBytes* ws_usage) const;
+  // Computes pss (proportional set size) of a process. Note that this
+  // function is somewhat expensive on Windows (a few ms per process).
+  bool GetProportionalSetSizeBytes(uint64_t* pss_bytes) const;
 
 #if defined(OS_MACOSX)
   // Fills both CommitedKBytes and WorkingSetKBytes in a single operation. This
@@ -152,6 +154,10 @@ class BASE_EXPORT ProcessMetrics {
   // system call.
   bool GetCommittedAndWorkingSetKBytes(CommittedKBytes* usage,
                                        WorkingSetKBytes* ws_usage) const;
+  // Returns private, shared, and total resident bytes.
+  bool GetMemoryBytes(size_t* private_bytes,
+                      size_t* shared_bytes,
+                      size_t* resident_bytes) const;
 #endif
 
   // Returns the CPU usage in percent since the last time this method or
@@ -375,6 +381,9 @@ BASE_EXPORT bool IsValidDiskName(const std::string& candidate);
 // Retrieves data from /proc/diskstats about system-wide disk I/O.
 // Fills in the provided |diskinfo| structure. Returns true on success.
 BASE_EXPORT bool GetSystemDiskInfo(SystemDiskInfo* diskinfo);
+
+// Returns the amount of time spent in user space since boot across all CPUs.
+BASE_EXPORT TimeDelta GetUserCpuTimeSinceBoot();
 #endif  // defined(OS_LINUX) || defined(OS_ANDROID)
 
 #if defined(OS_CHROMEOS)

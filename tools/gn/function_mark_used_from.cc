@@ -33,79 +33,79 @@ const char kMarkUsedFrom[] = "mark_used_from";
 const char kMarkUsedFrom_HelpShort[] =
     "mark_used_from: Marks variables as used from a different scope.";
 const char kMarkUsedFrom_Help[] =
-    "mark_used_from: Marks variables as used from a different scope.\n"
-    "\n"
-    "  mark_used_from(from_scope, variable_list_or_star,\n"
-    "                 variables_to_not_mark_list = [])\n"
-    "\n"
-    "  Marks the given variables from the given scope as used if they exist.\n"
-    "  This is normally used in the context of templates to prevent\n"
-    "  \"Assignment had no effect\" errors.\n"
-    "\n"
-    "  The variables in the given variable_list will be marked used if they\n"
-    "  exist in the given scope or any enclosing scope. If they do not exist,\n"
-    "  nothing will happen.\n"
-    "\n"
-    "  As a special case, if the variable_list is a string with the value of\n"
-    "  \"*\", all variables from the given scope will be marked used. \"*\"\n"
-    "  only marks variables used that exist directly on the from_scope, not\n"
-    "  enclosing ones. Otherwise it would mark all global variables as used.\n"
-    "\n"
-    "  If variables_to_not_mark_list is non-empty, then it must contains a\n"
-    "  list of variable names that will not be marked used. This is mostly\n"
-    "  useful when variable_list_or_star has a value of \"*\".\n"
-    "\n"
-    "  See also \"forward_variables_from\" for copying variables from a.\n"
-    "  different scope.\n"
-    "\n"
-    "Examples\n"
-    "\n"
-    "  # This is a common action template. It would invoke a script with\n"
-    "  # some given parameters, and wants to use the various types of deps\n"
-    "  # and the visibility from the invoker if it's defined. It also injects\n"
-    "  # an additional dependency to all targets depending on the visibility\n"
-    "  # flag.\n"
-    "  template(\"my_test\") {\n"
-    "    action(target_name) {\n"
-    "      forward_variables_from(invoker, [ \"data_deps\", \"deps\",\n"
-    "                                        \"public_deps\", \"visibility\" "
-                                                                         "])\n"
-    "      if (defined(visibility) && visibility) {\n"
-    "        if (defined(invoker.extra_deps)) {\n"
-    "          # Add these extra deps to the dependencies.\n"
-    "          # \"deps\" may or may not be defined at this point.\n"
-    "          if (defined(deps)) {\n"
-    "            deps += invoker.extra_deps\n"
-    "          } else {\n"
-    "            deps = invoker.extra_deps\n"
-    "          }\n"
-    "        }\n"
-    "      } else {\n"
-    "        # Don't do anything with these extra deps.\n"
-    "        mark_used_from(invoker, [ \"extra_deps\" ])\n"
-    "      }\n"
-    "    }\n"
-    "  }\n"
-    "\n"
-    "  # This is a template around a target whose type depends on a global\n"
-    "  # variable. It marks all values from the invoker as used.\n"
-    "  template(\"my_wrapper\") {\n"
-    "    target(my_wrapper_target_type, target_name) {\n"
-    "      mark_used_from(invoker, \"*\")\n"
-    "    }\n"
-    "\n"
-    "  # A template that wraps another. It adds behavior based on one\n"
-    "  # variable, and forwards all others to the nested target.\n"
-    "  template(\"my_ios_test_app\") {\n"
-    "    ios_test_app(target_name) {\n"
-    "      mark_used_from(invoker, \"*\", [\"test_bundle_name\"])\n"
-    "      if (!defined(extra_substitutions)) {\n"
-    "        extra_substitutions = []\n"
-    "      }\n"
-    "      extra_substitutions += [ \"BUNDLE_ID_TEST_NAME=$test_bundle_name\" "
-                                                                          "]\n"
-    "    }\n"
-    " }\n";
+    R"(mark_used_from: Marks variables as used from a different scope.
+
+  mark_used_from(from_scope, variable_list_or_star,
+                 variables_to_not_mark_list = [])
+
+  Marks the given variables from the given scope as used if they exist. This is
+  normally used in the context of templates to mark variables defined in the
+  template invocation as used in order to prevent "Assignment had no effect"
+  errors.
+
+  The variables in the given variable_list will be marked used if they exist in
+  the given scope or any enclosing scope. If they do not exist, nothing will
+  happen.
+
+  As a special case, if the variable_list is a string with the value of "*", all
+  variables from the given scope will be marked used. "*" only marks variables
+  used that exist directly on the from_scope, not enclosing ones. Otherwise it
+  would mark all global variables as used.
+
+  If variables_to_not_mark_list is non-empty, then it must contains a list of
+  variable names that will not be marked used. This is mostly useful when
+  variable_list_or_star has a value of "*".
+
+  See also "forward_variables_from" for copying variables from a different
+  scope.
+
+Examples
+
+  # This is a common action template. It would invoke a script with
+  # some given parameters, and wants to use the various types of deps
+  # and the visibility from the invoker if it's defined. It also injects
+  # an additional dependency to all targets depending on the visibility
+  # flag.
+  template("my_test") {
+    action(target_name) {
+      forward_variables_from(invoker, [ "data_deps", "deps",
+                                        "public_deps", "visibility" ])
+      if (defined(visibility) && visibility) {
+        if (defined(invoker.extra_deps)) {
+          # Add these extra deps to the dependencies.
+          # "deps" may or may not be defined at this point.
+          if (defined(deps)) {
+            deps += invoker.extra_deps
+          } else {
+            deps = invoker.extra_deps
+          }
+        }
+      } else {
+        # Don't do anything with these extra deps.
+        mark_used_from(invoker, [ "extra_deps" ])
+      }
+    }
+  }
+
+  # This is a template around a target whose type depends on a global
+  # variable. It marks all values from the invoker as used.
+  template("my_wrapper") {
+    target(my_wrapper_target_type, target_name) {
+      mark_used_from(invoker, "*")
+    }
+
+  # A template that wraps another. It adds behavior based on one
+  # variable, and forwards all others to the nested target.
+  template("my_ios_test_app") {
+    ios_test_app(target_name) {
+      mark_used_from(invoker, "*", ["test_bundle_name"])
+      if (!defined(extra_substitutions)) {
+        extra_substitutions = []
+      }
+      extra_substitutions += [ "BUNDLE_ID_TEST_NAME=$test_bundle_name" ]
+    }
+ }
+)";
 
 // This function takes a ListNode rather than a resolved vector of values
 // both avoid copying the potentially-large source scope, and so the variables

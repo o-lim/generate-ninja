@@ -7,8 +7,8 @@
 namespace base {
 namespace trace_event {
 
-MemoryDumpSessionState::MemoryDumpSessionState() {}
-
+MemoryDumpSessionState::MemoryDumpSessionState()
+    : heap_profiler_breakdown_threshold_bytes_(0) {}
 MemoryDumpSessionState::~MemoryDumpSessionState() {}
 
 void MemoryDumpSessionState::SetStackFrameDeduplicator(
@@ -23,9 +23,14 @@ void MemoryDumpSessionState::SetTypeNameDeduplicator(
   type_name_deduplicator_ = std::move(type_name_deduplicator);
 }
 
-void MemoryDumpSessionState::SetMemoryDumpConfig(
-    const TraceConfig::MemoryDumpConfig& config) {
-  memory_dump_config_ = config;
+void MemoryDumpSessionState::SetAllowedDumpModes(
+    std::set<MemoryDumpLevelOfDetail> allowed_dump_modes) {
+  allowed_dump_modes_ = allowed_dump_modes;
+}
+
+bool MemoryDumpSessionState::IsDumpModeAllowed(
+    MemoryDumpLevelOfDetail dump_mode) const {
+  return allowed_dump_modes_.count(dump_mode) != 0;
 }
 
 }  // namespace trace_event

@@ -54,6 +54,16 @@ TEST(TimeTestOutOfBounds, FromExplodedOutOfBoundsTime) {
       {{2016, 10, 0, 25, 7, 47, 234, 0}, false},
       // Milliseconds are too large
       {{2016, 10, 0, 25, 6, 31, 23, 1643}, false},
+      // Test overflow. Time is valid, but overflow case
+      // results in Time(0).
+      {{9840633, 1, 0, 1, 1, 1, 0, 0}, true},
+      // Underflow will fail as well.
+      {{-9840633, 1, 0, 1, 1, 1, 0, 0}, true},
+      // Test integer overflow and underflow cases for the values themselves.
+      {{std::numeric_limits<int>::min(), 1, 0, 1, 1, 1, 0, 0}, true},
+      {{std::numeric_limits<int>::max(), 1, 0, 1, 1, 1, 0, 0}, true},
+      {{2016, std::numeric_limits<int>::min(), 0, 1, 1, 1, 0, 0}, false},
+      {{2016, std::numeric_limits<int>::max(), 0, 1, 1, 1, 0, 0}, false},
   };
 
   for (const auto& test : kDateTestData) {
@@ -806,22 +816,29 @@ TEST(TimeDelta, FromAndIn) {
 
 #if defined(OS_POSIX)
 TEST(TimeDelta, TimeSpecConversion) {
-  struct timespec result = TimeDelta::FromSeconds(0).ToTimeSpec();
+  TimeDelta delta = TimeDelta::FromSeconds(0);
+  struct timespec result = delta.ToTimeSpec();
   EXPECT_EQ(result.tv_sec, 0);
   EXPECT_EQ(result.tv_nsec, 0);
+  EXPECT_EQ(delta, TimeDelta::FromTimeSpec(result));
 
-  result = TimeDelta::FromSeconds(1).ToTimeSpec();
+  delta = TimeDelta::FromSeconds(1);
+  result = delta.ToTimeSpec();
   EXPECT_EQ(result.tv_sec, 1);
   EXPECT_EQ(result.tv_nsec, 0);
+  EXPECT_EQ(delta, TimeDelta::FromTimeSpec(result));
 
-  result = TimeDelta::FromMicroseconds(1).ToTimeSpec();
+  delta = TimeDelta::FromMicroseconds(1);
+  result = delta.ToTimeSpec();
   EXPECT_EQ(result.tv_sec, 0);
   EXPECT_EQ(result.tv_nsec, 1000);
+  EXPECT_EQ(delta, TimeDelta::FromTimeSpec(result));
 
-  result = TimeDelta::FromMicroseconds(
-      Time::kMicrosecondsPerSecond + 1).ToTimeSpec();
+  delta = TimeDelta::FromMicroseconds(Time::kMicrosecondsPerSecond + 1);
+  result = delta.ToTimeSpec();
   EXPECT_EQ(result.tv_sec, 1);
   EXPECT_EQ(result.tv_nsec, 1000);
+  EXPECT_EQ(delta, TimeDelta::FromTimeSpec(result));
 }
 #endif  // OS_POSIX
 
@@ -1099,17 +1116,17 @@ TEST(TimeDeltaLogging, DCheckEqCompiles) {
 
 TEST(TimeDeltaLogging, EmptyIsZero) {
   TimeDelta zero;
-  EXPECT_EQ("0s", AnyToString(zero));
+  EXPECT_EQ("0 s", AnyToString(zero));
 }
 
 TEST(TimeDeltaLogging, FiveHundredMs) {
   TimeDelta five_hundred_ms = TimeDelta::FromMilliseconds(500);
-  EXPECT_EQ("0.5s", AnyToString(five_hundred_ms));
+  EXPECT_EQ("0.5 s", AnyToString(five_hundred_ms));
 }
 
 TEST(TimeDeltaLogging, MinusTenSeconds) {
   TimeDelta minus_ten_seconds = TimeDelta::FromSeconds(-10);
-  EXPECT_EQ("-10s", AnyToString(minus_ten_seconds));
+  EXPECT_EQ("-10 s", AnyToString(minus_ten_seconds));
 }
 
 TEST(TimeDeltaLogging, DoesNotMessUpFormattingFlags) {

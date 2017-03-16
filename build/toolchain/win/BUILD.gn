@@ -264,6 +264,24 @@ template("msvc_toolchain") {
 
       command = "$python_path $tool_wrapper_path link-wrapper $env False $link /nologo /OUT:$exename /PDB:$pdbname @$rspfile"
 
+      if (is_official_build) {
+        # On bots, the binary's PDB grow and eventually exceed 4G, causing the
+        # link to fail. As there's no utility to keeping the PDB around
+        # incrementally anyway in this config (because we're doing
+        # non-incremental LTCG builds), delete it before linking.
+        command = "cmd /c $python_path $tool_wrapper_path delete-file $pdbname && $command"
+      }
+
+      if (linkrepro_root_dir != "") {
+        # Create the directory that will receive the link repro for this target
+        # if needed. Note that this will create one directory per link target
+        # even if this target doesn't generate a link repro. This is necessary
+        # because the linker doesn't generate the directory specified to the
+        # /LINKREPRO flag if it doesn't exist.
+        linkrepro_dir = "$linkrepro_root_dir\\{{target_output_name}}"
+        command = "cmd /c mkdir $linkrepro_dir && $command"
+      }
+
       default_output_extension = ".exe"
       default_output_dir = "{{root_out_dir}}"
       description = "LINK {{output}}"
@@ -294,13 +312,6 @@ template("msvc_toolchain") {
   }
 }
 
-if (is_clang) {
-  sys_include_prefix = "-imsvc"
-} else {
-  # MSVC doesn't have the concept of system headers.
-  sys_include_prefix = "/I"
-}
-
 if (host_os == "win") {
   clang_cl = "clang-cl.exe"
 } else {
@@ -317,7 +328,6 @@ if (target_cpu == "x86") {
                                      windows_sdk_path,
                                      visual_studio_runtime_dirs,
                                      "x86",
-                                     "${sys_include_prefix}",
                                    ],
                                    "scope")
 
@@ -334,7 +344,7 @@ if (target_cpu == "x86") {
     environment = "environment.x86"
     prefix = rebase_path("$clang_base_path/bin", root_build_dir)
     cl = "${goma_prefix}$prefix/${clang_cl}"
-    sys_include_flags = "${x86_toolchain_data.include_flags}"
+    sys_include_flags = "${x86_toolchain_data.include_flags_imsvc}"
 
     toolchain_args = {
       current_cpu = "x86"
@@ -350,7 +360,6 @@ x64_toolchain_data = exec_script("setup_toolchain.py",
                                    windows_sdk_path,
                                    visual_studio_runtime_dirs,
                                    "x64",
-                                   "${sys_include_prefix}",
                                  ],
                                  "scope")
 
@@ -372,7 +381,7 @@ template("win_x64_toolchains") {
     environment = "environment.x64"
     prefix = rebase_path("$clang_base_path/bin", root_build_dir)
     cl = "${goma_prefix}$prefix/${clang_cl}"
-    sys_include_flags = "${x64_toolchain_data.include_flags}"
+    sys_include_flags = "${x64_toolchain_data.include_flags_imsvc}"
 
     toolchain_args = {
       if (defined(invoker.toolchain_args)) {

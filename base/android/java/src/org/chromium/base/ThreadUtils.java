@@ -21,9 +21,9 @@ public class ThreadUtils {
 
     private static final Object sLock = new Object();
 
-    private static boolean sWillOverride = false;
+    private static boolean sWillOverride;
 
-    private static Handler sUiThreadHandler = null;
+    private static Handler sUiThreadHandler;
 
     public static void setWillOverrideUiThread() {
         synchronized (sLock) {
@@ -34,6 +34,11 @@ public class ThreadUtils {
     @VisibleForTesting
     public static void setUiThread(Looper looper) {
         synchronized (sLock) {
+            if (looper == null) {
+                // Used to reset the looper after tests.
+                sUiThreadHandler = null;
+                return;
+            }
             if (sUiThreadHandler != null && sUiThreadHandler.getLooper() != looper) {
                 throw new RuntimeException("UI thread looper is already set to "
                         + sUiThreadHandler.getLooper() + " (Main thread looper is "

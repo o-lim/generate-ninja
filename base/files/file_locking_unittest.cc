@@ -129,17 +129,17 @@ class FileLockingTest : public testing::Test {
     // Setup the temp dir and the lock file.
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
     lock_file_.Initialize(
-        temp_dir_.path().AppendASCII(kLockFile),
+        temp_dir_.GetPath().AppendASCII(kLockFile),
         File::FLAG_CREATE | File::FLAG_READ | File::FLAG_WRITE);
     ASSERT_TRUE(lock_file_.IsValid());
   }
 
   bool SignalEvent(const char* signal_file) {
-    return ::SignalEvent(temp_dir_.path(), signal_file);
+    return ::SignalEvent(temp_dir_.GetPath(), signal_file);
   }
 
   bool WaitForEventOrTimeout(const char* signal_file) {
-    return ::WaitForEventWithTimeout(temp_dir_.path(), signal_file,
+    return ::WaitForEventWithTimeout(temp_dir_.GetPath(), signal_file,
                                      TestTimeouts::action_timeout());
   }
 
@@ -147,15 +147,15 @@ class FileLockingTest : public testing::Test {
   // it to lock the file.
   void StartChildAndSignalLock(const char* unlock_action) {
     // Create a temporary dir and spin up a ChildLockExit subprocess against it.
-    const FilePath temp_path = temp_dir_.path();
+    const FilePath temp_path = temp_dir_.GetPath();
     base::CommandLine child_command_line(
         base::GetMultiProcessTestChildBaseCommandLine());
     child_command_line.AppendSwitchPath(kTempDirFlag, temp_path);
     child_command_line.AppendSwitch(unlock_action);
-    lock_child_ =
-        base::SpawnMultiProcessTestChild(ChildMainString, child_command_line,
-                                         base::LaunchOptions());
-    ASSERT_TRUE(lock_child_.IsValid());
+
+    spawn_child_ = base::SpawnMultiProcessTestChild(
+        ChildMainString, child_command_line, base::LaunchOptions());
+    ASSERT_TRUE(spawn_child_.process.IsValid());
 
     // Wait for the child to lock the file.
     ASSERT_TRUE(WaitForEventOrTimeout(kSignalLockFileLocked));
@@ -165,14 +165,14 @@ class FileLockingTest : public testing::Test {
   void ExitChildCleanly() {
     ASSERT_TRUE(SignalEvent(kSignalExit));
     int rv = -1;
-    ASSERT_TRUE(lock_child_.WaitForExitWithTimeout(
-        TestTimeouts::action_timeout(), &rv));
+    ASSERT_TRUE(WaitForMultiprocessTestChildExit(
+        spawn_child_.process, TestTimeouts::action_timeout(), &rv));
     ASSERT_EQ(0, rv);
   }
 
   base::ScopedTempDir temp_dir_;
   base::File lock_file_;
-  base::Process lock_child_;
+  base::SpawnChildResult spawn_child_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(FileLockingTest);
@@ -220,7 +220,7 @@ TEST_F(FileLockingTest, UnlockOnTerminate) {
   StartChildAndSignalLock(kExitUnlock);
 
   ASSERT_NE(File::FILE_OK, lock_file_.Lock());
-  ASSERT_TRUE(lock_child_.Terminate(0, true));
+  ASSERT_TRUE(TerminateMultiProcessTestChild(spawn_child_.process, 0, true));
   ASSERT_EQ(File::FILE_OK, lock_file_.Lock());
   ASSERT_EQ(File::FILE_OK, lock_file_.Unlock());
 }

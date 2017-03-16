@@ -13,6 +13,7 @@
 #include "base/base_export.h"
 #include "base/message_loop/message_pump.h"
 #include "base/time/time.h"
+#include "base/win/message_window.h"
 #include "base/win/scoped_handle.h"
 
 namespace base {
@@ -124,12 +125,9 @@ class BASE_EXPORT MessagePumpForUI : public MessagePumpWin {
   void ScheduleDelayedWork(const TimeTicks& delayed_work_time) override;
 
  private:
-  static LRESULT CALLBACK WndProcThunk(HWND window_handle,
-                                       UINT message,
-                                       WPARAM wparam,
-                                       LPARAM lparam);
+  bool MessageCallback(
+      UINT message, WPARAM wparam, LPARAM lparam, LRESULT* result);
   void DoRunLoop() override;
-  void InitMessageWnd();
   void WaitForWork();
   void HandleWorkMessage();
   void HandleTimerMessage();
@@ -138,51 +136,7 @@ class BASE_EXPORT MessagePumpForUI : public MessagePumpWin {
   bool ProcessMessageHelper(const MSG& msg);
   bool ProcessPumpReplacementMessage();
 
-  // Atom representing the registered window class.
-  ATOM atom_;
-
-  // A hidden message-only window.
-  HWND message_hwnd_;
-};
-
-//-----------------------------------------------------------------------------
-// MessagePumpForGpu is a simplified version of UI message pump that is
-// optimized for the GPU process. Unlike MessagePumpForUI it doesn't have a
-// hidden window and doesn't handle a situation where a native message pump
-// might take over message processing.
-//
-class BASE_EXPORT MessagePumpForGpu : public MessagePumpWin {
- public:
-  MessagePumpForGpu();
-  ~MessagePumpForGpu() override;
-
-  // Factory methods.
-  static void InitFactory();
-  static std::unique_ptr<MessagePump> CreateMessagePumpForGpu();
-
-  // MessagePump methods:
-  void ScheduleWork() override;
-  void ScheduleDelayedWork(const TimeTicks& delayed_work_time) override;
-
-  // TODO (stanisc): crbug.com/596190: Remove this after the signaling issue
-  // has been investigated.
-  // This should be used for diagnostic only. If message pump wake-up mechanism
-  // is based on auto-reset event this call would reset the event to unset
-  // state.
-  bool WasSignaled() override;
-
- private:
-  // MessagePumpWin methods:
-  void DoRunLoop() override;
-
-  void WaitForWork();
-  bool ProcessNextMessage();
-
-  win::ScopedHandle event_;
-
-  // Used to help diagnose hangs.
-  // TODO(stanisc): crbug.com/596190: Remove these once the bug is fixed.
-  TimeTicks last_set_event_timeticks_;
+  base::win::MessageWindow message_window_;
 };
 
 //-----------------------------------------------------------------------------

@@ -7,12 +7,18 @@
 
 #include "base/files/file_path_watcher.h"
 
+#include "base/macros.h"
+#include "base/memory/ptr_util.h"
+
 namespace base {
 
 namespace {
 
 class FilePathWatcherImpl : public FilePathWatcher::PlatformDelegate {
  public:
+  FilePathWatcherImpl() = default;
+  ~FilePathWatcherImpl() override = default;
+
   bool Watch(const FilePath& path,
              bool recursive,
              const FilePathWatcher::Callback& callback) override {
@@ -21,16 +27,15 @@ class FilePathWatcherImpl : public FilePathWatcher::PlatformDelegate {
 
   void Cancel() override {}
 
-  void CancelOnMessageLoopThread() override {}
-
- protected:
-  ~FilePathWatcherImpl() override {}
+ private:
+  DISALLOW_COPY_AND_ASSIGN(FilePathWatcherImpl);
 };
 
 }  // namespace
 
 FilePathWatcher::FilePathWatcher() {
-  impl_ = new FilePathWatcherImpl();
+  sequence_checker_.DetachFromSequence();
+  impl_ = MakeUnique<FilePathWatcherImpl>();
 }
 
 }  // namespace base

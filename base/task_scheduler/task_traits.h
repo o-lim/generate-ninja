@@ -78,19 +78,57 @@ enum class TaskShutdownBehavior {
 // Describes metadata for a single task or a group of tasks.
 class BASE_EXPORT TaskTraits {
  public:
-  // Constructs a default TaskTraits for tasks with
-  //     (1) no I/O,
-  //     (2) low priority, and
-  //     (3) may block shutdown or be skipped on shutdown.
-  // Tasks that require stricter guarantees should highlight those by requesting
+  // Constructs a default TaskTraits for tasks that
+  //     (1) don't block (ref. MayBlock() and WithBaseSyncPrimitives()),
+  //     (2) prefer inheriting the current priority to specifying their own, and
+  //     (3) can either block shutdown or be skipped on shutdown
+  //         (TaskScheduler implementation is free to choose a fitting default).
+  // Tasks that require stricter guarantees and/or know the specific
+  // TaskPriority appropriate for them should highlight those by requesting
   // explicit traits below.
   TaskTraits();
   TaskTraits(const TaskTraits& other) = default;
   TaskTraits& operator=(const TaskTraits& other) = default;
   ~TaskTraits();
 
-  // Allows tasks with these traits to do file I/O.
-  TaskTraits& WithFileIO();
+  // Tasks with this trait may block. This includes but is not limited to tasks
+  // that wait on synchronous file I/O operations: read or write a file from
+  // disk, interact with a pipe or a socket, rename or delete a file, enumerate
+  // files in a directory, etc. This trait isn't required for the mere use of
+  // locks. For tasks that block on base/ synchronization primitives, see
+  // WithBaseSyncPrimitives().
+  TaskTraits& MayBlock();
+
+  // Tasks with this trait will pass base::AssertWaitAllowed(), i.e. will be
+  // allowed on the following methods :
+  // - base::WaitableEvent::Wait
+  // - base::ConditionVariable::Wait
+  // - base::PlatformThread::Join
+  // - base::PlatformThread::Sleep
+  // - base::Process::WaitForExit
+  // - base::Process::WaitForExitWithTimeout
+  //
+  // Tasks should generally not use these methods.
+  //
+  // Instead of waiting on a WaitableEvent or a ConditionVariable, put the work
+  // that should happen after the wait in a callback and post that callback from
+  // where the WaitableEvent or ConditionVariable would have been signaled. If
+  // something needs to be scheduled after many tasks have executed, use
+  // base::BarrierClosure.
+  //
+  // Avoid creating threads. Instead, use
+  // base::Create(Sequenced|SingleTreaded)TaskRunnerWithTraits(). If a thread is
+  // really needed, make it non-joinable and add cleanup work at the end of the
+  // thread's main function (if using base::Thread, override Cleanup()).
+  //
+  // On Windows, join processes asynchronously using base::win::ObjectWatcher.
+  //
+  // MayBlock() must be specified in conjunction with this trait if and only if
+  // removing usage of methods listed above in the labeled tasks would still
+  // result in tasks that may block (per MayBlock()'s definition).
+  //
+  // In doubt, consult with //base/task_scheduler/OWNERS.
+  TaskTraits& WithBaseSyncPrimitives();
 
   // Applies |priority| to tasks with these traits.
   TaskTraits& WithPriority(TaskPriority priority);
@@ -98,8 +136,11 @@ class BASE_EXPORT TaskTraits {
   // Applies |shutdown_behavior| to tasks with these traits.
   TaskTraits& WithShutdownBehavior(TaskShutdownBehavior shutdown_behavior);
 
-  // Returns true if file I/O is allowed by these traits.
-  bool with_file_io() const { return with_file_io_; }
+  // Returns true if tasks with these traits may block.
+  bool may_block() const { return may_block_; }
+
+  // Returns true if tasks with these traits may use base/ sync primitives.
+  bool with_base_sync_primitives() const { return with_base_sync_primitives_; }
 
   // Returns the priority of tasks with these traits.
   TaskPriority priority() const { return priority_; }
@@ -108,29 +149,22 @@ class BASE_EXPORT TaskTraits {
   TaskShutdownBehavior shutdown_behavior() const { return shutdown_behavior_; }
 
  private:
-  bool with_file_io_;
+  bool may_block_;
+  bool with_base_sync_primitives_;
   TaskPriority priority_;
   TaskShutdownBehavior shutdown_behavior_;
 };
 
-// Describes how tasks are executed by a task runner.
-enum class ExecutionMode {
-  // Can execute multiple tasks at a time in any order.
-  PARALLEL,
+// Returns string literals for the enums defined in this file. These methods
+// should only be used for tracing and debugging.
+BASE_EXPORT const char* TaskPriorityToString(TaskPriority task_priority);
+BASE_EXPORT const char* TaskShutdownBehaviorToString(
+    TaskShutdownBehavior task_priority);
 
-  // Executes one task at a time in posting order. The sequence’s priority is
-  // equivalent to the highest priority pending task in the sequence.
-  SEQUENCED,
-
-  // Executes one task at a time on a single thread in posting order.
-  SINGLE_THREADED,
-};
-
-// Stream operators so TaskPriority and TaskShutdownBehavior can be used in
-// DCHECK statements.
+// Stream operators so that the enums defined in this file can be used in
+// DCHECK and EXPECT statements.
 BASE_EXPORT std::ostream& operator<<(std::ostream& os,
                                      const TaskPriority& shutdown_behavior);
-
 BASE_EXPORT std::ostream& operator<<(
     std::ostream& os,
     const TaskShutdownBehavior& shutdown_behavior);

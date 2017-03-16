@@ -31,8 +31,8 @@ static void DoSomething(JNIEnv* env, const base::android::JavaParamRef<jclass>&
     jcaller,
     const base::android::JavaParamRef<jobject>& callback);
 
-extern "C" __attribute__((visibility("default")))
-void Java_org_chromium_foo_Foo_nativeDoSomething(JNIEnv* env, jclass jcaller,
+JNI_GENERATOR_EXPORT void Java_org_chromium_foo_Foo_nativeDoSomething(JNIEnv*
+    env, jclass jcaller,
     jobject callback) {
   return DoSomething(env, base::android::JavaParamRef<jclass>(env, jcaller),
       base::android::JavaParamRef<jobject>(env, callback));
@@ -48,7 +48,6 @@ static void Java_Foo_calledByNative(JNIEnv* env, const
       base::android::MethodID::TYPE_STATIC>(
       env, Foo_clazz(env),
       "calledByNative",
-
 "("
 "Lorg/chromium/foo/Bar$Callback;"
 ")"
@@ -58,7 +57,6 @@ static void Java_Foo_calledByNative(JNIEnv* env, const
      env->CallStaticVoidMethod(Foo_clazz(env),
           method_id, callback.obj());
   jni_generator::CheckException(env);
-
 }
 
 // Step 3: RegisterNatives.
@@ -72,7 +70,8 @@ static const JNINativeMethod kMethodsFoo[] = {
 };
 
 static bool RegisterNativesImpl(JNIEnv* env) {
-  if (base::android::IsManualJniRegistrationDisabled()) return true;
+  if (jni_generator::ShouldSkipJniRegistration(false))
+    return true;
 
   const int kMethodsFooSize = arraysize(kMethodsFoo);
 

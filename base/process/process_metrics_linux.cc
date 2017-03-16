@@ -192,7 +192,7 @@ size_t ProcessMetrics::GetPeakWorkingSetSize() const {
 }
 
 bool ProcessMetrics::GetMemoryBytes(size_t* private_bytes,
-                                    size_t* shared_bytes) {
+                                    size_t* shared_bytes) const {
   WorkingSetKBytes ws_usage;
   if (!GetWorkingSetKBytes(&ws_usage))
     return false;
@@ -910,6 +910,10 @@ bool GetSystemDiskInfo(SystemDiskInfo* diskinfo) {
   }
 
   return true;
+}
+
+TimeDelta GetUserCpuTimeSinceBoot() {
+  return internal::GetUserCpuTimeSinceBoot();
 }
 
 #if defined(OS_CHROMEOS)

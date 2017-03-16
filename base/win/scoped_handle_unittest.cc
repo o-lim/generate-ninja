@@ -99,18 +99,26 @@ TEST(ScopedHandleTest, ActiveVerifierUntrackedHandle) {
   ASSERT_TRUE(::CloseHandle(handle));
 }
 
-TEST(ScopedHandleTest, MultiProcess) {
+// Under ASan, the multi-process test crashes during process shutdown for
+// unknown reasons. Disable it for now. http://crbug.com/685262
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_MultiProcess DISABLED_MultiProcess
+#else
+#define MAYBE_MultiProcess MultiProcess
+#endif
+
+TEST(ScopedHandleTest, MAYBE_MultiProcess) {
   // Initializing ICU in the child process causes a scoped handle to be created
   // before the test gets a chance to test the race condition, so disable ICU
   // for the child process here.
   CommandLine command_line(base::GetMultiProcessTestChildBaseCommandLine());
   command_line.AppendSwitch(switches::kTestDoNotInitializeIcu);
 
-  base::Process test_child_process = base::SpawnMultiProcessTestChild(
+  base::SpawnChildResult spawn_child = base::SpawnMultiProcessTestChild(
       "ActiveVerifierChildProcess", command_line, LaunchOptions());
 
   int rv = -1;
-  ASSERT_TRUE(test_child_process.WaitForExitWithTimeout(
+  ASSERT_TRUE(spawn_child.process.WaitForExitWithTimeout(
       TestTimeouts::action_timeout(), &rv));
   EXPECT_EQ(0, rv);
 }

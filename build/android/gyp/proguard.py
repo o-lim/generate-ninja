@@ -29,7 +29,7 @@ def _ParseOptions(args):
   parser.add_option('--input-paths',
                     help='Paths to the .jar files proguard should run on.')
   parser.add_option('--output-path', help='Path to the generated .jar file.')
-  parser.add_option('--proguard-configs',
+  parser.add_option('--proguard-configs', action='append',
                     help='Paths to proguard configuration files.')
   parser.add_option('--mapping', help='Path to proguard mapping to apply.')
   parser.add_option('--is-test', action='store_true',
@@ -52,6 +52,13 @@ def _ParseOptions(args):
     classpath += build_utils.ParseGnList(arg)
   options.classpath = classpath
 
+  configs = []
+  for arg in options.proguard_configs:
+    configs += build_utils.ParseGnList(arg)
+  options.proguard_configs = configs
+
+  options.input_paths = build_utils.ParseGnList(options.input_paths)
+
   return options
 
 
@@ -59,9 +66,21 @@ def main(args):
   args = build_utils.ExpandFileArgs(args)
   options = _ParseOptions(args)
 
+  # Work around cases where we switch from a non-proguard setup
+  # to proguard. The output jar might exist and might be a hardlink
+  # to the input jar, so remove the output before doing anything
+  # in that case to avoid an incremental build failure.
+  try:
+    out_inode = os.stat(options.output_path).st_ino
+  except OSError:
+    out_inode = None
+  if (out_inode and
+      out_inode in (os.stat(injar).st_ino for injar in options.input_paths)):
+    os.unlink(options.output_path)
+
   proguard = proguard_util.ProguardCmdBuilder(options.proguard_path)
-  proguard.injars(build_utils.ParseGnList(options.input_paths))
-  proguard.configs(build_utils.ParseGnList(options.proguard_configs))
+  proguard.injars(options.input_paths)
+  proguard.configs(options.proguard_configs)
   proguard.outjar(options.output_path)
 
   if options.mapping:

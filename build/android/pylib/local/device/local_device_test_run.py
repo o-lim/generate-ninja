@@ -5,6 +5,7 @@
 import fnmatch
 import imp
 import logging
+import posixpath
 import signal
 import thread
 import threading
@@ -15,6 +16,11 @@ from pylib.base import base_test_result
 from pylib.base import test_run
 from pylib.base import test_collection
 from pylib.local.device import local_device_environment
+
+
+_SIGTERM_TEST_LOG = (
+  '  Suite execution terminated, probably due to swarming timeout.\n'
+  '  Your test may not have run.')
 
 
 def IncrementalInstall(device, apk_helper, installer_script):
@@ -39,6 +45,26 @@ def IncrementalInstall(device, apk_helper, installer_script):
                     permissions=None)  # Auto-grant permissions from manifest.
 
 
+def SubstituteDeviceRoot(device_path, device_root):
+  if not device_path:
+    return device_root
+  elif isinstance(device_path, list):
+    return posixpath.join(*(p if p else device_root for p in device_path))
+  else:
+    return device_path
+
+
+class TestsTerminated(Exception):
+  pass
+
+
+class InvalidShardingSettings(Exception):
+  def __init__(self, shard_index, total_shards):
+    super(InvalidShardingSettings, self).__init__(
+        'Invalid sharding settings. shard_index: %d total_shards: %d'
+            % (shard_index, total_shards))
+
+
 class LocalDeviceTestRun(test_run.TestRun):
 
   def __init__(self, env, test_instance):
@@ -58,8 +84,9 @@ class LocalDeviceTestRun(test_run.TestRun):
           thread.exit()
 
         result = None
+        rerun = None
         try:
-          result = self._RunTest(dev, test)
+          result, rerun = self._RunTest(dev, test)
           if isinstance(result, base_test_result.BaseTestResult):
             results.AddResult(result)
           elif isinstance(result, list):
@@ -69,17 +96,15 @@ class LocalDeviceTestRun(test_run.TestRun):
                 'Unexpected result type: %s' % type(result).__name__)
         except:
           if isinstance(tests, test_collection.TestCollection):
-            tests.add(test)
+            rerun = test
           raise
         finally:
           if isinstance(tests, test_collection.TestCollection):
+            if rerun:
+              tests.add(rerun)
             tests.test_completed()
 
-
       logging.info('Finished running tests on this device.')
-
-    class TestsTerminated(Exception):
-      pass
 
     def stop_tests(_signum, _frame):
       logging.critical('Received SIGTERM. Stopping test execution.')
@@ -87,7 +112,7 @@ class LocalDeviceTestRun(test_run.TestRun):
       raise TestsTerminated()
 
     try:
-      with signal_handler.AddSignalHandler(signal.SIGTERM, stop_tests):
+      with signal_handler.SignalHandler(signal.SIGTERM, stop_tests):
         tries = 0
         results = []
         while tries < self._env.max_tries and tests:
@@ -102,7 +127,7 @@ class LocalDeviceTestRun(test_run.TestRun):
           test_names = (self._GetUniqueTestName(t) for t in tests)
           try_results.AddResults(
               base_test_result.BaseTestResult(
-                  t, base_test_result.ResultType.UNKNOWN)
+                  t, base_test_result.ResultType.NOTRUN)
               for t in test_names if not t.endswith('*'))
 
           try:
@@ -113,6 +138,14 @@ class LocalDeviceTestRun(test_run.TestRun):
             else:
               self._env.parallel_devices.pMap(
                   run_tests_on_device, tests, try_results).pGet(None)
+          except TestsTerminated:
+            for unknown_result in try_results.GetUnknown():
+              try_results.AddResult(
+                  base_test_result.BaseTestResult(
+                      unknown_result.GetName(),
+                      base_test_result.ResultType.TIMEOUT,
+                      log=_SIGTERM_TEST_LOG))
+            raise
           finally:
             results.append(try_results)
 
@@ -152,6 +185,17 @@ class LocalDeviceTestRun(test_run.TestRun):
 
     return [t for t in failed_tests if self._ShouldRetry(t)]
 
+  def _ApplyExternalSharding(self, tests, shard_index, total_shards):
+    logging.info('Using external sharding settings. This is shard %d/%d',
+                 shard_index, total_shards)
+
+    if total_shards < 0 or shard_index < 0 or total_shards <= shard_index:
+      raise InvalidShardingSettings(shard_index, total_shards)
+
+    return [
+        t for t in tests
+        if hash(self._GetUniqueTestName(t)) % total_shards == shard_index]
+
   def GetTool(self, device):
     if not str(device) in self._tools:
       self._tools[str(device)] = valgrind_tools.CreateTool(
@@ -171,7 +215,6 @@ class LocalDeviceTestRun(test_run.TestRun):
 
   def _GetTests(self):
     raise NotImplementedError
-
   def _RunTest(self, device, test):
     raise NotImplementedError
 

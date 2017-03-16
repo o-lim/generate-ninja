@@ -27,14 +27,10 @@ config("compiler") {
   ]
 
   if (is_clang) {
-    rebased_android_toolchain_root =
-        rebase_path(android_toolchain_root, root_build_dir)
-    assert(rebased_android_toolchain_root != "")  # Mark as used.
-    if (current_cpu == "mipsel" || current_cpu == "mips64el") {
+    if (current_cpu == "mips64el") {
       cflags += [
-        # TODO(gordanac) Enable integrated-as.
-        "-fno-integrated-as",
-        "-B${rebased_android_toolchain_root}/bin",  # Else /usr/bin/as gets picked up.
+        # Have to force IAS for mips64.
+        "-fintegrated-as",
       ]
     }
   } else {
@@ -63,8 +59,6 @@ config("compiler") {
     } else if (current_cpu == "x86") {
       abi_target = "i686-linux-androideabi"
     } else if (current_cpu == "arm64") {
-      # Place holder for arm64 support, not tested.
-      # TODO: Enable clang support for Android Arm64. http://crbug.com/539781
       abi_target = "aarch64-linux-android"
     } else if (current_cpu == "x64") {
       # Place holder for x64 support, not tested.
@@ -98,12 +92,30 @@ config("runtime_library") {
   # arm-linux-androideabi-4.4.3 toolchain (circa Gingerbread) will exhibit
   # strange errors. The include ordering here is important; change with
   # caution.
-  cflags_cc = [
-    "-isystem" +
-        rebase_path("$android_libcpp_root/libcxx/include", root_build_dir),
-    "-isystem" + rebase_path(
+  cflags_cc = []
+  if (android_ndk_major_version >= 13) {
+    libcxx_include_path =
+        rebase_path("$android_libcpp_root/include", root_build_dir)
+    libcxxabi_include_path =
+        rebase_path("$android_ndk_root/sources/cxx-stl/llvm-libc++abi/include",
+                    root_build_dir)
+
+    if (!is_clang) {
+      # Per the release notes, GCC is not supported in the NDK starting with
+      # r13. It's still present, though, and has conflicting declarations of
+      # float abs(float).
+      cflags_cc += [ "-Wno-attributes" ]
+    }
+  } else {
+    libcxx_include_path =
+        rebase_path("$android_libcpp_root/libcxx/include", root_build_dir)
+    libcxxabi_include_path = rebase_path(
             "$android_ndk_root/sources/cxx-stl/llvm-libc++abi/libcxxabi/include",
-            root_build_dir),
+            root_build_dir)
+  }
+  cflags_cc += [
+    "-isystem" + libcxx_include_path,
+    "-isystem" + libcxxabi_include_path,
     "-isystem" +
         rebase_path("$android_ndk_root/sources/android/support/include",
                     root_build_dir),
@@ -120,6 +132,15 @@ config("runtime_library") {
     libs = [ "c++_shared" ]
   } else {
     libs = [ "c++_static" ]
+  }
+  libs += [
+    "c++abi",
+    "android_support",
+  ]
+
+  # arm builds of libc++ starting in NDK r12 depend on unwind.
+  if (current_cpu == "arm") {
+    libs += [ "unwind" ]
   }
 
   # Manually link the libgcc.a that the cross compiler uses. This is
@@ -140,6 +161,21 @@ config("runtime_library") {
       "__compiler_offsetof=__builtin_offsetof",
       "nan=__builtin_nan",
     ]
+
+    if (current_cpu == "x64" || current_cpu == "arm64" ||
+        current_cpu == "mips64el") {
+      # 64-bit targets build with NDK 21, 32-bit targets with NDK 16
+      # (see ./config.gni).  When using clang, NDK 21 defines snprintf to
+      # something for a kind of for of _FORTIFY_SOURCE support, see
+      # third_party/android_tools/ndk/platforms/android-21/arch-x86_64/usr/include/stdio.h
+      # Making snprintf a macro breaks base/strings/string_utils.h which
+      # defines base::snprintf().  So define snprintf to itself to force the
+      # NDK to not redefine it.  This disables _chk for snprintf, but since
+      # 32-bit versions use NDK 16 which doesn't have any fortify support, that
+      # seems ok.  b/32067310 tracks better fortify support with clang.
+      # TODO(thakis): Remove this once b/32067310 is fixed.
+      defines += [ "snprintf=snprintf" ]
+    }
   }
 
   # TODO(jdduke) Re-enable on mips after resolving linking
@@ -155,9 +191,14 @@ config("executable_config") {
   ldflags = [ "-pie" ]
 }
 
-config("hide_native_jni_exports") {
+config("hide_all_but_jni_onload") {
+  ldflags = [ "-Wl,--version-script=" + rebase_path(
+                  "//build/android/android_only_explicit_jni_exports.lst") ]
+}
+
+config("hide_all_but_jni") {
   ldflags = [ "-Wl,--version-script=" +
-              rebase_path("//build/android/android_no_jni_exports.lst") ]
+              rebase_path("//build/android/android_only_jni_exports.lst") ]
 }
 
 # Instrumentation -------------------------------------------------------------

@@ -513,6 +513,9 @@ void NinjaBinaryTargetWriter::WriteOneFlag(
         pch_file.erase(pch_file.length() - 4);
         out_ << " -include " << pch_file;
       }
+    } else {
+      ReverseRecursiveTargetConfigStringsToStream(target_, getter,
+                                                  flag_escape_options, out_);
     }
   } else {
     ReverseRecursiveTargetConfigStringsToStream(target_, getter,
@@ -812,7 +815,7 @@ void NinjaBinaryTargetWriter::WriteCompilerBuildLine(
   args_escape_options.inhibit_quoting = true;
 
   SubstitutionWriter::WriteNinjaVariablesForSource(
-      settings_, source, source_substitutions_used,
+      target_, settings_, source, source_substitutions_used,
       args_escape_options, out_);
 }
 

@@ -49,20 +49,18 @@ const char kMarkUsed[] = "mark_used";
 const char kMarkUsed_HelpShort[] =
     "mark_used_from: Marks variables as used from the current scope.";
 const char kMarkUsed_Help[] =
-    "mark_used: Marks variables as used from the current scope.\n"
-    "\n"
-    "  mark_used(variable_name_or_variable_list)\n"
-    "\n"
-    "  Marks the given variables from the current scope as used. This can be\n"
-    "  used in the context of templates to prevent \"Assignment had no effect\"\n"
-    "  errors.\n"
-    "\n"
-    "  The variables in the given variable_list will be marked used in the\n"
-    "  current scope or any enclosing scope.\n"
-    "\n"
-    "  See also \"mark_used_from\" for marking variables used from a\n"
-    "  different scope.\n"
-    "\n";
+    R"(mark_used: Marks variables as used from the current scope.
+
+  mark_used(variable_name_or_variable_list)
+
+  Marks the given variables from the current scope as used. This can be used in
+  the context of templates to prevent "Assignment had no effect" errors.
+
+  The variables in the given variable_list will be marked used in the current
+  scope or any enclosing scope.
+
+  See also "mark_used_from" for marking variables used from a different scope.
+)";
 
 // This function takes a ListNode rather than a resolved vector of values
 // both avoid copying the potentially-large source scope, and so the variables

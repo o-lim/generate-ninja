@@ -185,10 +185,4 @@ void InitAndroidTestMessageLoop() {
     LOG(INFO) << "MessagePumpForUIFactory already set, unable to override.";
 }
 
-void InitAndroidTest() {
-  if (!base::AndroidIsChildProcess()) {
-    InitAndroidTestLogging();
-  }
-  InitAndroidTestMessageLoop();
-}
 }  // namespace base

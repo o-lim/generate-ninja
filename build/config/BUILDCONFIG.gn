@@ -146,9 +146,6 @@ declare_args() {
   # separate flags.
   is_official_build = false
 
-  # Debug build. Enabling official builds automatically sets is_debug to false.
-  is_debug = !is_official_build
-
   # Whether we're a traditional desktop unix.
   is_desktop_linux = current_os == "linux"
 
@@ -166,6 +163,11 @@ declare_args() {
   host_toolchain = ""
 
   # DON'T ADD MORE FLAGS HERE. Read the comment above.
+}
+
+declare_args() {
+  # Debug build. Enabling official builds automatically sets is_debug to false.
+  is_debug = !is_official_build
 }
 
 declare_args() {
@@ -232,9 +234,9 @@ if (target_os == "android") {
   assert(host_os == "linux" || host_os == "mac",
          "Android builds are only supported on Linux and Mac hosts.")
   if (is_clang) {
-    _default_toolchain = "//build/toolchain/android:clang_$target_cpu"
+    _default_toolchain = "//build/toolchain/android:android_clang_$target_cpu"
   } else {
-    _default_toolchain = "//build/toolchain/android:$target_cpu"
+    _default_toolchain = "//build/toolchain/android:android_$target_cpu"
   }
 } else if (target_os == "chromeos" || target_os == "linux") {
   # See comments in build/toolchain/cros/BUILD.gn about board compiles.
@@ -483,9 +485,12 @@ set_sources_assignment_filter(sources_assignment_filter)
 # Holds all configs used for running the compiler.
 default_compiler_configs = [
   "//build/config:feature_flags",
+  "//build/config/compiler:afdo",
   "//build/config/compiler:compiler",
+  "//build/config/compiler:pthread",
   "//build/config/compiler:clang_stackrealign",
   "//build/config/compiler:compiler_arm_fpu",
+  "//build/config/compiler:compiler_arm_thumb",
   "//build/config/compiler:chromium_code",
   "//build/config/compiler:default_include_dirs",
   "//build/config/compiler:default_optimization",
@@ -497,6 +502,7 @@ default_compiler_configs = [
 ]
 if (is_win) {
   default_compiler_configs += [
+    "//build/config/win:default_crt",
     "//build/config/win:lean_and_mean",
     "//build/config/win:nominmax",
     "//build/config/win:unicode",
@@ -579,13 +585,18 @@ if (is_android) {
   # Strip native JNI exports from shared libraries by default. Binaries that
   # want this can remove this config.
   default_shared_library_configs +=
-      [ "//build/config/android:hide_native_jni_exports" ]
+      [ "//build/config/android:hide_all_but_jni_onload" ]
 }
 set_defaults("shared_library") {
   configs = default_shared_library_configs
 }
 set_defaults("loadable_module") {
   configs = default_shared_library_configs
+
+  # loadable_modules are generally used by other libs, not just via JNI.
+  if (is_android) {
+    configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
+  }
 }
 
 # ==============================================================================
@@ -657,7 +668,7 @@ set_defaults("component") {
   if (is_component_build) {
     configs = default_shared_library_configs
     if (is_android) {
-      configs -= [ "//build/config/android:hide_native_jni_exports" ]
+      configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
     }
   } else {
     configs = default_compiler_configs

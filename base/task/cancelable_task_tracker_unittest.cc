@@ -15,6 +15,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/test/gtest_util.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -112,7 +113,7 @@ TEST_F(CancelableTaskTrackerTest, CancelPostedTask) {
       test_task_runner.get(), FROM_HERE, MakeExpectedNotRunClosure(FROM_HERE));
   EXPECT_NE(CancelableTaskTracker::kBadTaskId, task_id);
 
-  EXPECT_EQ(1U, test_task_runner->GetPendingTasks().size());
+  EXPECT_EQ(1U, test_task_runner->NumPendingTasks());
 
   task_tracker_.TryCancel(task_id);
 
@@ -348,11 +349,7 @@ class CancelableTaskTrackerDeathTest : public CancelableTaskTrackerTest {
 void MaybeRunDeadlyTaskTrackerMemberFunction(
     CancelableTaskTracker* task_tracker,
     const Callback<void(CancelableTaskTracker*)>& fn) {
-// CancelableTask uses DCHECKs with its ThreadChecker (itself only
-// enabled in debug mode).
-#if DCHECK_IS_ON()
-  EXPECT_DEATH_IF_SUPPORTED(fn.Run(task_tracker), "");
-#endif
+  EXPECT_DCHECK_DEATH(fn.Run(task_tracker));
 }
 
 void PostDoNothingTask(CancelableTaskTracker* task_tracker) {

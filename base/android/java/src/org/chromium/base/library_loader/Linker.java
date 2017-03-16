@@ -195,7 +195,7 @@ public abstract class Linker {
     protected final Object mLock = new Object();
 
     // The name of a class that implements TestRunner.
-    private String mTestRunnerClassName = null;
+    private String mTestRunnerClassName;
 
     // Size of reserved Breakpad guard region. Should match the value of
     // kBreakpadGuardRegionBytes on the JNI side. Used when computing the load
@@ -216,7 +216,7 @@ public abstract class Linker {
     public static final int LINKER_IMPLEMENTATION_MODERN = 2;
 
     // Singleton.
-    private static Linker sSingleton = null;
+    private static Linker sSingleton;
     private static Object sSingletonLock = new Object();
 
     // Protected singleton constructor.
@@ -503,32 +503,24 @@ public abstract class Linker {
     }
 
     /**
-     * Determine whether a library is the linker library. Also deal with the
-     * component build that adds a .cr suffix to the name.
+     * Determine whether a library is the linker library.
      *
      * @param library the name of the library.
      * @return true is the library is the Linker's own JNI library.
      */
     public boolean isChromiumLinkerLibrary(String library) {
-        return library.equals(LINKER_JNI_LIBRARY) || library.equals(LINKER_JNI_LIBRARY + ".cr");
+        return library.equals(LINKER_JNI_LIBRARY);
     }
 
     /**
      * Load the Linker JNI library. Throws UnsatisfiedLinkError on error.
-     * In a component build, the suffix ".cr" is added to each library name, so
-     * if the initial load fails we retry with a suffix.
      */
     protected static void loadLinkerJniLibrary() {
         String libName = "lib" + LINKER_JNI_LIBRARY + ".so";
         if (DEBUG) {
             Log.i(TAG, "Loading " + libName);
         }
-        try {
-            System.loadLibrary(LINKER_JNI_LIBRARY);
-        } catch (UnsatisfiedLinkError e) {
-            Log.w(TAG, "Couldn't load " + libName + ", trying " + libName + ".cr");
-            System.loadLibrary(LINKER_JNI_LIBRARY + ".cr");
-        }
+        System.loadLibrary(LINKER_JNI_LIBRARY);
     }
 
     /**

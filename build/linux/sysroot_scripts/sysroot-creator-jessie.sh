@@ -3,17 +3,20 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-SCRIPT_DIR=$(cd $(dirname $0) && pwd)
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 DISTRO=debian
 DIST=jessie
+DIST_UPDATES=jessie-updates
+
 PACKAGES_EXT=xz
+
 APT_REPO=http://http.us.debian.org/debian
 # gpg keyring file generated using:
 #   export KEYS="518E17E1 46925553 2B90D010"
 #   gpg --recv-keys $KEYS
 #   gpg --output ./debian-archive-jessie-stable.gpg --export $KEYS
-KEYRING_FILE=${SCRIPT_DIR}/debian-archive-jessie-stable.gpg
+KEYRING_FILE="${SCRIPT_DIR}/debian-archive-jessie-stable.gpg"
 
 HAS_ARCH_AMD64=1
 HAS_ARCH_I386=1
@@ -29,8 +32,12 @@ DEBIAN_PACKAGES="\
   krb5-multidev
   libasound2
   libasound2-dev
+  libatk-bridge2.0-0
+  libatk-bridge2.0-dev
   libatk1.0-0
   libatk1.0-dev
+  libatspi2.0-0
+  libatspi2.0-dev
   libattr1
   libavahi-client3
   libavahi-common3
@@ -56,6 +63,8 @@ DEBIAN_PACKAGES="\
   libdrm-dev
   libdrm-nouveau2
   libdrm-radeon1
+  libegl1-mesa
+  libegl1-mesa-dev
   libelf1
   libelf-dev
   libexpat1
@@ -66,6 +75,8 @@ DEBIAN_PACKAGES="\
   libfontconfig1-dev
   libfreetype6
   libfreetype6-dev
+  libgbm1
+  libgbm-dev
   libgcc-4.8-dev
   libgcc1
   libgconf-2-4
@@ -91,6 +102,8 @@ DEBIAN_PACKAGES="\
   libgpg-error-dev
   libgssapi-krb5-2
   libgssrpc4
+  libgtk-3-0
+  libgtk-3-dev
   libgtk2.0-0
   libgtk2.0-dev
   libharfbuzz0b
@@ -98,6 +111,8 @@ DEBIAN_PACKAGES="\
   libharfbuzz-gobject0
   libharfbuzz-icu0
   libatomic1
+  libjsoncpp0
+  libjsoncpp-dev
   libk5crypto3
   libkadm5clnt-mit9
   libkadm5srv-mit9
@@ -145,17 +160,27 @@ DEBIAN_PACKAGES="\
   libtasn1-6
   libudev-dev
   libudev1
+  libwayland-client0
+  libwayland-cursor0
+  libwayland-dev
+  libwayland-egl1-mesa
+  libwayland-server0
   libx11-6
   libx11-dev
   libx11-xcb1
   libx11-xcb-dev
   libxau6
+  libaudit1
   libxau-dev
   libxcb1
   libxcb1-dev
+  libxcb-dri2-0
+  libxcb-dri3-0
   libxcb-glx0
+  libxcb-present0
   libxcb-render0
   libxcb-render0-dev
+  libxcb-sync1
   libxcb-shm0
   libxcb-shm0-dev
   libxcomposite1
@@ -174,10 +199,13 @@ DEBIAN_PACKAGES="\
   libxi-dev
   libxinerama1
   libxinerama-dev
+  libxkbcommon0
+  libxkbcommon-dev
   libxrandr2
   libxrandr-dev
   libxrender1
   libxrender-dev
+  libxshmfence1
   libxss1
   libxss-dev
   libxt6
@@ -235,4 +263,4 @@ DEBIAN_PACKAGES_ARM64="
   libthai0
 "
 
-. ${SCRIPT_DIR}/sysroot-creator.sh
+. "${SCRIPT_DIR}/sysroot-creator.sh"

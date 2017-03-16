@@ -11,7 +11,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
 #include "base/win/current_module.h"
@@ -25,104 +25,20 @@ enum MessageLoopProblems {
   MESSAGE_POST_ERROR,
   COMPLETION_POST_ERROR,
   SET_TIMER_ERROR,
+  RECEIVED_WM_QUIT_ERROR,
   MESSAGE_LOOP_PROBLEM_MAX,
 };
 
-// The following define pointers to user32 API's for the API's which are used
-// in this file. These are added to avoid directly depending on user32 from
-// base as there are users of base who don't want this.
-decltype(::TranslateMessage)* g_translate_message = nullptr;
-decltype(::DispatchMessageW)* g_dispatch_message = nullptr;
-decltype(::PeekMessageW)* g_peek_message = nullptr;
-decltype(::PostMessageW)* g_post_message = nullptr;
-decltype(::DefWindowProcW)* g_def_window_proc = nullptr;
-decltype(::PostQuitMessage)* g_post_quit = nullptr;
-decltype(::UnregisterClassW)* g_unregister_class = nullptr;
-decltype(::RegisterClassExW)* g_register_class = nullptr;
-decltype(::CreateWindowExW)* g_create_window_ex = nullptr;
-decltype(::DestroyWindow)* g_destroy_window = nullptr;
-decltype(::CallMsgFilterW)* g_call_msg_filter = nullptr;
-decltype(::GetQueueStatus)* g_get_queue_status = nullptr;
-decltype(::MsgWaitForMultipleObjectsEx)* g_msg_wait_for_multiple_objects_ex =
-    nullptr;
-decltype(::SetTimer)* g_set_timer = nullptr;
-decltype(::KillTimer)* g_kill_timer = nullptr;
-
-#define GET_USER32_API(module, name)         \
-  reinterpret_cast<decltype(name)*>(::GetProcAddress(module, #name))
-
-// Initializes the global pointers to user32 APIs for the API's used in this
-// file.
-void InitUser32APIs() {
-  if (g_translate_message)
-    return;
-
-  HMODULE user32_module = ::GetModuleHandle(L"user32.dll");
-  CHECK(user32_module);
-
-  g_translate_message = GET_USER32_API(user32_module, TranslateMessage);
-  CHECK(g_translate_message);
-
-  g_dispatch_message = GET_USER32_API(user32_module, DispatchMessageW);
-  CHECK(g_dispatch_message);
-
-  g_peek_message = GET_USER32_API(user32_module, PeekMessageW);
-  CHECK(g_peek_message);
-
-  g_post_message = GET_USER32_API(user32_module, PostMessageW);
-  CHECK(g_post_message);
-
-  g_def_window_proc = GET_USER32_API(user32_module, DefWindowProcW);
-  CHECK(g_def_window_proc);
-
-  g_post_quit = GET_USER32_API(user32_module, PostQuitMessage);
-  CHECK(g_post_quit);
-
-  g_unregister_class = GET_USER32_API(user32_module, UnregisterClassW);
-  CHECK(g_unregister_class);
-
-  g_register_class = GET_USER32_API(user32_module, RegisterClassExW);
-  CHECK(g_register_class);
-
-  g_create_window_ex = GET_USER32_API(user32_module, CreateWindowExW);
-  CHECK(g_create_window_ex);
-
-  g_destroy_window = GET_USER32_API(user32_module, DestroyWindow);
-  CHECK(g_destroy_window);
-
-  g_call_msg_filter = GET_USER32_API(user32_module, CallMsgFilterW);
-  CHECK(g_call_msg_filter);
-
-  g_get_queue_status = GET_USER32_API(user32_module, GetQueueStatus);
-  CHECK(g_get_queue_status);
-
-  g_msg_wait_for_multiple_objects_ex =
-      GET_USER32_API(user32_module, MsgWaitForMultipleObjectsEx);
-  CHECK(g_msg_wait_for_multiple_objects_ex);
-
-  g_set_timer = GET_USER32_API(user32_module, SetTimer);
-  CHECK(g_set_timer);
-
-  g_kill_timer = GET_USER32_API(user32_module, KillTimer);
-  CHECK(g_kill_timer);
-}
-
 }  // namespace
-
-static const wchar_t kWndClassFormat[] = L"Chrome_MessagePumpWindow_%p";
 
 // Message sent to get an additional time slice for pumping (processing) another
 // task (a series of such messages creates a continuous task pump).
 static const int kMsgHaveWork = WM_USER + 1;
 
-// The application-defined code passed to the hook procedure.
-static const int kMessageFilterCode = 0x5001;
-
 //-----------------------------------------------------------------------------
 // MessagePumpWin public:
 
-MessagePumpWin::MessagePumpWin() {
-}
+MessagePumpWin::MessagePumpWin() = default;
 
 void MessagePumpWin::Run(Delegate* delegate) {
   RunState s;
@@ -172,24 +88,20 @@ int MessagePumpWin::GetCurrentDelay() const {
 //-----------------------------------------------------------------------------
 // MessagePumpForUI public:
 
-MessagePumpForUI::MessagePumpForUI()
-    : atom_(0) {
-  InitUser32APIs();
-  InitMessageWnd();
+MessagePumpForUI::MessagePumpForUI() {
+  bool succeeded = message_window_.Create(
+      Bind(&MessagePumpForUI::MessageCallback, Unretained(this)));
+  DCHECK(succeeded);
 }
 
-MessagePumpForUI::~MessagePumpForUI() {
-  g_destroy_window(message_hwnd_);
-  g_unregister_class(MAKEINTATOM(atom_), CURRENT_MODULE());
-}
+MessagePumpForUI::~MessagePumpForUI() = default;
 
 void MessagePumpForUI::ScheduleWork() {
   if (InterlockedExchange(&work_state_, HAVE_WORK) != READY)
     return;  // Someone else continued the pumping.
 
   // Make sure the MessagePump does some work for us.
-  BOOL ret = g_post_message(message_hwnd_, kMsgHaveWork,
-                            reinterpret_cast<WPARAM>(this), 0);
+  BOOL ret = PostMessage(message_window_.hwnd(), kMsgHaveWork, 0, 0);
   if (ret)
     return;  // There was room in the Window Message queue.
 
@@ -218,18 +130,17 @@ void MessagePumpForUI::ScheduleDelayedWork(const TimeTicks& delayed_work_time) {
 //-----------------------------------------------------------------------------
 // MessagePumpForUI private:
 
-// static
-LRESULT CALLBACK MessagePumpForUI::WndProcThunk(
-    HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) {
+bool MessagePumpForUI::MessageCallback(
+    UINT message, WPARAM wparam, LPARAM lparam, LRESULT* result) {
   switch (message) {
     case kMsgHaveWork:
-      reinterpret_cast<MessagePumpForUI*>(wparam)->HandleWorkMessage();
+      HandleWorkMessage();
       break;
     case WM_TIMER:
-      reinterpret_cast<MessagePumpForUI*>(wparam)->HandleTimerMessage();
+      HandleTimerMessage();
       break;
   }
-  return g_def_window_proc(hwnd, message, wparam, lparam);
+  return false;
 }
 
 void MessagePumpForUI::DoRunLoop() {
@@ -270,7 +181,7 @@ void MessagePumpForUI::DoRunLoop() {
     // don't want to disturb that timer if it is already in flight.  However,
     // if we did do all remaining delayed work, then lets kill the WM_TIMER.
     if (more_work_is_plausible && delayed_work_time_.is_null())
-      g_kill_timer(message_hwnd_, reinterpret_cast<UINT_PTR>(this));
+      KillTimer(message_window_.hwnd(), reinterpret_cast<UINT_PTR>(this));
     if (state_->should_quit)
       break;
 
@@ -288,24 +199,6 @@ void MessagePumpForUI::DoRunLoop() {
   }
 }
 
-void MessagePumpForUI::InitMessageWnd() {
-  // Generate a unique window class name.
-  string16 class_name = StringPrintf(kWndClassFormat, this);
-
-  HINSTANCE instance = CURRENT_MODULE();
-  WNDCLASSEX wc = {0};
-  wc.cbSize = sizeof(wc);
-  wc.lpfnWndProc = base::win::WrappedWindowProc<WndProcThunk>;
-  wc.hInstance = instance;
-  wc.lpszClassName = class_name.c_str();
-  atom_ = g_register_class(&wc);
-  DCHECK(atom_);
-
-  message_hwnd_ = g_create_window_ex(0, MAKEINTATOM(atom_), 0, 0, 0, 0, 0, 0,
-                                     HWND_MESSAGE, 0, instance, 0);
-  DCHECK(message_hwnd_);
-}
-
 void MessagePumpForUI::WaitForWork() {
   // Wait until a message is available, up to the time needed by the timer
   // manager to fire the next set of timers.
@@ -316,8 +209,8 @@ void MessagePumpForUI::WaitForWork() {
     if (delay < 0)  // Negative value means no timers waiting.
       delay = INFINITE;
 
-    DWORD result = g_msg_wait_for_multiple_objects_ex(0, nullptr, delay,
-                                                      QS_ALLINPUT, wait_flags);
+    DWORD result = MsgWaitForMultipleObjectsEx(0, nullptr, delay, QS_ALLINPUT,
+                                               wait_flags);
 
     if (WAIT_OBJECT_0 == result) {
       // A WM_* message is available.
@@ -335,9 +228,9 @@ void MessagePumpForUI::WaitForWork() {
       // current thread.
       MSG msg = {0};
       bool has_pending_sent_message =
-          (HIWORD(g_get_queue_status(QS_SENDMESSAGE)) & QS_SENDMESSAGE) != 0;
+          (HIWORD(GetQueueStatus(QS_SENDMESSAGE)) & QS_SENDMESSAGE) != 0;
       if (has_pending_sent_message ||
-          g_peek_message(&msg, nullptr, 0, 0, PM_NOREMOVE)) {
+          PeekMessage(&msg, nullptr, 0, 0, PM_NOREMOVE)) {
         return;
       }
 
@@ -375,7 +268,7 @@ void MessagePumpForUI::HandleWorkMessage() {
 }
 
 void MessagePumpForUI::HandleTimerMessage() {
-  g_kill_timer(message_hwnd_, reinterpret_cast<UINT_PTR>(this));
+  KillTimer(message_window_.hwnd(), reinterpret_cast<UINT_PTR>(this));
 
   // If we are being called outside of the context of Run, then don't do
   // anything.  This could correspond to a MessageBox call or something of
@@ -420,8 +313,7 @@ void MessagePumpForUI::RescheduleTimer() {
 
     // Create a WM_TIMER event that will wake us up to check for any pending
     // timers (in case we are running within a nested, external sub-pump).
-    BOOL ret = g_set_timer(message_hwnd_, reinterpret_cast<UINT_PTR>(this),
-                           delay_msec, nullptr);
+    BOOL ret = SetTimer(message_window_.hwnd(), 0, delay_msec, nullptr);
     if (ret)
       return;
     // If we can't set timers, we are in big trouble... but cross our fingers
@@ -438,12 +330,12 @@ bool MessagePumpForUI::ProcessNextWindowsMessage() {
   // case to ensure that the message loop peeks again instead of calling
   // MsgWaitForMultipleObjectsEx again.
   bool sent_messages_in_queue = false;
-  DWORD queue_status = g_get_queue_status(QS_SENDMESSAGE);
+  DWORD queue_status = GetQueueStatus(QS_SENDMESSAGE);
   if (HIWORD(queue_status) & QS_SENDMESSAGE)
     sent_messages_in_queue = true;
 
   MSG msg;
-  if (g_peek_message(&msg, nullptr, 0, 0, PM_REMOVE) != FALSE)
+  if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE) != FALSE)
     return ProcessMessageHelper(msg);
 
   return sent_messages_in_queue;
@@ -453,22 +345,22 @@ bool MessagePumpForUI::ProcessMessageHelper(const MSG& msg) {
   TRACE_EVENT1("base", "MessagePumpForUI::ProcessMessageHelper",
                "message", msg.message);
   if (WM_QUIT == msg.message) {
+    // Receiving WM_QUIT is unusual and unexpected on most message loops.
+    UMA_HISTOGRAM_ENUMERATION("Chrome.MessageLoopProblem",
+                              RECEIVED_WM_QUIT_ERROR, MESSAGE_LOOP_PROBLEM_MAX);
     // Repost the QUIT message so that it will be retrieved by the primary
     // GetMessage() loop.
     state_->should_quit = true;
-    g_post_quit(static_cast<int>(msg.wParam));
+    PostQuitMessage(static_cast<int>(msg.wParam));
     return false;
   }
 
   // While running our main message pump, we discard kMsgHaveWork messages.
-  if (msg.message == kMsgHaveWork && msg.hwnd == message_hwnd_)
+  if (msg.message == kMsgHaveWork && msg.hwnd == message_window_.hwnd())
     return ProcessPumpReplacementMessage();
 
-  if (g_call_msg_filter(const_cast<MSG*>(&msg), kMessageFilterCode))
-    return true;
-
-  g_translate_message(&msg);
-  g_dispatch_message(&msg);
+  TranslateMessage(&msg);
+  DispatchMessage(&msg);
 
   return true;
 }
@@ -485,11 +377,11 @@ bool MessagePumpForUI::ProcessPumpReplacementMessage() {
 
   MSG msg;
   const bool have_message =
-      g_peek_message(&msg, nullptr, 0, 0, PM_REMOVE) != FALSE;
+      PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE) != FALSE;
 
   // Expect no message or a message different than kMsgHaveWork.
   DCHECK(!have_message || kMsgHaveWork != msg.message ||
-         msg.hwnd != message_hwnd_);
+         msg.hwnd != message_window_.hwnd());
 
   // Since we discarded a kMsgHaveWork message, we must update the flag.
   int old_work_state_ = InterlockedExchange(&work_state_, READY);
@@ -505,150 +397,6 @@ bool MessagePumpForUI::ProcessPumpReplacementMessage() {
   // kMsgHaveWork events get (percentage wise) rarer and rarer.
   ScheduleWork();
   return ProcessMessageHelper(msg);
-}
-
-//-----------------------------------------------------------------------------
-// MessagePumpForGpu public:
-
-MessagePumpForGpu::MessagePumpForGpu() {
-  event_.Set(CreateEvent(nullptr, FALSE, FALSE, nullptr));
-  InitUser32APIs();
-}
-
-MessagePumpForGpu::~MessagePumpForGpu() {}
-
-// static
-void MessagePumpForGpu::InitFactory() {
-  bool init_result = MessageLoop::InitMessagePumpForUIFactory(
-      &MessagePumpForGpu::CreateMessagePumpForGpu);
-  DCHECK(init_result);
-}
-
-// static
-std::unique_ptr<MessagePump> MessagePumpForGpu::CreateMessagePumpForGpu() {
-  return WrapUnique<MessagePump>(new MessagePumpForGpu);
-}
-
-void MessagePumpForGpu::ScheduleWork() {
-  if (InterlockedExchange(&work_state_, HAVE_WORK) != READY)
-    return;  // Someone else continued the pumping.
-
-  // TODO(stanisc): crbug.com/596190: Preserve for crash dump analysis.
-  // Remove this when the bug is fixed.
-  last_set_event_timeticks_ = TimeTicks::Now();
-
-  // Make sure the MessagePump does some work for us.
-  SetEvent(event_.Get());
-}
-
-void MessagePumpForGpu::ScheduleDelayedWork(
-    const TimeTicks& delayed_work_time) {
-  // We know that we can't be blocked right now since this method can only be
-  // called on the same thread as Run, so we only need to update our record of
-  // how long to sleep when we do sleep.
-  delayed_work_time_ = delayed_work_time;
-}
-
-bool MessagePumpForGpu::WasSignaled() {
-  // If |event_| was set this would reset it back to unset state.
-  return WaitForSingleObject(event_.Get(), 0) == WAIT_OBJECT_0;
-}
-
-//-----------------------------------------------------------------------------
-// MessagePumpForGpu private:
-
-void MessagePumpForGpu::DoRunLoop() {
-  while (!state_->should_quit) {
-    // Indicate that the loop is handling the work.
-    // If there is a race condition between switching to WORKING state here and
-    // the producer thread setting the HAVE_WORK state after exiting the wait,
-    // the event might remain in the signalled state. That might be less than
-    // optimal but wouldn't result in failing to handle the work.
-    InterlockedExchange(&work_state_, WORKING);
-
-    bool more_work_is_plausible = ProcessNextMessage();
-    if (state_->should_quit)
-      break;
-
-    more_work_is_plausible |= state_->delegate->DoWork();
-    if (state_->should_quit)
-      break;
-
-    more_work_is_plausible |=
-        state_->delegate->DoDelayedWork(&delayed_work_time_);
-    if (state_->should_quit)
-      break;
-
-    if (more_work_is_plausible)
-      continue;
-
-    more_work_is_plausible = state_->delegate->DoIdleWork();
-    if (state_->should_quit)
-      break;
-
-    if (more_work_is_plausible)
-      continue;
-
-    // Switch that working state to READY to indicate that the loop is
-    // waiting for accepting new work if it is still in WORKING state and hasn't
-    // been signalled. Otherwise if it is in HAVE_WORK state skip the wait
-    // and proceed to handing the work.
-    if (InterlockedCompareExchange(&work_state_, READY, WORKING) == HAVE_WORK)
-      continue;  // Skip wait, more work was requested.
-
-    WaitForWork();  // Wait (sleep) until we have work to do again.
-  }
-}
-
-void MessagePumpForGpu::WaitForWork() {
-  // Wait until a message is available, up to the time needed by the timer
-  // manager to fire the next set of timers.
-  int delay;
-
-  // The while loop handles the situation where on Windows 7 and later versions
-  // MsgWaitForMultipleObjectsEx might time out slightly earlier (less than one
-  // ms) than the specified |delay|. In that situation it is more optimal to
-  // just wait again rather than waste a DoRunLoop cycle.
-  while ((delay = GetCurrentDelay()) != 0) {
-    if (delay < 0)  // Negative value means no timers waiting.
-      delay = INFINITE;
-
-    // TODO(stanisc): crbug.com/596190: Preserve for crash dump analysis.
-    // Remove this when the bug is fixed.
-    TimeTicks wait_for_work_timeticks = TimeTicks::Now();
-    debug::Alias(&wait_for_work_timeticks);
-    debug::Alias(&delay);
-
-    HANDLE handle = event_.Get();
-    DWORD result =
-        g_msg_wait_for_multiple_objects_ex(1, &handle, delay, QS_ALLINPUT, 0);
-    DCHECK_NE(WAIT_FAILED, result) << GetLastError();
-    if (result != WAIT_TIMEOUT) {
-      // Either work or message available.
-      return;
-    }
-  }
-}
-
-bool MessagePumpForGpu::ProcessNextMessage() {
-  MSG msg;
-  if (!g_peek_message(&msg, nullptr, 0, 0, PM_REMOVE))
-    return false;
-
-  if (msg.message == WM_QUIT) {
-    // Repost the QUIT message so that it will be retrieved by the primary
-    // GetMessage() loop.
-    state_->should_quit = true;
-    g_post_quit(static_cast<int>(msg.wParam));
-    return false;
-  }
-
-  if (!g_call_msg_filter(const_cast<MSG*>(&msg), kMessageFilterCode)) {
-    g_translate_message(&msg);
-    g_dispatch_message(&msg);
-  }
-
-  return true;
 }
 
 //-----------------------------------------------------------------------------

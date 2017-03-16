@@ -31,8 +31,11 @@ class BASE_EXPORT MemoryPressureMonitor {
   // Return the singleton MemoryPressureMonitor.
   static MemoryPressureMonitor* Get();
 
+  // Record memory pressure UMA statistic. A tick is 5 seconds.
+  static void RecordMemoryPressure(MemoryPressureLevel level, int ticks);
+
   // Returns the currently observed memory pressure.
-  virtual MemoryPressureLevel GetCurrentPressureLevel() const = 0;
+  virtual MemoryPressureLevel GetCurrentPressureLevel() = 0;
 
   // Sets a notification callback. The default callback invokes
   // base::MemoryPressureListener::NotifyMemoryPressure.

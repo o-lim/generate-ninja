@@ -34,7 +34,7 @@ struct Inputs {
   std::vector<SourceFile> source_vec;
   std::vector<Label> compile_vec;
   std::vector<Label> test_vec;
-  bool compile_included_all;
+  bool compile_included_all = false;
   SourceFileSet source_files;
   LabelSet compile_labels;
   LabelSet test_labels;
@@ -43,6 +43,7 @@ struct Inputs {
 struct Outputs {
   std::string status;
   std::string error;
+  bool compile_includes_all = false;
   LabelSet compile_labels;
   LabelSet test_labels;
   LabelSet invalid_labels;
@@ -50,13 +51,13 @@ struct Outputs {
 
 LabelSet LabelsFor(const TargetSet& targets) {
   LabelSet labels;
-  for (const auto& target : targets)
+  for (auto* target : targets)
     labels.insert(target->label());
   return labels;
 }
 
 bool AnyBuildFilesWereModified(const SourceFileSet& source_files) {
-  for (const auto& file : source_files) {
+  for (auto* file : source_files) {
     if (base::EndsWith(file->value(), ".gn", base::CompareCase::SENSITIVE) ||
         base::EndsWith(file->value(), ".gni", base::CompareCase::SENSITIVE))
       return true;
@@ -101,7 +102,7 @@ std::vector<std::string> GetStringVector(const base::DictionaryValue& dict,
 void WriteString(base::DictionaryValue& dict,
                  const std::string& key,
                  const std::string& value) {
-  dict.SetString(key, value);
+  dict.SetStringWithoutPathExpansion(key, value);
 };
 
 void WriteLabels(const Label& default_toolchain,
@@ -114,7 +115,7 @@ void WriteLabels(const Label& default_toolchain,
     strings.push_back(l.GetUserVisibleName(default_toolchain));
   std::sort(strings.begin(), strings.end());
   value->AppendStrings(strings);
-  dict.Set(key, std::move(value));
+  dict.SetWithoutPathExpansion(key, std::move(value));
 }
 
 Label AbsoluteOrSourceAbsoluteStringToLabel(const Label& default_toolchain,
@@ -157,7 +158,7 @@ Err JSONToInputs(const Label& default_toolchain,
     inputs->source_vec.push_back(SourceFile(s));
   }
 
-  strings = GetStringVector(*dict, "compile_targets", &err);
+  strings = GetStringVector(*dict, "additional_compile_targets", &err);
   if (err.has_error())
     return err;
 
@@ -193,7 +194,7 @@ Err JSONToInputs(const Label& default_toolchain,
 }
 
 std::string OutputsToJSON(const Outputs& outputs,
-                          const Label& default_toolchain) {
+                          const Label& default_toolchain, Err *err) {
   std::string output;
   auto value = base::MakeUnique<base::DictionaryValue>();
 
@@ -203,12 +204,20 @@ std::string OutputsToJSON(const Outputs& outputs,
                 outputs.invalid_labels);
   } else {
     WriteString(*value, "status", outputs.status);
-    WriteLabels(default_toolchain, *value, "compile_targets",
-                outputs.compile_labels);
+    if (outputs.compile_includes_all) {
+      auto compile_targets = base::WrapUnique(new base::ListValue());
+      compile_targets->AppendString("all");
+      value->SetWithoutPathExpansion("compile_targets",
+                                     std::move(compile_targets));
+    } else {
+      WriteLabels(default_toolchain, *value, "compile_targets",
+                  outputs.compile_labels);
+    }
     WriteLabels(default_toolchain, *value, "test_targets", outputs.test_labels);
   }
 
-  base::JSONWriter::Write(*value.get(), &output);
+  if (!base::JSONWriter::Write(*value.get(), &output))
+    *err = Err(Location(), "Failed to marshal JSON value for output");
   return output;
 }
 
@@ -237,9 +246,7 @@ std::string Analyzer::Analyze(const std::string& input, Err* err) const {
   Err local_err = JSONToInputs(default_toolchain_, input, &inputs);
   if (local_err.has_error()) {
     outputs.error = local_err.message();
-    if (err)
-      *err = Err();
-    return "";
+    return OutputsToJSON(outputs, default_toolchain_, err);
   }
 
   LabelSet invalid_labels;
@@ -250,36 +257,37 @@ std::string Analyzer::Analyze(const std::string& input, Err* err) const {
   if (!invalid_labels.empty()) {
     outputs.error = "Invalid targets";
     outputs.invalid_labels = invalid_labels;
-    if (err)
-      *err = Err();
-    return OutputsToJSON(outputs, default_toolchain_);
+    return OutputsToJSON(outputs, default_toolchain_, err);
+  }
+
+  // TODO(crbug.com/555273): We can do smarter things when we detect changes
+  // to build files. For example, if all of the ninja files are unchanged,
+  // we know that we can ignore changes to these files. Also, for most .gn
+  // files, we can treat a change as simply affecting every target, config,
+  // or toolchain defined in that file.
+  if (AnyBuildFilesWereModified(inputs.source_files)) {
+    outputs.status = "Found dependency (all)";
+    if (inputs.compile_included_all) {
+      outputs.compile_includes_all = true;
+    } else {
+      outputs.compile_labels.insert(inputs.compile_labels.begin(),
+                                    inputs.compile_labels.end());
+      outputs.compile_labels.insert(inputs.test_labels.begin(),
+                                    inputs.test_labels.end());
+    }
+    outputs.test_labels = inputs.test_labels;
+    return OutputsToJSON(outputs, default_toolchain_, err);
   }
 
   TargetSet affected_targets = AllAffectedTargets(inputs.source_files);
   if (affected_targets.empty()) {
     outputs.status = "No dependency";
-    if (err)
-      *err = Err();
-    return OutputsToJSON(outputs, default_toolchain_);
-  }
-
-  // TODO: We can do smarter things when we detect changes to build files.
-  // For example, if all of the ninja files are unchanged, we know that we
-  // can ignore changes to these files. Also, for most .gn files, we can
-  // treat a change as simply affecting every target, config, or toolchain
-  // defined in that file.
-  if (AnyBuildFilesWereModified(inputs.source_files)) {
-    outputs.status = "Found dependency (all)";
-    outputs.compile_labels = inputs.compile_labels;
-    outputs.test_labels = inputs.test_labels;
-    if (err)
-      *err = Err();
-    return OutputsToJSON(outputs, default_toolchain_);
+    return OutputsToJSON(outputs, default_toolchain_, err);
   }
 
   TargetSet compile_targets = TargetsFor(inputs.compile_labels);
   if (inputs.compile_included_all) {
-    for (auto& root : roots_)
+    for (auto* root : roots_)
       compile_targets.insert(root);
   }
   TargetSet filtered_targets = Filter(compile_targets);
@@ -293,17 +301,16 @@ std::string Analyzer::Analyze(const std::string& input, Err* err) const {
     outputs.status = "No dependency";
   else
     outputs.status = "Found dependency";
-  *err = Err();
-  return OutputsToJSON(outputs, default_toolchain_);
+  return OutputsToJSON(outputs, default_toolchain_, err);
 }
 
 TargetSet Analyzer::AllAffectedTargets(
     const SourceFileSet& source_files) const {
   TargetSet direct_matches;
-  for (const auto& source_file : source_files)
+  for (auto* source_file : source_files)
     AddTargetsDirectlyReferringToFileTo(source_file, &direct_matches);
   TargetSet all_matches;
-  for (const auto& match : direct_matches)
+  for (auto* match : direct_matches)
     AddAllRefsTo(match, &all_matches);
   return all_matches;
 }
@@ -385,7 +392,7 @@ bool Analyzer::TargetRefersToFile(const Target* target,
 
 void Analyzer::AddTargetsDirectlyReferringToFileTo(const SourceFile* file,
                                                    TargetSet* matches) const {
-  for (const auto& target : all_targets_) {
+  for (auto* target : all_targets_) {
     // Only handles targets in the default toolchain.
     if ((target->label().GetToolchainLabel() == default_toolchain_) &&
         TargetRefersToFile(target, file))

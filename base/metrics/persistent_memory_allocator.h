@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <memory>
+#include <type_traits>
 
 #include "base/atomicops.h"
 #include "base/base_export.h"
@@ -47,6 +48,50 @@ class SharedMemory;
 // Note that memory not in active use is not accessed so it is possible to
 // use virtual memory, including memory-mapped files, as backing storage with
 // the OS "pinning" new (zeroed) physical RAM pages only as they are needed.
+//
+// OBJECTS: Although the allocator can be used in a "malloc" sense, fetching
+// character arrays and manipulating that memory manually, the better way is
+// generally to use the "object" methods to create and manage allocations. In
+// this way the sizing, type-checking, and construction are all automatic. For
+// this to work, however, every type of stored object must define two public
+// "constexpr" values, kPersistentTypeId and kExpectedInstanceSize, as such:
+//
+// struct MyPersistentObjectType {
+//     // SHA1(MyPersistentObjectType): Increment this if structure changes!
+//     static constexpr uint32_t kPersistentTypeId = 0x3E15F6DE + 1;
+//
+//     // Expected size for 32/64-bit check. Update this if structure changes!
+//     static constexpr size_t kExpectedInstanceSize = 20;
+//
+//     ...
+// };
+//
+// kPersistentTypeId: This value is an arbitrary identifier that allows the
+//   identification of these objects in the allocator, including the ability
+//   to find them via iteration. The number is arbitrary but using the first
+//   four bytes of the SHA1 hash of the type name means that there shouldn't
+//   be any conflicts with other types that may also be stored in the memory.
+//   The fully qualified name (e.g. base::debug::MyPersistentObjectType) could
+//   be used to generate the hash if the type name seems common. Use a command
+//   like this to get the hash: echo -n "MyPersistentObjectType" | sha1sum
+//   If the structure layout changes, ALWAYS increment this number so that
+//   newer versions of the code don't try to interpret persistent data written
+//   by older versions with a different layout.
+//
+// kExpectedInstanceSize: This value is the hard-coded number that matches
+//   what sizeof(T) would return. By providing it explicitly, the allocator can
+//   verify that the structure is compatible between both 32-bit and 64-bit
+//   versions of the code.
+//
+// Using New manages the memory and then calls the default constructor for the
+// object. Given that objects are persistent, no destructor is ever called
+// automatically though a caller can explicitly call Delete to destruct it and
+// change the type to something indicating it is no longer in use.
+//
+// Though persistent memory segments are transferrable between programs built
+// for different natural word widths, they CANNOT be exchanged between CPUs
+// of different endianess. Attempts to do so will simply see the existing data
+// as corrupt and refuse to access any of it.
 class BASE_EXPORT PersistentMemoryAllocator {
  public:
   typedef uint32_t Reference;
@@ -55,6 +100,11 @@ class BASE_EXPORT PersistentMemoryAllocator {
   // Like the allocator itself, iterators are lock-free and thread-secure.
   // That means that multiple threads can share an iterator and the same
   // reference will not be returned twice.
+  //
+  // The order of the items returned by an iterator matches the order in which
+  // MakeIterable() was called on them. Once an allocation is made iterable,
+  // it is always such so the only possible difference between successive
+  // iterations is for more to be added to the end.
   //
   // Iteration, in general, is tolerant of corrupted memory. It will return
   // what it can and stop only when corruption forces it to. Bad corruption
@@ -76,6 +126,17 @@ class BASE_EXPORT PersistentMemoryAllocator {
     Iterator(const PersistentMemoryAllocator* allocator,
              Reference starting_after);
 
+    // Resets the iterator back to the beginning.
+    void Reset();
+
+    // Resets the iterator, resuming from the |starting_after| reference.
+    void Reset(Reference starting_after);
+
+    // Returns the previously retrieved reference, or kReferenceNull if none.
+    // If constructor or reset with a starting_after location, this will return
+    // that value.
+    Reference GetLast();
+
     // Gets the next iterable, storing that type in |type_return|. The actual
     // return value is a reference to the allocation inside the allocator or
     // zero if there are no more. GetNext() may still be called again at a
@@ -88,6 +149,18 @@ class BASE_EXPORT PersistentMemoryAllocator {
     // calls to GetNext() meaning it's possible to completely miss entries.
     Reference GetNextOfType(uint32_t type_match);
 
+    // As above but works using object type.
+    template <typename T>
+    Reference GetNextOfType() {
+      return GetNextOfType(T::kPersistentTypeId);
+    }
+
+    // As above but works using objects and returns null if not found.
+    template <typename T>
+    const T* GetNextOfObject() {
+      return GetAsObject<T>(GetNextOfType<T>());
+    }
+
     // Converts references to objects. This is a convenience method so that
     // users of the iterator don't need to also have their own pointer to the
     // allocator over which the iterator runs in order to retrieve objects.
@@ -96,8 +169,27 @@ class BASE_EXPORT PersistentMemoryAllocator {
     // non-const (external) pointer to the same allocator (or use const_cast
     // to remove the qualifier).
     template <typename T>
-    const T* GetAsObject(Reference ref, uint32_t type_id) const {
-      return allocator_->GetAsObject<T>(ref, type_id);
+    const T* GetAsObject(Reference ref) const {
+      return allocator_->GetAsObject<T>(ref);
+    }
+
+    // Similar to GetAsObject() but converts references to arrays of things.
+    template <typename T>
+    const T* GetAsArray(Reference ref, uint32_t type_id, size_t count) const {
+      return allocator_->GetAsArray<T>(ref, type_id, count);
+    }
+
+    // Convert a generic pointer back into a reference. A null reference will
+    // be returned if |memory| is not inside the persistent segment or does not
+    // point to an object of the specified |type_id|.
+    Reference GetAsReference(const void* memory, uint32_t type_id) const {
+      return allocator_->GetAsReference(memory, type_id);
+    }
+
+    // As above but convert an object back into a reference.
+    template <typename T>
+    Reference GetAsReference(const T* obj) const {
+      return allocator_->GetAsReference(obj);
     }
 
    private:
@@ -120,11 +212,21 @@ class BASE_EXPORT PersistentMemoryAllocator {
   };
 
   enum : Reference {
-    kReferenceNull = 0  // A common "null" reference value.
+    // A common "null" reference value.
+    kReferenceNull = 0,
   };
 
   enum : uint32_t {
-    kTypeIdAny = 0  // Match any type-id inside GetAsObject().
+    // A value that will match any type when doing lookups.
+    kTypeIdAny = 0x00000000,
+
+    // A value indicating that the type is in transition. Work is being done
+    // on the contents to prepare it for a new type to come.
+    kTypeIdTransitioning = 0xFFFFFFFF,
+  };
+
+  enum : size_t {
+    kSizeAny = 1  // Constant indicating that any array size is acceptable.
   };
 
   // This is the standard file extension (suitable for being passed to the
@@ -187,7 +289,7 @@ class BASE_EXPORT PersistentMemoryAllocator {
   //
   // IMPORTANT: Callers must update tools/metrics/histograms/histograms.xml
   // with the following histograms:
-  //    UMA.PersistentAllocator.name.Allocs
+  //    UMA.PersistentAllocator.name.Errors
   //    UMA.PersistentAllocator.name.UsedPct
   void CreateTrackingHistograms(base::StringPiece name);
 
@@ -208,6 +310,27 @@ class BASE_EXPORT PersistentMemoryAllocator {
   // TIME before accessing it or risk crashing! Once dereferenced, the pointer
   // is safe to reuse forever.
   //
+  // It is essential that the object be of a fixed size. All fields must be of
+  // a defined type that does not change based on the compiler or the CPU
+  // natural word size. Acceptable are char, float, double, and (u)intXX_t.
+  // Unacceptable are int, bool, and wchar_t which are implementation defined
+  // with regards to their size.
+  //
+  // Alignment must also be consistent. A uint64_t after a uint32_t will pad
+  // differently between 32 and 64 bit architectures. Either put the bigger
+  // elements first, group smaller elements into blocks the size of larger
+  // elements, or manually insert padding fields as appropriate for the
+  // largest architecture, including at the end.
+  //
+  // To protected against mistakes, all objects must have the attribute
+  // |kExpectedInstanceSize| (static constexpr size_t)  that is a hard-coded
+  // numerical value -- NNN, not sizeof(T) -- that can be tested. If the
+  // instance size is not fixed, at least one build will fail.
+  //
+  // If the size of a structure changes, the type-ID used to recognize it
+  // should also change so later versions of the code don't try to read
+  // incompatible structures from earlier versions.
+  //
   // NOTE: Though this method will guarantee that an object of the specified
   // type can be accessed without going outside the bounds of the memory
   // segment, it makes no guarantees of the validity of the data within the
@@ -220,18 +343,50 @@ class BASE_EXPORT PersistentMemoryAllocator {
   // nature of that keyword to the caller. It can add it back, if necessary,
   // based on knowledge of how the allocator is being used.
   template <typename T>
-  T* GetAsObject(Reference ref, uint32_t type_id) {
-    static_assert(!std::is_polymorphic<T>::value, "no polymorphic objects");
-    return const_cast<T*>(
-        reinterpret_cast<volatile T*>(GetBlockData(ref, type_id, sizeof(T))));
+  T* GetAsObject(Reference ref) {
+    static_assert(std::is_standard_layout<T>::value, "only standard objects");
+    static_assert(!std::is_array<T>::value, "use GetAsArray<>()");
+    static_assert(T::kExpectedInstanceSize == sizeof(T), "inconsistent size");
+    return const_cast<T*>(reinterpret_cast<volatile T*>(
+        GetBlockData(ref, T::kPersistentTypeId, sizeof(T))));
   }
   template <typename T>
-  const T* GetAsObject(Reference ref, uint32_t type_id) const {
-    static_assert(!std::is_polymorphic<T>::value, "no polymorphic objects");
-    return const_cast<const T*>(
-        reinterpret_cast<const volatile T*>(GetBlockData(
-            ref, type_id, sizeof(T))));
+  const T* GetAsObject(Reference ref) const {
+    static_assert(std::is_standard_layout<T>::value, "only standard objects");
+    static_assert(!std::is_array<T>::value, "use GetAsArray<>()");
+    static_assert(T::kExpectedInstanceSize == sizeof(T), "inconsistent size");
+    return const_cast<const T*>(reinterpret_cast<const volatile T*>(
+        GetBlockData(ref, T::kPersistentTypeId, sizeof(T))));
   }
+
+  // Like GetAsObject but get an array of simple, fixed-size types.
+  //
+  // Use a |count| of the required number of array elements, or kSizeAny.
+  // GetAllocSize() can be used to calculate the upper bound but isn't reliable
+  // because padding can make space for extra elements that were not written.
+  //
+  // Remember that an array of char is a string but may not be NUL terminated.
+  //
+  // There are no compile-time or run-time checks to ensure 32/64-bit size
+  // compatibilty when using these accessors. Only use fixed-size types such
+  // as char, float, double, or (u)intXX_t.
+  template <typename T>
+  T* GetAsArray(Reference ref, uint32_t type_id, size_t count) {
+    static_assert(std::is_fundamental<T>::value, "use GetAsObject<>()");
+    return const_cast<T*>(reinterpret_cast<volatile T*>(
+        GetBlockData(ref, type_id, count * sizeof(T))));
+  }
+  template <typename T>
+  const T* GetAsArray(Reference ref, uint32_t type_id, size_t count) const {
+    static_assert(std::is_fundamental<T>::value, "use GetAsObject<>()");
+    return const_cast<const char*>(reinterpret_cast<const volatile T*>(
+        GetBlockData(ref, type_id, count * sizeof(T))));
+  }
+
+  // Get the corresponding reference for an object held in persistent memory.
+  // If the |memory| is not valid or the type does not match, a kReferenceNull
+  // result will be returned.
+  Reference GetAsReference(const void* memory, uint32_t type_id) const;
 
   // Get the number of bytes allocated to a block. This is useful when storing
   // arrays in order to validate the ending boundary. The returned value will
@@ -244,14 +399,22 @@ class BASE_EXPORT PersistentMemoryAllocator {
   // even though the memory stays valid and allocated. Changing the type is
   // an atomic compare/exchange and so requires knowing the existing value.
   // It will return false if the existing type is not what is expected.
+  //
+  // Changing the type doesn't mean the data is compatible with the new type.
+  // Passing true for |clear| will zero the memory after the type has been
+  // changed away from |from_type_id| but before it becomes |to_type_id| meaning
+  // that it is done in a manner that is thread-safe. Memory is guaranteed to
+  // be zeroed atomically by machine-word in a monotonically increasing order.
+  //
+  // It will likely be necessary to reconstruct the type before it can be used.
+  // Changing the type WILL NOT invalidate existing pointers to the data, either
+  // in this process or others, so changing the data structure could have
+  // unpredicatable results. USE WITH CARE!
   uint32_t GetType(Reference ref) const;
-  bool ChangeType(Reference ref, uint32_t to_type_id, uint32_t from_type_id);
-
-  // Reserve space in the memory segment of the desired |size| and |type_id|.
-  // A return value of zero indicates the allocation failed, otherwise the
-  // returned reference can be used by any process to get a real pointer via
-  // the GetAsObject() call.
-  Reference Allocate(size_t size, uint32_t type_id);
+  bool ChangeType(Reference ref,
+                  uint32_t to_type_id,
+                  uint32_t from_type_id,
+                  bool clear);
 
   // Allocated objects can be added to an internal list that can then be
   // iterated over by other processes. If an allocated object can be found
@@ -260,6 +423,7 @@ class BASE_EXPORT PersistentMemoryAllocator {
   // succeeds unless corruption is detected; check IsCorrupted() to find out.
   // Once an object is made iterable, its position in iteration can never
   // change; new iterable objects will always be added after it in the series.
+  // Changing the type does not alter its "iterable" status.
   void MakeIterable(Reference ref);
 
   // Get the information about the amount of free space in the allocator. The
@@ -286,8 +450,138 @@ class BASE_EXPORT PersistentMemoryAllocator {
   // called before such information is to be displayed or uploaded.
   void UpdateTrackingHistograms();
 
+  // While the above works much like malloc & free, these next methods provide
+  // an "object" interface similar to new and delete.
+
+  // Reserve space in the memory segment of the desired |size| and |type_id|.
+  // A return value of zero indicates the allocation failed, otherwise the
+  // returned reference can be used by any process to get a real pointer via
+  // the GetAsObject() or GetAsArray calls.
+  Reference Allocate(size_t size, uint32_t type_id);
+
+  // Allocate and construct an object in persistent memory. The type must have
+  // both (size_t) kExpectedInstanceSize and (uint32_t) kPersistentTypeId
+  // static constexpr fields that are used to ensure compatibility between
+  // software versions. An optional size parameter can be specified to force
+  // the allocation to be bigger than the size of the object; this is useful
+  // when the last field is actually variable length.
+  template <typename T>
+  T* New(size_t size) {
+    if (size < sizeof(T))
+      size = sizeof(T);
+    Reference ref = Allocate(size, T::kPersistentTypeId);
+    void* mem =
+        const_cast<void*>(GetBlockData(ref, T::kPersistentTypeId, size));
+    if (!mem)
+      return nullptr;
+    DCHECK_EQ(0U, reinterpret_cast<uintptr_t>(mem) & (ALIGNOF(T) - 1));
+    return new (mem) T();
+  }
+  template <typename T>
+  T* New() {
+    return New<T>(sizeof(T));
+  }
+
+  // Similar to New, above, but construct the object out of an existing memory
+  // block and of an expected type. If |clear| is true, memory will be zeroed
+  // before construction. Though this is not standard object behavior, it
+  // is present to match with new allocations that always come from zeroed
+  // memory. Anything previously present simply ceases to exist; no destructor
+  // is called for it so explicitly Delete() the old object first if need be.
+  // Calling this will not invalidate existing pointers to the object, either
+  // in this process or others, so changing the object could have unpredictable
+  // results. USE WITH CARE!
+  template <typename T>
+  T* New(Reference ref, uint32_t from_type_id, bool clear) {
+    DCHECK_LE(sizeof(T), GetAllocSize(ref)) << "alloc not big enough for obj";
+    // Make sure the memory is appropriate. This won't be used until after
+    // the type is changed but checking first avoids the possibility of having
+    // to change the type back.
+    void* mem = const_cast<void*>(GetBlockData(ref, 0, sizeof(T)));
+    if (!mem)
+      return nullptr;
+    // Ensure the allocator's internal alignment is sufficient for this object.
+    // This protects against coding errors in the allocator.
+    DCHECK_EQ(0U, reinterpret_cast<uintptr_t>(mem) & (ALIGNOF(T) - 1));
+    // Change the type, clearing the memory if so desired. The new type is
+    // "transitioning" so that there is no race condition with the construction
+    // of the object should another thread be simultaneously iterating over
+    // data. This will "acquire" the memory so no changes get reordered before
+    // it.
+    if (!ChangeType(ref, kTypeIdTransitioning, from_type_id, clear))
+      return nullptr;
+    // Construct an object of the desired type on this memory, just as if
+    // New() had been called to create it.
+    T* obj = new (mem) T();
+    // Finally change the type to the desired one. This will "release" all of
+    // the changes above and so provide a consistent view to other threads.
+    bool success =
+        ChangeType(ref, T::kPersistentTypeId, kTypeIdTransitioning, false);
+    DCHECK(success);
+    return obj;
+  }
+
+  // Deletes an object by destructing it and then changing the type to a
+  // different value (default 0).
+  template <typename T>
+  void Delete(T* obj, uint32_t new_type) {
+    // Get the reference for the object.
+    Reference ref = GetAsReference<T>(obj);
+    // First change the type to "transitioning" so there is no race condition
+    // where another thread could find the object through iteration while it
+    // is been destructed. This will "acquire" the memory so no changes get
+    // reordered before it. It will fail if |ref| is invalid.
+    if (!ChangeType(ref, kTypeIdTransitioning, T::kPersistentTypeId, false))
+      return;
+    // Destruct the object.
+    obj->~T();
+    // Finally change the type to the desired value. This will "release" all
+    // the changes above.
+    bool success = ChangeType(ref, new_type, kTypeIdTransitioning, false);
+    DCHECK(success);
+  }
+  template <typename T>
+  void Delete(T* obj) {
+    Delete<T>(obj, 0);
+  }
+
+  // As above but works with objects allocated from persistent memory.
+  template <typename T>
+  Reference GetAsReference(const T* obj) const {
+    return GetAsReference(obj, T::kPersistentTypeId);
+  }
+
+  // As above but works with an object allocated from persistent memory.
+  template <typename T>
+  void MakeIterable(const T* obj) {
+    MakeIterable(GetAsReference<T>(obj));
+  }
+
  protected:
+  enum MemoryType {
+    MEM_EXTERNAL,
+    MEM_MALLOC,
+    MEM_VIRTUAL,
+    MEM_SHARED,
+    MEM_FILE,
+  };
+
+  struct Memory {
+    Memory(void* b, MemoryType t) : base(b), type(t) {}
+
+    void* base;
+    MemoryType type;
+  };
+
+  // Constructs the allocator. Everything is the same as the public allocator
+  // except |memory| which is a structure with additional information besides
+  // the base address.
+  PersistentMemoryAllocator(Memory memory, size_t size, size_t page_size,
+                            uint64_t id, base::StringPiece name,
+                            bool readonly);
+
   volatile char* const mem_base_;  // Memory base. (char so sizeof guaranteed 1)
+  const MemoryType mem_type_;      // Type of memory allocation.
   const uint32_t mem_size_;        // Size of entire memory segment.
   const uint32_t mem_page_;        // Page size allocations shouldn't cross.
 
@@ -332,11 +626,15 @@ class BASE_EXPORT PersistentMemoryAllocator {
               ref, type_id, size));
   }
 
-  const bool readonly_;              // Indicates access to read-only memory.
-  std::atomic<bool> corrupt_;        // Local version of "corrupted" flag.
+  // Record an error in the internal histogram.
+  void RecordError(int error) const;
+
+  const bool readonly_;                // Indicates access to read-only memory.
+  mutable std::atomic<bool> corrupt_;  // Local version of "corrupted" flag.
 
   HistogramBase* allocs_histogram_;  // Histogram recording allocs.
   HistogramBase* used_histogram_;    // Histogram recording used space.
+  HistogramBase* errors_histogram_;  // Histogram recording errors.
 
   friend class PersistentMemoryAllocatorTest;
   FRIEND_TEST_ALL_PREFIXES(PersistentMemoryAllocatorTest, AllocateAndIterate);
@@ -359,10 +657,10 @@ class BASE_EXPORT LocalPersistentMemoryAllocator
   // Allocates a block of local memory of the specified |size|, ensuring that
   // the memory will not be physically allocated until accessed and will read
   // as zero when that happens.
-  static void* AllocateLocalMemory(size_t size);
+  static Memory AllocateLocalMemory(size_t size);
 
   // Deallocates a block of local |memory| of the specified |size|.
-  static void DeallocateLocalMemory(void* memory, size_t size);
+  static void DeallocateLocalMemory(void* memory, size_t size, MemoryType type);
 
   DISALLOW_COPY_AND_ASSIGN(LocalPersistentMemoryAllocator);
 };
@@ -382,7 +680,7 @@ class BASE_EXPORT SharedPersistentMemoryAllocator
 
   SharedMemory* shared_memory() { return shared_memory_.get(); }
 
-  // Ensure that the memory isn't so invalid that it won't crash when passing it
+  // Ensure that the memory isn't so invalid that it would crash when passing it
   // to the allocator. This doesn't guarantee the data is valid, just that it
   // won't cause the program to abort. The existing IsCorrupt() call will handle
   // the rest.
@@ -411,7 +709,7 @@ class BASE_EXPORT FilePersistentMemoryAllocator
                                 bool read_only);
   ~FilePersistentMemoryAllocator() override;
 
-  // Ensure that the file isn't so invalid that it won't crash when passing it
+  // Ensure that the file isn't so invalid that it would crash when passing it
   // to the allocator. This doesn't guarantee the file is valid, just that it
   // won't cause the program to abort. The existing IsCorrupt() call will handle
   // the rest.

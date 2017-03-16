@@ -15,7 +15,7 @@ declare_args() {
   visual_studio_path = getenv("VISUAL_STUDIO_PATH")
 
   # Version of Visual Studio pointed to by the visual_studio_path.
-  # Use "2013" for Visual Studio 2013, or "2013e" for the Express version.
+  # Currently always "2015".
   visual_studio_version = getenv("VISUAL_STUDIO_VERSION")
 
   # Full path to the Windows SDK, not including a backslash at the end.

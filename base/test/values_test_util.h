@@ -13,7 +13,6 @@
 namespace base {
 class DictionaryValue;
 class ListValue;
-class StringValue;
 class Value;
 
 // All the functions below expect that the value for the given key in
@@ -40,8 +39,7 @@ void ExpectDictStringValue(const std::string& expected_value,
                            const std::string& key);
 
 // Takes ownership of |actual|.
-void ExpectStringValue(const std::string& expected_str,
-                       StringValue* actual);
+void ExpectStringValue(const std::string& expected_str, Value* actual);
 
 namespace test {
 

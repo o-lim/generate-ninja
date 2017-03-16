@@ -41,87 +41,103 @@
 #endif
 
 extern const char kDotfile_Help[] =
-    ".gn file\n"
-    "\n"
-    "  When gn starts, it will search the current directory and parent\n"
-    "  directories for a file called \".gn\". This indicates the source root.\n"
-    "  You can override this detection by using the --root command-line\n"
-    "  argument\n"
-    "\n"
-    "  The .gn file in the source root will be executed. The syntax is the\n"
-    "  same as a buildfile, but with very limited build setup-specific\n"
-    "  meaning.\n"
-    "\n"
-    "  If you specify --root, by default GN will look for the file .gn in\n"
-    "  that directory. If you want to specify a different file, you can\n"
-    "  additionally pass --dotfile:\n"
-    "\n"
-    "    gn gen out/Debug --root=/home/build --dotfile=/home/my_gn_file.gn\n"
-    "\n"
-    "Variables\n"
-    "\n"
-    "  buildconfig [required]\n"
-    "      Label of the build config file. This file will be used to set up\n"
-    "      the build file execution environment for each toolchain.\n"
-    "\n"
-    "  check_targets [optional]\n"
-    "      A list of labels and label patterns that should be checked when\n"
-    "      running \"gn check\" or \"gn gen --check\". If unspecified, all\n"
-    "      targets will be checked. If it is the empty list, no targets will\n"
-    "      be checked.\n"
-    "\n"
-    "      The format of this list is identical to that of \"visibility\"\n"
-    "      so see \"gn help visibility\" for examples.\n"
-    "\n"
-    "  exec_script_whitelist [optional]\n"
-    "      A list of .gn/.gni files (not labels) that have permission to call\n"
-    "      the exec_script function. If this list is defined, calls to\n"
-    "      exec_script will be checked against this list and GN will fail if\n"
-    "      the current file isn't in the list.\n"
-    "\n"
-    "      This is to allow the use of exec_script to be restricted since\n"
-    "      is easy to use inappropriately. Wildcards are not supported.\n"
-    "      Files in the secondary_source tree (if defined) should be\n"
-    "      referenced by ignoring the secondary tree and naming them as if\n"
-    "      they are in the main tree.\n"
-    "\n"
-    "      If unspecified, the ability to call exec_script is unrestricted.\n"
-    "\n"
-    "      Example:\n"
-    "        exec_script_whitelist = [\n"
-    "          \"//base/BUILD.gn\",\n"
-    "          \"//build/my_config.gni\",\n"
-    "        ]\n"
-    "\n"
-    "  root [optional]\n"
-    "      Label of the root build target. The GN build will start by loading\n"
-    "      the build file containing this target name. This defaults to\n"
-    "      \"//:\" which will cause the file //BUILD.gn to be loaded.\n"
-    "\n"
-    "  secondary_source [optional]\n"
-    "      Label of an alternate directory tree to find input files. When\n"
-    "      searching for a BUILD.gn file (or the build config file discussed\n"
-    "      above), the file will first be looked for in the source root.\n"
-    "      If it's not found, the secondary source root will be checked\n"
-    "      (which would contain a parallel directory hierarchy).\n"
-    "\n"
-    "      This behavior is intended to be used when BUILD.gn files can't be\n"
-    "      checked in to certain source directories for whatever reason.\n"
-    "\n"
-    "      The secondary source root must be inside the main source tree.\n"
-    "\n"
-    "Example .gn file contents\n"
-    "\n"
-    "  buildconfig = \"//build/config/BUILDCONFIG.gn\"\n"
-    "\n"
-    "  check_targets = [\n"
-    "    \"//doom_melon/*\",  # Check everything in this subtree.\n"
-    "    \"//tools:mind_controlling_ant\",  # Check this specific target.\n"
-    "  ]\n"
-    "\n"
-    "  root = \"//:root\"\n"
-    "\n"
-    "  secondary_source = \"//build/config/temporary_buildfiles/\"\n";
+    R"(.gn file
+
+  When gn starts, it will search the current directory and parent directories
+  for a file called ".gn". This indicates the source root. You can override
+  this detection by using the --root command-line argument
+
+  The .gn file in the source root will be executed. The syntax is the same as a
+  buildfile, but with very limited build setup-specific meaning.
+
+  If you specify --root, by default GN will look for the file .gn in that
+  directory. If you want to specify a different file, you can additionally pass
+  --dotfile:
+
+    gn gen out/Debug --root=/home/build --dotfile=/home/my_gn_file.gn
+
+Variables
+
+  arg_file_template [optional]
+      Path to a file containing the text that should be used as the default
+      args.gn content when you run `gn args`.
+
+  buildconfig [required]
+      Path to the build config file. This file will be used to set up the
+      build file execution environment for each toolchain.
+
+  check_targets [optional]
+      A list of labels and label patterns that should be checked when running
+      "gn check" or "gn gen --check". If unspecified, all targets will be
+      checked. If it is the empty list, no targets will be checked.
+
+      The format of this list is identical to that of "visibility" so see "gn
+      help visibility" for examples.
+
+  exec_script_whitelist [optional]
+      A list of .gn/.gni files (not labels) that have permission to call the
+      exec_script function. If this list is defined, calls to exec_script will
+      be checked against this list and GN will fail if the current file isn't
+      in the list.
+
+      This is to allow the use of exec_script to be restricted since is easy to
+      use inappropriately. Wildcards are not supported. Files in the
+      secondary_source tree (if defined) should be referenced by ignoring the
+      secondary tree and naming them as if they are in the main tree.
+
+      If unspecified, the ability to call exec_script is unrestricted.
+
+      Example:
+        exec_script_whitelist = [
+          "//base/BUILD.gn",
+          "//build/my_config.gni",
+        ]
+
+  root [optional]
+      Label of the root build target. The GN build will start by loading the
+      build file containing this target name. This defaults to "//:" which will
+      cause the file //BUILD.gn to be loaded.
+
+  secondary_source [optional]
+      Label of an alternate directory tree to find input files. When searching
+      for a BUILD.gn file (or the build config file discussed above), the file
+      will first be looked for in the source root. If it's not found, the
+      secondary source root will be checked (which would contain a parallel
+      directory hierarchy).
+
+      This behavior is intended to be used when BUILD.gn files can't be checked
+      in to certain source directories for whatever reason.
+
+      The secondary source root must be inside the main source tree.
+
+  default_args [optional]
+      Scope containing the default overrides for declared arguments. These
+      overrides take precedence over the default values specified in the
+      declare_args() block, but can be overriden using --args or the
+      args.gn file.
+
+      This is intended to be used when subprojects declare arguments with
+      default values that need to be changed for whatever reason.
+
+Example .gn file contents
+
+  buildconfig = "//build/config/BUILDCONFIG.gn"
+
+  check_targets = [
+    "//doom_melon/*",  # Check everything in this subtree.
+    "//tools:mind_controlling_ant",  # Check this specific target.
+  ]
+
+  root = "//:root"
+
+  secondary_source = "//build/config/temporary_buildfiles/"
+
+  default_args = {
+    # Default to release builds for this project.
+    is_debug = false
+    is_component_build = false
+  }
+)";
 
 namespace {
 
@@ -140,15 +156,31 @@ base::FilePath FindDotFile(const base::FilePath& current_dir) {
   return FindDotFile(up_one_dir);
 }
 
+void ForwardItemDefinedToBuilderInMainThread(
+    Builder* builder_call_on_main_thread_only,
+    std::unique_ptr<Item> item) {
+  builder_call_on_main_thread_only->ItemDefined(std::move(item));
+
+  // Pair to the Increment in ItemDefinedCallback.
+  g_scheduler->DecrementWorkCount();
+}
+
 // Called on any thread. Post the item to the builder on the main thread.
 void ItemDefinedCallback(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     Builder* builder_call_on_main_thread_only,
     std::unique_ptr<Item> item) {
   DCHECK(item);
+
+  // Increment the work count for the duration of defining the item with the
+  // builder. Otherwise finishing this callback will race finishing loading
+  // files. If there is no other pending work at any point in the middle of
+  // this call completing on the main thread, the 'Complete' function will
+  // be signaled and we'll stop running with an incomplete build.
+  g_scheduler->IncrementWorkCount();
   task_runner->PostTask(
       FROM_HERE,
-      base::Bind(&Builder::ItemDefined,
+      base::Bind(&ForwardItemDefinedToBuilderInMainThread,
                  base::Unretained(builder_call_on_main_thread_only),
                  base::Passed(&item)));
 }
@@ -260,6 +292,7 @@ Setup::Setup()
       check_public_headers_(false),
       dotfile_settings_(&build_settings_, std::string()),
       dotfile_scope_(&dotfile_settings_),
+      default_args_(nullptr),
       fill_arguments_(true) {
   dotfile_settings_.set_toolchain_label(Label());
 
@@ -305,6 +338,14 @@ bool Setup::DoSetup(const std::string& build_dir, bool force_create) {
     return false;
   }
 
+  // Apply project-specific default (if specified).
+  // Must happen before FillArguments().
+  if (default_args_) {
+    Scope::KeyValueMap overrides;
+    default_args_->GetCurrentScopeValues(&overrides);
+    build_settings_.build_args().AddArgOverrides(overrides);
+  }
+
   if (fill_arguments_) {
     if (!FillArguments(*cmdline))
       return false;
@@ -326,31 +367,29 @@ SourceFile Setup::GetBuildArgFile() const {
 }
 
 void Setup::RunPreMessageLoop() {
-  // Load the root build file.
-  loader_->Load(root_build_file_, LocationRange(), Label());
-
   // Will be decremented with the loader is drained.
   g_scheduler->IncrementWorkCount();
+
+  // Load the root build file.
+  loader_->Load(root_build_file_, LocationRange(), Label());
 }
 
 bool Setup::RunPostMessageLoop() {
   Err err;
-  if (build_settings_.check_for_bad_items()) {
-    if (!builder_.CheckForBadItems(&err)) {
-      err.PrintToStdout();
-      return false;
-    }
+  if (!builder_.CheckForBadItems(&err)) {
+    err.PrintToStdout();
+    return false;
+  }
 
-    if (!build_settings_.build_args().VerifyAllOverridesUsed(&err)) {
-      // TODO(brettw) implement a system to have a different marker for
-      // warnings. Until we have a better system, print the error but don't
-      // return failure unless requested on the command line.
-      err.PrintToStdout();
-      if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-              switches::kFailOnUnusedArgs))
-        return false;
-      return true;
-    }
+  if (!build_settings_.build_args().VerifyAllOverridesUsed(&err)) {
+    // TODO(brettw) implement a system to have a different marker for
+    // warnings. Until we have a better system, print the error but don't
+    // return failure unless requested on the command line.
+    err.PrintToStdout();
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+            switches::kFailOnUnusedArgs))
+      return false;
+    return true;
   }
 
   if (check_public_headers_) {
@@ -756,6 +795,29 @@ bool Setup::FillOtherConfig(const base::CommandLine& cmdline) {
       }
     }
     build_settings_.set_exec_script_whitelist(std::move(whitelist));
+  }
+
+  // Fill optional default_args.
+  const Value* default_args_value =
+      dotfile_scope_.GetValue("default_args", true);
+  if (default_args_value) {
+    if (!default_args_value->VerifyTypeIs(Value::SCOPE, &err)) {
+      err.PrintToStdout();
+      return false;
+    }
+
+    default_args_ = default_args_value->scope_value();
+  }
+
+  const Value* arg_file_template_value =
+      dotfile_scope_.GetValue("arg_file_template", true);
+  if (arg_file_template_value) {
+    if (!arg_file_template_value->VerifyTypeIs(Value::STRING, &err)) {
+      err.PrintToStdout();
+      return false;
+    }
+    SourceFile path(arg_file_template_value->string_value());
+    build_settings_.set_arg_file_template_path(path);
   }
 
   return true;

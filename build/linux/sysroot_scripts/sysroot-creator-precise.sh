@@ -3,11 +3,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-SCRIPT_DIR=$(dirname $0)
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 DISTRO=ubuntu
 DIST=precise
 DIST_UPDATES=precise-updates
+REPO_EXTRA="universe"
 
 # This is where we get all the debian packages from.
 APT_REPO=http://archive.ubuntu.com/ubuntu
@@ -16,8 +17,10 @@ APT_REPO_ARM64=http://ports.ubuntu.com
 KEYRING_FILE=/usr/share/keyrings/ubuntu-archive-keyring.gpg
 
 HAS_ARCH_AMD64=1
-HAS_ARCH_I386=1
-HAS_ARCH_ARM=1
+
+# Precise supports these architectures but they are not needed by chrome.
+# HAS_ARCH_I386=1
+# HAS_ARCH_ARM=1
 
 # Sysroot packages: these are the packages needed to build chrome.
 # NOTE: When DEBIAN_PACKAGES is modified, the packagelist files must be updated
@@ -56,6 +59,9 @@ DEBIAN_PACKAGES="\
   libdrm-nouveau2
   libdrm-radeon1
   libdrm2
+  libegl1-mesa
+  libegl1-mesa-dev
+  libegl1-mesa-drivers
   libelf1
   libelf-dev
   libexpat1
@@ -66,6 +72,8 @@ DEBIAN_PACKAGES="\
   libfontconfig1-dev
   libfreetype6
   libfreetype6-dev
+  libgbm1
+  libgbm-dev
   libgcc1
   libgconf-2-4
   libgconf2-4
@@ -90,6 +98,8 @@ DEBIAN_PACKAGES="\
   libgpg-error-dev
   libgssapi-krb5-2
   libgssrpc4
+  libgtk-3-0
+  libgtk-3-dev
   libgtk2.0-0
   libgtk2.0-dev
   libk5crypto3
@@ -134,6 +144,8 @@ DEBIAN_PACKAGES="\
   libstdc++6
   libstdc++6-4.6-dev
   libtasn1-3
+  libwayland0
+  libwayland-dev
   libx11-6
   libx11-dev
   libx11-xcb1
@@ -163,6 +175,8 @@ DEBIAN_PACKAGES="\
   libxi-dev
   libxinerama1
   libxinerama-dev
+  libxkbcommon0
+  libxkbcommon-dev
   libxrandr2
   libxrandr-dev
   libxrender1
@@ -195,4 +209,4 @@ DEBIAN_PACKAGES="\
 DEBIAN_PACKAGES_X86="libquadmath0"
 DEBIAN_PACKAGES_ARM="libdrm-omap1"
 
-. ${SCRIPT_DIR}/sysroot-creator.sh
+. "${SCRIPT_DIR}/sysroot-creator.sh"

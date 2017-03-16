@@ -16,6 +16,12 @@ declare_args() {
   root_extra_deps = []
 }
 
+if (is_official_build) {
+  # An official (maximally optimized!) component (optimized for build times)
+  # build doesn't make sense and usually doesn't work.
+  assert(!is_component_build)
+}
+
 group("gn_all") {
   testonly = true
 

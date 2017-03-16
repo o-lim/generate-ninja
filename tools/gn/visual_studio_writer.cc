@@ -71,12 +71,15 @@ struct SourceFileWriter {
 
 const char kToolsetVersionVs2013[] = "v120";               // Visual Studio 2013
 const char kToolsetVersionVs2015[] = "v140";               // Visual Studio 2015
+const char kToolsetVersionVs2017[] = "v141";               // Visual Studio 2017
 const char kProjectVersionVs2013[] = "12.0";               // Visual Studio 2013
 const char kProjectVersionVs2015[] = "14.0";               // Visual Studio 2015
+const char kProjectVersionVs2017[] = "15.0";               // Visual Studio 2015
 const char kVersionStringVs2013[] = "Visual Studio 2013";  // Visual Studio 2013
 const char kVersionStringVs2015[] = "Visual Studio 2015";  // Visual Studio 2015
+const char kVersionStringVs2017[] = "Visual Studio 2017";  // Visual Studio 2017
 const char kWindowsKitsVersion[] = "10";                   // Windows 10 SDK
-const char kWindowsKitsIncludeVersion[] = "10.0.10586.0";  // Windows 10 SDK
+const char kWindowsKitsIncludeVersion[] = "10.0.14393.0";  // Windows 10 SDK
 
 const char kGuidTypeProject[] = "{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}";
 const char kGuidTypeFolder[] = "{2150E333-8FDC-42A3-9474-1A3956D46DE8}";
@@ -150,6 +153,18 @@ void ParseCompilerOptions(const Target* target, CompilerOptions* options) {
     ParseCompilerOptions(iter.cur().cflags(), options);
     ParseCompilerOptions(iter.cur().cflags_c(), options);
     ParseCompilerOptions(iter.cur().cflags_cc(), options);
+  }
+}
+
+void ParseLinkerOptions(const std::vector<std::string>& ldflags,
+                        LinkerOptions* options) {
+  for (const std::string& flag : ldflags)
+    ParseLinkerOption(flag, options);
+}
+
+void ParseLinkerOptions(const Target* target, LinkerOptions* options) {
+  for (ConfigValuesIterator iter(target); !iter.done(); iter.Next()) {
+    ParseLinkerOptions(iter.cur().ldflags(), options);
   }
 }
 
@@ -260,6 +275,11 @@ VisualStudioWriter::VisualStudioWriter(const BuildSettings* build_settings,
       project_version_ = kProjectVersionVs2015;
       toolset_version_ = kToolsetVersionVs2015;
       version_string_ = kVersionStringVs2015;
+      break;
+    case Version::Vs2017:
+      project_version_ = kProjectVersionVs2017;
+      toolset_version_ = kToolsetVersionVs2017;
+      version_string_ = kVersionStringVs2017;
       break;
     default:
       NOTREACHED() << "Not a valid Visual Studio Version: " << version;
@@ -539,8 +559,17 @@ bool VisualStudioWriter::WriteProjectFileContents(
         cl_compile->SubElement("WarningLevel")->Text(options.warning_level);
     }
 
-    // We don't include resource compilation and link options as ninja files
-    // are used to generate real build.
+    std::unique_ptr<XmlElementWriter> link =
+        item_definitions->SubElement("Link");
+    {
+      LinkerOptions options;
+      ParseLinkerOptions(target, &options);
+      if (!options.subsystem.empty())
+        link->SubElement("SubSystem")->Text(options.subsystem);
+    }
+
+    // We don't include resource compilation and other link options as ninja
+    // files are used to generate real build.
   }
 
   {

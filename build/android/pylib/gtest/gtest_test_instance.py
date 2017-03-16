@@ -2,17 +2,19 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import HTMLParser
 import logging
 import os
 import re
 import tempfile
+import threading
+import xml.etree.ElementTree
 
 from devil.android import apk_helper
 from pylib import constants
 from pylib.constants import host_paths
 from pylib.base import base_test_result
 from pylib.base import test_instance
-from pylib.utils import isolator
 
 with host_paths.SysPath(host_paths.BUILD_COMMON_PATH):
   import unittest_util # pylint: disable=import-error
@@ -23,30 +25,16 @@ BROWSER_TEST_SUITES = [
   'content_browsertests',
 ]
 
-RUN_IN_SUB_THREAD_TEST_SUITES = ['net_unittests']
-
-
-_DEFAULT_ISOLATE_FILE_PATHS = {
-    'base_unittests': 'base/base_unittests.isolate',
-    'blink_heap_unittests':
-      'third_party/WebKit/Source/platform/heap/BlinkHeapUnitTests.isolate',
-    'blink_platform_unittests':
-      'third_party/WebKit/Source/platform/blink_platform_unittests.isolate',
-    'cc_perftests': 'cc/cc_perftests.isolate',
-    'components_browsertests': 'components/components_browsertests.isolate',
-    'components_unittests': 'components/components_unittests.isolate',
-    'content_browsertests': 'content/content_browsertests.isolate',
-    'content_unittests': 'content/content_unittests.isolate',
-    'media_perftests': 'media/media_perftests.isolate',
-    'media_unittests': 'media/media_unittests.isolate',
-    'midi_unittests': 'media/midi/midi_unittests.isolate',
-    'net_unittests': 'net/net_unittests.isolate',
-    'sql_unittests': 'sql/sql_unittests.isolate',
-    'ui_base_unittests': 'ui/base/ui_base_tests.isolate',
-    'unit_tests': 'chrome/unit_tests.isolate',
-    'webkit_unit_tests':
-      'third_party/WebKit/Source/web/WebKitUnitTests.isolate',
-}
+RUN_IN_SUB_THREAD_TEST_SUITES = [
+  # Multiprocess tests should be run outside of the main thread.
+  'base_unittests',  # file_locking_unittest.cc uses a child process.
+  'ipc_perftests',
+  'ipc_tests',
+  'mojo_message_pipe_perftests',
+  'mojo_public_bindings_perftests',
+  'mojo_system_unittests',
+  'net_unittests'
+]
 
 
 # Used for filtering large data deps at a finer grain than what's allowed in
@@ -94,6 +82,8 @@ _RE_TEST_ERROR = re.compile(r'FAILURES!!! Tests run: \d+,'
                                     r' Failures: \d+, Errors: 1')
 _RE_TEST_CURRENTLY_RUNNING = re.compile(r'\[ERROR:.*?\]'
                                     r' Currently running: (.*)')
+_RE_DISABLED = re.compile(r'DISABLED_')
+_RE_FLAKY = re.compile(r'FLAKY_')
 
 def ParseGTestListTests(raw_list):
   """Parses a raw test list as provided by --gtest_list_tests.
@@ -118,13 +108,15 @@ def ParseGTestListTests(raw_list):
   for test in raw_list:
     if not test:
       continue
-    if test[0] != ' ':
+    if not test.startswith(' '):
       test_case = test.split()[0]
       if test_case.endswith('.'):
         current = test_case
-    elif not 'YOU HAVE' in test:
-      test_name = test.split()[0]
-      ret += [current + test_name]
+    else:
+      test = test.strip()
+      if test and not 'YOU HAVE' in test:
+        test_name = test.split()[0]
+        ret += [current + test_name]
   return ret
 
 
@@ -192,17 +184,91 @@ def ParseGTestOutput(output):
   return results
 
 
+def ParseGTestXML(xml_content):
+  """Parse gtest XML result."""
+  results = []
+
+  html = HTMLParser.HTMLParser()
+
+  # TODO(jbudorick): Unclear how this handles crashes.
+  testsuites = xml.etree.ElementTree.fromstring(xml_content)
+  for testsuite in testsuites:
+    suite_name = testsuite.attrib['name']
+    for testcase in testsuite:
+      case_name = testcase.attrib['name']
+      result_type = base_test_result.ResultType.PASS
+      log = []
+      for failure in testcase:
+        result_type = base_test_result.ResultType.FAIL
+        log.append(html.unescape(failure.attrib['message']))
+
+      results.append(base_test_result.BaseTestResult(
+          '%s.%s' % (suite_name, case_name),
+          result_type,
+          int(float(testcase.attrib['time']) * 1000),
+          log=('\n'.join(log) if log else '')))
+
+  return results
+
+
+def ConvertTestFilterFileIntoGTestFilterArgument(input_lines):
+  """Converts test filter file contents into --gtest_filter argument.
+
+  See //testing/buildbot/filters/README.md for description of the
+  syntax that |input_lines| are expected to follow.
+
+  See
+  https://github.com/google/googletest/blob/master/googletest/docs/AdvancedGuide.md#running-a-subset-of-the-tests
+  for description of the syntax that --gtest_filter argument should follow.
+
+  Args:
+    input_lines: An iterable (e.g. a list or a file) containing input lines.
+  Returns:
+    a string suitable for feeding as an argument of --gtest_filter parameter.
+  """
+  # Strip whitespace + skip empty lines and lines beginning with '#'.
+  stripped_lines = (l.strip() for l in input_lines)
+  filter_lines = list(l for l in stripped_lines if l and l[0] != '#')
+
+  # Split the tests into positive and negative patterns (gtest treats
+  # every pattern after the first '-' sign as an exclusion).
+  positive_patterns = ':'.join(l for l in filter_lines if l[0] != '-')
+  negative_patterns = ':'.join(l[1:] for l in filter_lines if l[0] == '-')
+  if negative_patterns:
+    negative_patterns = '-' + negative_patterns
+
+  # Join the filter lines into one, big --gtest_filter argument.
+  return positive_patterns + negative_patterns
+
+def TestNameWithoutDisabledPrefix(test_name):
+  """Modify the test name without disabled prefix if prefix 'DISABLED_' or
+  'FLAKY_' presents.
+
+  Args:
+    test_name: The name of a test.
+  Returns:
+    A test name without prefix 'DISABLED_' or 'FLAKY_'.
+  """
+  disabled_prefixes = [_RE_DISABLED, _RE_FLAKY]
+  for dp in disabled_prefixes:
+    test_name = dp.sub('', test_name)
+  return test_name
+
 class GtestTestInstance(test_instance.TestInstance):
 
-  def __init__(self, args, isolate_delegate, error_func):
+  def __init__(self, args, data_deps_delegate, error_func):
     super(GtestTestInstance, self).__init__()
     # TODO(jbudorick): Support multiple test suites.
     if len(args.suite_name) > 1:
       raise ValueError('Platform mode currently supports only 1 gtest suite')
-    self._extract_test_list_from_filter = args.extract_test_list_from_filter
-    self._shard_timeout = args.shard_timeout
-    self._suite = args.suite_name[0]
     self._exe_dist_dir = None
+    self._external_shard_index = args.test_launcher_shard_index
+    self._extract_test_list_from_filter = args.extract_test_list_from_filter
+    self._filter_tests_lock = threading.Lock()
+    self._shard_timeout = args.shard_timeout
+    self._store_tombstones = args.store_tombstones
+    self._total_external_shards = args.test_launcher_total_shards
+    self._suite = args.suite_name[0]
 
     # GYP:
     if args.executable_dist_dir:
@@ -246,26 +312,16 @@ class GtestTestInstance(test_instance.TestInstance):
       self._gtest_filter = args.test_filter
     elif args.test_filter_file:
       with open(args.test_filter_file, 'r') as f:
-        self._gtest_filter = ':'.join(l.strip() for l in f)
+        self._gtest_filter = ConvertTestFilterFileIntoGTestFilterArgument(f)
     else:
       self._gtest_filter = None
 
-    if not args.isolate_file_path:
-      default_isolate_file_path = _DEFAULT_ISOLATE_FILE_PATHS.get(self._suite)
-      if default_isolate_file_path:
-        args.isolate_file_path = os.path.join(
-            host_paths.DIR_SOURCE_ROOT, default_isolate_file_path)
+    self._run_disabled = args.run_disabled
 
-    if (args.isolate_file_path and
-        not isolator.IsIsolateEmpty(args.isolate_file_path)):
-      self._isolate_abs_path = os.path.abspath(args.isolate_file_path)
-      self._isolate_delegate = isolate_delegate
-      self._isolated_abs_path = os.path.join(
-          constants.GetOutDirectory(), '%s.isolated' % self._suite)
-    else:
-      logging.warning('%s isolate file provided. No data deps will be pushed.',
-                      'Empty' if args.isolate_file_path else 'No')
-      self._isolate_delegate = None
+    self._data_deps_delegate = data_deps_delegate
+    self._runtime_deps_path = args.runtime_deps_path
+    if not self._runtime_deps_path:
+      logging.warning('No data dependencies will be pushed.')
 
     if args.app_data_files:
       self._app_data_files = args.app_data_files
@@ -279,6 +335,9 @@ class GtestTestInstance(test_instance.TestInstance):
       self._app_data_file_dir = None
 
     self._test_arguments = args.test_arguments
+
+    # TODO(jbudorick): Remove this once it's deployed.
+    self._enable_xml_result_parsing = args.enable_xml_result_parsing
 
   @property
   def activity(self):
@@ -301,12 +360,28 @@ class GtestTestInstance(test_instance.TestInstance):
     return self._app_data_files
 
   @property
+  def enable_xml_result_parsing(self):
+    return self._enable_xml_result_parsing
+
+  @property
   def exe_dist_dir(self):
     return self._exe_dist_dir
 
   @property
+  def external_shard_index(self):
+    return self._external_shard_index
+
+  @property
+  def extract_test_list_from_filter(self):
+    return self._extract_test_list_from_filter
+
+  @property
   def extras(self):
     return self._extras
+
+  @property
+  def gtest_also_run_disabled_tests(self):
+    return self._run_disabled
 
   @property
   def gtest_filter(self):
@@ -329,6 +404,10 @@ class GtestTestInstance(test_instance.TestInstance):
     return self._shard_timeout
 
   @property
+  def store_tombstones(self):
+    return self._store_tombstones
+
+  @property
   def suite(self):
     return self._suite
 
@@ -341,8 +420,8 @@ class GtestTestInstance(test_instance.TestInstance):
     return self._test_arguments
 
   @property
-  def extract_test_list_from_filter(self):
-    return self._extract_test_list_from_filter
+  def total_external_shards(self):
+    return self._total_external_shards
 
   #override
   def TestType(self):
@@ -351,15 +430,8 @@ class GtestTestInstance(test_instance.TestInstance):
   #override
   def SetUp(self):
     """Map data dependencies via isolate."""
-    if self._isolate_delegate:
-      self._isolate_delegate.Remap(
-          self._isolate_abs_path, self._isolated_abs_path)
-      self._isolate_delegate.PurgeExcluded(_DEPS_EXCLUSION_LIST)
-      self._isolate_delegate.MoveOutputDeps()
-      dest_dir = None
-      self._data_deps.extend([
-          (self._isolate_delegate.isolate_deps_dir, dest_dir)])
-
+    self._data_deps.extend(
+        self._data_deps_delegate(self._runtime_deps_path))
 
   def GetDataDependencies(self):
     """Returns the test suite's data dependencies.
@@ -386,17 +458,31 @@ class GtestTestInstance(test_instance.TestInstance):
       gtest_filter_strings.append(self._gtest_filter)
 
     filtered_test_list = test_list
-    for gtest_filter_string in gtest_filter_strings:
-      logging.debug('Filtering tests using: %s', gtest_filter_string)
-      filtered_test_list = unittest_util.FilterTestNames(
-          filtered_test_list, gtest_filter_string)
+    # This lock is required because on older versions of Python
+    # |unittest_util.FilterTestNames| use of |fnmatch| is not threadsafe.
+    with self._filter_tests_lock:
+      for gtest_filter_string in gtest_filter_strings:
+        logging.debug('Filtering tests using: %s', gtest_filter_string)
+        filtered_test_list = unittest_util.FilterTestNames(
+            filtered_test_list, gtest_filter_string)
+
+      if self._run_disabled and self._gtest_filter:
+        out_filtered_test_list = list(set(test_list)-set(filtered_test_list))
+        for test in out_filtered_test_list:
+          test_name_no_disabled = TestNameWithoutDisabledPrefix(test)
+          if test_name_no_disabled != test and unittest_util.FilterTestNames(
+              [test_name_no_disabled], self._gtest_filter):
+            filtered_test_list.append(test)
     return filtered_test_list
 
   def _GenerateDisabledFilterString(self, disabled_prefixes):
     disabled_filter_items = []
 
     if disabled_prefixes is None:
-      disabled_prefixes = ['DISABLED_', 'FLAKY_', 'FAILS_', 'PRE_', 'MANUAL_']
+      disabled_prefixes = ['FAILS_', 'PRE_', 'MANUAL_']
+      if not self._run_disabled:
+        disabled_prefixes += ['DISABLED_', 'FLAKY_']
+
     disabled_filter_items += ['%s*' % dp for dp in disabled_prefixes]
     disabled_filter_items += ['*.%s*' % dp for dp in disabled_prefixes]
 
@@ -413,7 +499,6 @@ class GtestTestInstance(test_instance.TestInstance):
 
   #override
   def TearDown(self):
-    """Clear the mappings created by SetUp."""
-    if self._isolate_delegate:
-      self._isolate_delegate.Clear()
+    """Do nothing."""
+    pass
 

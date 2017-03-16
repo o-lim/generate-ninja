@@ -8,15 +8,7 @@
 #include "base/mac/scoped_nsobject.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-// See scoped_nsobject_unittest_arc.mm for why this is necessary. Remove once
-// gyp support is dropped.
-void ScopedNSObjectUnittestArcLinkerWorkaround();
-
 namespace {
-
-TEST(ScopedNSObjectTest, EnableARCTests) {
-  ScopedNSObjectUnittestArcLinkerWorkaround();
-}
 
 TEST(ScopedNSObjectTest, ScopedNSObject) {
   base::scoped_nsobject<NSObject> p1([[NSObject alloc] init]);
@@ -61,6 +53,12 @@ TEST(ScopedNSObjectTest, ScopedNSObject) {
     ASSERT_EQ(3u, [p1 retainCount]);
   }
   ASSERT_EQ(2u, [p1 retainCount]);
+
+  base::scoped_nsobject<NSObject> p7([NSObject new]);
+  base::scoped_nsobject<NSObject> p8(std::move(p7));
+  ASSERT_TRUE(p8);
+  ASSERT_EQ(1u, [p8 retainCount]);
+  ASSERT_FALSE(p7.get());
 }
 
 // Instantiating scoped_nsobject<> with T=NSAutoreleasePool should trip a

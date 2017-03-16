@@ -224,6 +224,7 @@ def ExtractAll(zip_path, path=None, no_clobber=True, pattern=None,
   if not zipfile.is_zipfile(zip_path):
     raise Exception('Invalid zip file: %s' % zip_path)
 
+  extracted = []
   with zipfile.ZipFile(zip_path) as z:
     for name in z.namelist():
       if name.endswith('/'):
@@ -244,8 +245,12 @@ def ExtractAll(zip_path, path=None, no_clobber=True, pattern=None,
         dest = os.path.join(path, name)
         MakeDirectory(os.path.dirname(dest))
         os.symlink(z.read(name), dest)
+        extracted.append(dest)
       else:
         z.extract(name, path)
+        extracted.append(os.path.join(path, name))
+
+  return extracted
 
 
 def AddToZipHermetic(zip_file, zip_path, src_path=None, data=None,
@@ -328,7 +333,14 @@ def MergeZips(output, inputs, exclude_patterns=None, path_transform=None):
   path_transform = path_transform or (lambda p, z: p)
   added_names = set()
 
-  with zipfile.ZipFile(output, 'w') as out_zip:
+  output_is_already_open = not isinstance(output, basestring)
+  if output_is_already_open:
+    assert isinstance(output, zipfile.ZipFile)
+    out_zip = output
+  else:
+    out_zip = zipfile.ZipFile(output, 'w')
+
+  try:
     for in_file in inputs:
       with zipfile.ZipFile(in_file, 'r') as in_zip:
         in_zip._expected_crc = None
@@ -339,8 +351,12 @@ def MergeZips(output, inputs, exclude_patterns=None, path_transform=None):
           dst_name = path_transform(info.filename, in_file)
           already_added = dst_name in added_names
           if not already_added and not MatchesGlob(dst_name, exclude_patterns):
-            AddToZipHermetic(out_zip, dst_name, data=in_zip.read(info))
+            AddToZipHermetic(out_zip, dst_name, data=in_zip.read(info),
+                             compress=info.compress_type != zipfile.ZIP_STORED)
             added_names.add(dst_name)
+  finally:
+    if not output_is_already_open:
+      out_zip.close()
 
 
 def PrintWarning(message):
@@ -395,8 +411,7 @@ def GetPythonDependencies():
   A path is assumed to be a "system" import if it is outside of chromium's
   src/. The paths will be relative to the current directory.
   """
-  module_paths = (m.__file__ for m in sys.modules.itervalues()
-                  if m is not None and hasattr(m, '__file__'))
+  module_paths = GetModulePaths()
 
   abs_module_paths = map(os.path.abspath, module_paths)
 
@@ -413,6 +428,30 @@ def GetPythonDependencies():
   return sorted(set(non_system_module_paths))
 
 
+def GetModulePaths():
+  """Returns the paths to all of the modules in sys.modules."""
+  ForceLazyModulesToLoad()
+  return (m.__file__ for m in sys.modules.itervalues()
+          if m is not None and hasattr(m, '__file__'))
+
+
+def ForceLazyModulesToLoad():
+  """Forces any lazily imported modules to fully load themselves.
+
+  Inspecting the modules' __file__ attribute causes lazily imported modules
+  (e.g. from email) to get fully imported and update sys.modules. Iterate
+  over the values until sys.modules stabilizes so that no modules are missed.
+  """
+  while True:
+    num_modules_before = len(sys.modules.keys())
+    for m in sys.modules.values():
+      if m is not None and hasattr(m, '__file__'):
+        _ = m.__file__
+    num_modules_after = len(sys.modules.keys())
+    if num_modules_before == num_modules_after:
+      break
+
+
 def AddDepfileOption(parser):
   # TODO(agrieve): Get rid of this once we've moved to argparse.
   if hasattr(parser, 'add_option'):
@@ -420,14 +459,20 @@ def AddDepfileOption(parser):
   else:
     func = parser.add_argument
   func('--depfile',
-       help='Path to depfile. Must be specified as the action\'s first output.')
+       help='Path to depfile (refer to `gn help depfile`)')
 
 
-def WriteDepfile(path, dependencies):
-  with open(path, 'w') as depfile:
-    depfile.write(path)
+def WriteDepfile(depfile_path, first_gn_output, inputs=None, add_pydeps=True):
+  assert depfile_path != first_gn_output  # http://crbug.com/646165
+  inputs = inputs or []
+  if add_pydeps:
+    inputs = GetPythonDependencies() + inputs
+  MakeDirectory(os.path.dirname(depfile_path))
+  # Ninja does not support multiple outputs in depfiles.
+  with open(depfile_path, 'w') as depfile:
+    depfile.write(first_gn_output.replace(' ', '\\ '))
     depfile.write(': ')
-    depfile.write(' '.join(dependencies))
+    depfile.write(' '.join(i.replace(' ', '\\ ') for i in inputs))
     depfile.write('\n')
 
 
@@ -523,7 +568,8 @@ def CallAndWriteDepfileIfStale(function, options, record_path=None,
       all_depfile_deps = list(python_deps)
       if depfile_deps:
         all_depfile_deps.extend(depfile_deps)
-      WriteDepfile(options.depfile, all_depfile_deps)
+      WriteDepfile(options.depfile, output_paths[0], all_depfile_deps,
+                   add_pydeps=False)
     if stamp_file:
       Touch(stamp_file)
 
