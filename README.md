@@ -41,17 +41,19 @@ and the following git submodules exported into their respective directories:
  - third\_party/ced/src
  - third\_party/icu
 
-Furthermore, this fork adds some minor features as well as some minor bug fixes:
+Furthermore, this fork adds some minor features as well as some bug fixes:
 
  - Create build dir when necessary if it does not exist
  - Change ordering of libs and config flags such that dependent libs and config flags have the least precedence
- - Fix static library link order to fix unresolved symbol link errors
+ - Fix bootstrap builds
+ - Fix unresolved dependencies for sub-configs
  - Fix invalid characters list for ninja rule names
  - Fix help messages title for GN commands
  - Fix duplicate pch ninja rules
- - Fix errors when root build dir equals source root
- - Fix `--all-toolchains` flag for `gn ls` and `gn refs`
  - Fix action targets not using substitutions
+ - Fix errors when root build dir equals source root
+ - Fix static library link order to fix unresolved symbol link errors
+ - Fix `--all-toolchains` flag for `gn ls` and `gn refs`
  - Support source substitutions for binary targets
  - Support for `command` in action targets
  - Support for `description` in action targets
