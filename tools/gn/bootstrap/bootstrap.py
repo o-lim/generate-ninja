@@ -176,16 +176,6 @@ def build_gn_with_ninja_manually(tempdir, options):
 
   write_build_date_header(root_gen_dir)
 
-  if is_mac:
-    # //base/build_time.cc needs base/generated_build_date.h,
-    # and this file is only included for Mac builds.
-    mkdir_p(os.path.join(root_gen_dir, 'base'))
-    check_call([
-        os.path.join(SRC_ROOT, 'build', 'write_build_date_header.py'),
-        os.path.join(root_gen_dir, 'base', 'generated_build_date.h'),
-        'default'
-    ])
-
   if is_win:
     write_buildflag_header_manually(root_gen_dir, 'base/win/base_features.h',
         {'SINGLE_MODULE_MODE_HANDLE_VERIFIER': 'true'})
@@ -340,7 +330,7 @@ def write_gn_ninja(path, root_gen_dir, options):
     cflags.extend([
         '/FS',
         '/Gy',
-        '/W3', '/wd4244', "/wd4996",
+        '/W3', '/wd4244', '/wd4267', '/wd4312', '/wd4838', '/wd4996',
         '/Zi',
         '/DWIN32_LEAN_AND_MEAN', '/DNOMINMAX',
         '/D_CRT_SECURE_NO_DEPRECATE', '/D_SCL_SECURE_NO_DEPRECATE',
@@ -399,7 +389,6 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/environment.cc',
       'base/feature_list.cc',
       'base/files/file.cc',
-      'base/files/file_descriptor_watcher_posix.cc',
       'base/files/file_enumerator.cc',
       'base/files/file_path.cc',
       'base/files/file_path_constants.cc',
@@ -421,7 +410,6 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/memory/ref_counted.cc',
       'base/memory/ref_counted_memory.cc',
       'base/memory/singleton.cc',
-      'base/memory/shared_memory_helper.cc',
       'base/memory/weak_ptr.cc',
       'base/message_loop/incoming_task_queue.cc',
       'base/message_loop/message_loop.cc',
@@ -549,10 +537,12 @@ def write_gn_ninja(path, root_gen_dir, options):
         'base/base_paths_posix.cc',
         'base/debug/debugger_posix.cc',
         'base/debug/stack_trace_posix.cc',
+        'base/files/file_descriptor_watcher_posix.cc',
         'base/files/file_enumerator_posix.cc',
         'base/files/file_posix.cc',
         'base/files/file_util_posix.cc',
         'base/files/memory_mapped_file_posix.cc',
+        'base/memory/shared_memory_helper.cc',
         'base/message_loop/message_pump_libevent.cc',
         'base/posix/file_descriptor_shuffle.cc',
         'base/posix/global_descriptors.cc',
@@ -635,9 +625,6 @@ def write_gn_ninja(path, root_gen_dir, options):
   if is_mac:
     static_libraries['base']['sources'].extend([
         'base/base_paths_mac.mm',
-        'base/build_time.cc',
-        'base/rand_util.cc',
-        'base/rand_util_posix.cc',
         'base/files/file_util_mac.mm',
         'base/mac/bundle_locations.mm',
         'base/mac/call_with_eh_frame.cc',
@@ -650,7 +637,7 @@ def write_gn_ninja(path, root_gen_dir, options):
         'base/memory/shared_memory_handle_mac.cc',
         'base/memory/shared_memory_mac.cc',
         'base/message_loop/message_pump_mac.mm',
-        'base/metrics/field_trial.cc',
+        'base/process/memory_mac.mm',
         'base/process/process_handle_mac.cc',
         'base/process/process_iterator_mac.cc',
         'base/process/process_metrics_mac.cc',
@@ -705,7 +692,6 @@ def write_gn_ninja(path, root_gen_dir, options):
         'base/process/process_win.cc',
         'base/profiler/native_stack_sampler_win.cc',
         'base/profiler/win32_stack_frame_unwinder.cc',
-        'base/rand_util.cc',
         'base/rand_util_win.cc',
         'base/strings/sys_string_conversions_win.cc',
         'base/sync_socket_win.cc',
@@ -717,7 +703,6 @@ def write_gn_ninja(path, root_gen_dir, options):
         'base/sys_info_win.cc',
         'base/threading/platform_thread_win.cc',
         'base/threading/thread_local_storage_win.cc',
-        'base/threading/thread_local_win.cc',
         'base/threading/worker_pool_win.cc',
         'base/time/time_win.cc',
         'base/timer/hi_res_timer_manager_win.cc',
