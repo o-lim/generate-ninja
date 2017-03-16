@@ -850,32 +850,6 @@ BuildDirContext::BuildDirContext(const BuildSettings* in_build_settings,
       is_default_toolchain(in_is_default_toolchain) {
 }
 
-#if 1
-SourceDir GetToolchainObjDir(const Settings* settings) {
-  return GetToolchainObjDirAsOutputFile(settings).AsSourceDir(
-      settings->build_settings());
-}
-
-OutputFile GetToolchainObjDirAsOutputFile(const Settings* settings) {
-  OutputFile result(settings->toolchain_output_subdir());
-  result.value().append("obj/");
-  return result;
-}
-
-OutputFile GetToolchainObjDirAsOutputFile(const Label& toolchain_label,
-                                          bool is_default) {
-  OutputFile result(GetOutputSubdirName(toolchain_label, is_default));
-  result.value().append("obj/");
-  return result;
-}
-
-SourceDir GetToolchainObjDir(const BuildSettings* build_settings,
-                             const Label& toolchain_label, bool is_default) {
-  return GetToolchainObjDirAsOutputFile(
-      toolchain_label, is_default).AsSourceDir(build_settings);
-}
-#endif
-
 SourceDir GetBuildDirAsSourceDir(const BuildDirContext& context,
                                  BuildDirType type) {
   return GetBuildDirAsOutputFile(context, type).AsSourceDir(

@@ -19,10 +19,8 @@ Template::Template(const Scope* scope, const FunctionCallNode* def)
       definition_(def) {
 }
 
-Template::Template(const std::string& name,
-                   std::unique_ptr<Scope> scope,
-                   const FunctionCallNode* def)
-    : name_(name), closure_(std::move(scope)), definition_(def) {}
+Template::Template(std::unique_ptr<Scope> scope, const FunctionCallNode* def)
+    : closure_(std::move(scope)), definition_(def) {}
 
 Template::~Template() {
 }

@@ -233,14 +233,6 @@ class BuildDirContext {
   bool is_default_toolchain;
 };
 
-SourceDir GetToolchainObjDir(const Settings* settings);
-OutputFile GetToolchainObjDirAsOutputFile(const Settings* settings);
-OutputFile GetToolchainObjDirAsOutputFile(const Label& toolchain_label,
-                                          bool is_default);
-SourceDir GetToolchainObjDir(const BuildSettings* build_settings,
-                             const Label& toolchain_label,
-                             bool is_default);
-
 // Returns the root, object, or generated file directory for the toolchain.
 //
 // The toolchain object file root is never exposed in GN (there is no
