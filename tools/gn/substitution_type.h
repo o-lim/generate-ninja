@@ -26,11 +26,11 @@ enum SubstitutionType {
   // Valid for all compiler tools.
   SUBSTITUTION_SOURCE_NAME_PART,  // {{source_name_part}}
   SUBSTITUTION_SOURCE_FILE_PART,  // {{source_file_part}}
+  SUBSTITUTION_SOURCE_EXTENSION,  // {{source_extension}}
   SUBSTITUTION_SOURCE_DIR,  // {{source_dir}}
   SUBSTITUTION_SOURCE_ROOT_RELATIVE_DIR,  // {{root_relative_dir}}
   SUBSTITUTION_SOURCE_GEN_DIR,  // {{source_gen_dir}}
   SUBSTITUTION_SOURCE_OUT_DIR,  // {{source_out_dir}}
-  SUBSTITUTION_SOURCE_EXTENSION,  // {{source_extension}}
   SUBSTITUTION_SOURCE_TARGET_RELATIVE,  // {{source_target_relative}}
 
   // Valid for all compiler and linker tools. These depend on the target and

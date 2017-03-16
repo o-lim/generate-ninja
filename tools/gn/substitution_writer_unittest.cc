@@ -147,6 +147,11 @@ TEST(SubstitutionWriter, SourceSubstitutions) {
   EXPECT_EQ("baz.txt",
             GetAbsSubst("//foo/bar/baz.txt", SUBSTITUTION_SOURCE_FILE_PART));
 
+  EXPECT_EQ(".txt",
+            GetRelSubst("//foo/bar/baz.txt", SUBSTITUTION_SOURCE_EXTENSION));
+  EXPECT_EQ(".txt",
+            GetAbsSubst("//foo/bar/baz.txt", SUBSTITUTION_SOURCE_EXTENSION));
+
   EXPECT_EQ("../../foo/bar",
             GetRelSubst("//foo/bar/baz.txt", SUBSTITUTION_SOURCE_DIR));
   EXPECT_EQ("//foo/bar",

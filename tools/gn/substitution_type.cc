@@ -17,11 +17,11 @@ const char* kSubstitutionNames[SUBSTITUTION_NUM_TYPES] = {
 
   "{{source_name_part}}",  // SUBSTITUTION_SOURCE_NAME_PART
   "{{source_file_part}}",  // SUBSTITUTION_SOURCE_FILE_PART
+  "{{source_extension}}",  // SUBSTITUTION_SOURCE_EXTENSION
   "{{source_dir}}",  // SUBSTITUTION_SOURCE_DIR
   "{{source_root_relative_dir}}",  // SUBSTITUTION_SOURCE_ROOT_RELATIVE_DIR
   "{{source_gen_dir}}",  // SUBSTITUTION_SOURCE_GEN_DIR
   "{{source_out_dir}}",  // SUBSTITUTION_SOURCE_OUT_DIR
-  "{{source_extension}}",  // SUBSTITUTION_SOURCE_EXTENSION
   "{{source_target_relative}}",  // SUBSTITUTION_SOURCE_TARGET_RELATIVE
 
   "{{label}}",  // SUBSTITUTION_LABEL
@@ -75,11 +75,11 @@ const char* kSubstitutionNinjaNames[SUBSTITUTION_NUM_TYPES] = {
 
     "source_name_part",          // SUBSTITUTION_SOURCE_NAME_PART
     "source_file_part",          // SUBSTITUTION_SOURCE_FILE_PART
+    "source_extension",          // SUBSTITUTION_SOURCE_EXTENSION
     "source_dir",                // SUBSTITUTION_SOURCE_DIR
     "source_root_relative_dir",  // SUBSTITUTION_SOURCE_ROOT_RELATIVE_DIR
     "source_gen_dir",            // SUBSTITUTION_SOURCE_GEN_DIR
     "source_out_dir",            // SUBSTITUTION_SOURCE_OUT_DIR
-    "source_extension",          // SUBSTITUTION_SOURCE_EXTENSION
     "source_target_relative",    // SUBSTITUTION_SOURCE_TARGET_RELATIVE
 
     "label",               // SUBSTITUTION_LABEL
@@ -175,11 +175,11 @@ bool IsValidSourceSubstitution(SubstitutionType type) {
          type == SUBSTITUTION_SOURCE ||
          type == SUBSTITUTION_SOURCE_NAME_PART ||
          type == SUBSTITUTION_SOURCE_FILE_PART ||
+         type == SUBSTITUTION_SOURCE_EXTENSION ||
          type == SUBSTITUTION_SOURCE_DIR ||
          type == SUBSTITUTION_SOURCE_ROOT_RELATIVE_DIR ||
          type == SUBSTITUTION_SOURCE_GEN_DIR ||
          type == SUBSTITUTION_SOURCE_OUT_DIR ||
-         type == SUBSTITUTION_SOURCE_EXTENSION ||
          type == SUBSTITUTION_SOURCE_TARGET_RELATIVE;
 }
 
