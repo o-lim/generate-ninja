@@ -26,13 +26,13 @@ elif [ "$PLATFORM" == "linux" ]; then
 
   sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y
   sudo apt-get update -qq
-  sudo apt-get install -qq gcc-4.8 g++-4.8
-  sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-4.8 50 --slave /usr/bin/g++ g++ /usr/bin/g++-4.8
+  sudo apt-get install -qq gcc-4.9 g++-4.9
+  sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-4.9 60 --slave /usr/bin/g++ g++ /usr/bin/g++-4.9
   sudo update-alternatives --install /usr/bin/cc cc /usr/bin/gcc 30
   sudo update-alternatives --install /usr/bin/c++ c++ /usr/bin/g++ 30
   sudo update-alternatives --set cc /usr/bin/gcc
   sudo update-alternatives --set c++ /usr/bin/g++
-  sudo update-alternatives --set gcc /usr/bin/gcc-4.8
+  sudo update-alternatives --set gcc /usr/bin/gcc-4.9
 fi
 
 if [ -n "$NINJA_ZIP" ]; then
