@@ -2,14 +2,22 @@ language: cpp
 
 sudo: required
 
-os:
-  - linux
-  - osx
-
-env:
-  matrix:
-    - system="i686"
-    - system="x86_64"
+matrix:
+  include:
+    - os: linux
+      env:
+        - system="i686"
+    - os: linux
+      env:
+        - system="x86_64"
+    - os: osx
+      osx_image: xcode8
+      env:
+        - system="i686"
+    - os: osx
+      osx_image: xcode8
+      env:
+        - system="x86_64"
 
 before_install:
   - source .travis/setenv.sh
