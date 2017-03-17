@@ -821,8 +821,8 @@ component("base") {
     "sys_info_android.cc",
     "sys_info_chromeos.cc",
     "sys_info_internal.h",
-    "syslog_logging.cc",
-    "syslog_logging.h",
+    #"syslog_logging.cc",   # Unused in GN build.
+    #"syslog_logging.h",    # Unused in GN build.
 
     #"sys_info_freebsd.cc",  # Unused in Chromium build.
     "sys_info_ios.mm",
@@ -1345,7 +1345,6 @@ component("base") {
     deps += [
       "//base/trace_event/etw_manifest:chrome_events_win",
       "//base/win:base_win_features",
-      "//base/win:eventlog_messages",
     ]
 
     if (is_component_build) {
