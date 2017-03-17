@@ -347,7 +347,7 @@ void ActivityUserData::Set(StringPiece name,
     DCHECK_EQ(END_OF_VALUES, header->type.load(std::memory_order_relaxed));
     DCHECK_EQ(0, header->value_size.load(std::memory_order_relaxed));
     header->name_size = static_cast<uint8_t>(name_size);
-    header->record_size = full_size;
+    header->record_size = static_cast<uint16_t>(full_size);
     char* name_memory = reinterpret_cast<char*>(header) + sizeof(Header);
     void* value_memory =
         reinterpret_cast<char*>(header) + sizeof(Header) + name_extent;
@@ -375,7 +375,7 @@ void ActivityUserData::Set(StringPiece name,
   size = std::min(size, info->extent);
   info->size_ptr->store(0, std::memory_order_seq_cst);
   memcpy(info->memory, memory, size);
-  info->size_ptr->store(size, std::memory_order_release);
+  info->size_ptr->store(static_cast<uint16_t>(size), std::memory_order_release);
 }
 
 void ActivityUserData::SetReference(StringPiece name,
@@ -976,7 +976,7 @@ bool GlobalActivityTracker::ModuleInfoRecord::EncodeFrom(
   age = info.age;
   memcpy(identifier, info.identifier, sizeof(identifier));
   memcpy(pickle, pickler.data(), pickler.size());
-  pickle_size = pickler.size();
+  pickle_size = static_cast<uint16_t>(pickler.size());
   changes.store(0, std::memory_order_relaxed);
 
   // Now set those fields that can change.
