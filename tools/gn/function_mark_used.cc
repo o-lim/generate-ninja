@@ -47,7 +47,7 @@ void MarkUsedFromList(Scope* source,
 
 const char kMarkUsed[] = "mark_used";
 const char kMarkUsed_HelpShort[] =
-    "mark_used_from: Marks variables as used from the current scope.";
+    "mark_used: Marks variables as used from the current scope.";
 const char kMarkUsed_Help[] =
     R"(mark_used: Marks variables as used from the current scope.
 
