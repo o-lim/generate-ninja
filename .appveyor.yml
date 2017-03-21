@@ -1,4 +1,4 @@
-version: 0.0.0.{build}
+version: "#{build}"
 clone_depth: 50
 image: Visual Studio 2015
 
