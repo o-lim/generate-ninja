@@ -52,25 +52,20 @@ def RunGitCommand(directory, command):
 
 
 def FetchCommitPosition(directory):
-  regex = re.compile(r'\s*commit\s* ([0-9A-Fa-f]+)\s*')
+  regex = re.compile(r'v(.*\..*\..*(-[0-9]*-g[0-9A-Fa-f]*|))')
+  proc = RunGitCommand(directory, ['describe', '--tags',
+                                               '--match', 'v*.*.*',
+                                               '--always',
+                                               '--first-parent'])
+  line = proc.stdout.readline().strip()
+  if not line:
+    return None
 
-  # Search this far backward in the git log. The commit position should be
-  # close to the top. We allow some slop for long commit messages, and maybe
-  # there were some local commits after the last "official" one. Having this
-  # max prevents us from searching all history in the case of an error.
-  max_lines = 2048
+  match = regex.match(line)
+  if match:
+    return match.group(1)
 
-  proc = RunGitCommand(directory, ['log'])
-  for i in range(max_lines):
-    line = proc.stdout.readline()
-    if not line:
-      return None
-
-    match = regex.match(line)
-    if match:
-	    return match.group(1)[:7]
-
-  return None
+  return line
 
 
 def WriteHeader(header_file, header_guard, value):
