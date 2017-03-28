@@ -17,8 +17,8 @@ gn_all: gn gn_unittests
 bootstrap out_bootstrap/gn: tools/gn/bootstrap/bootstrap.py
 	@(cd tools/gn/bootstrap && python bootstrap.py -s --no-clean)
 
-out/Release/build.ninja: out_bootstrap/gn
-	@out_bootstrap/gn gen --args='is_debug=false' //out/Release
+out/Release/build.ninja: out_bootstrap/gn Makefile
+	@out_bootstrap/gn gen --args='is_debug=false is_official_build=true' //out/Release
 
 .PHONY: build.ninja
 build.ninja: out/Release/build.ninja

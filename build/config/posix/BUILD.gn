@@ -20,8 +20,6 @@ group("posix") {
 config("compiler") {
   if ((allow_posix_link_time_opt || is_cfi) && !is_nacl) {
     arflags = [
-      "--plugin",
-      rebase_path("$clang_base_path/lib/LLVMgold.so", root_build_dir),
     ]
   }
 }
