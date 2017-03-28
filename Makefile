@@ -1,4 +1,8 @@
 
+COMMIT_HASH := $Format:%h$
+GN_VERSION := 0.0.0
+export GN_VERSION := $(if $(filter-out %:%h,$(COMMIT_HASH)),$(GN_VERSION)-$(COMMIT_HASH))
+
 .PHONY: all
 all: gn_all gn_test
 
