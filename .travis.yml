@@ -22,8 +22,8 @@ script:
   - make
 
 branches:
-  only:
-    - master
+  except:
+    - chromium-gn
 
 notifications:
   email: false
