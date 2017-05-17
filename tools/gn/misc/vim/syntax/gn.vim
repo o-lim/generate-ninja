@@ -44,11 +44,11 @@ hi def link     gnFunctions         Macro
 
 " Variables
 syn keyword     gnVariable all_dependent_configs allow_circular_includes_from
-syn keyword     gnVariable args asmflags asmppflags cflags cflags_c cflags_cc
-syn keyword     gnVariable cflags_objc cflags_objcc check_includes console
-syn keyword     gnVariable complete_static_lib cppflags cppflags_c cppflags_cc
-syn keyword     gnVariable cppflags_objc cppflags_objcc command configs
-syn keyword     gnVariable data data_deps defines define_switch
+syn keyword     gnVariable args arflags asmflags asmppflags cflags cflags_c
+syn keyword     gnVariable cflags_cc cflags_objc cflags_objcc check_includes
+syn keyword     gnVariable console complete_static_lib cppflags cppflags_c
+syn keyword     gnVariable cppflags_cc cppflags_objc cppflags_objcc command
+syn keyword     gnVariable configs data data_deps defines define_switch
 syn keyword     gnVariable default_output_extension default_output_dir
 syn keyword     gnVariable depend_output depfile deps depsformat
 syn keyword     gnVariable description include_dirs inputs include_switch

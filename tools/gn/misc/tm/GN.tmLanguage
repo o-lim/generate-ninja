@@ -89,7 +89,7 @@
       <key>comment</key>
       <string>target variables</string>
       <key>match</key>
-      <string>\b(?:all_dependent_configs|allow_circular_includes_from|args|asmflags|asmppflags|cflags|cflags_c|cflags_cc|cflags_objc|cflags_objcc|check_includes|complete_static_lib|configs|command|cppflags|cppflags_c|cppflags_cc|cppflags_objc|cppflags_objcc|data|data_deps|defines|depfile|deps|depsformat|description|include_dirs|inputs|include_switch|interpreter|ldflags|lib_dirs|libs|lib_switch|lib_dir_switch|link_output|output_dir|output_extension|output_name|output_prefix|outputs|precompiled_header|precompiled_header_type|precompiled_source|public|public_configs|public_deps|restat|rspfile|rspfile_content|runtime_link_output|script|sources|sys_include_dirs|sys_include_switch|testonly|visibility)\b</string>
+      <string>\b(?:all_dependent_configs|allow_circular_includes_from|args|arflags|asmflags|asmppflags|cflags|cflags_c|cflags_cc|cflags_objc|cflags_objcc|check_includes|complete_static_lib|configs|command|cppflags|cppflags_c|cppflags_cc|cppflags_objc|cppflags_objcc|data|data_deps|defines|depfile|deps|depsformat|description|include_dirs|inputs|include_switch|interpreter|ldflags|lib_dirs|libs|lib_switch|lib_dir_switch|link_output|output_dir|output_extension|output_name|output_prefix|outputs|precompiled_header|precompiled_header_type|precompiled_source|public|public_configs|public_deps|restat|rspfile|rspfile_content|runtime_link_output|script|sources|sys_include_dirs|sys_include_switch|testonly|visibility)\b</string>
       <key>name</key>
       <string>entity.other.attribute-name.gn</string>
     </dict>
