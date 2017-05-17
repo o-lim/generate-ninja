@@ -60,6 +60,11 @@ config("libxml_warnings") {
       # used with certain preprocessor defines set.
       "-Wno-unused-function",
     ]
+  } else if (is_posix) {
+    cflags = [
+      # libxml format warnings for __xmlSimpleError(...)
+      "-Wno-format-extra-args",
+    ]
   }
 }
 
