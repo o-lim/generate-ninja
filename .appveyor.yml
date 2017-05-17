@@ -29,7 +29,21 @@ install:
 
 build_script:
   - make
+  - zip -j "out\Release\gn-%system%.zip" "out\Release\gn.exe"
 
 branches:
   except:
     - chromium-gn
+
+artifacts:
+  - path: out\Release\gn-$(system).zip
+
+deploy:
+  - provider: GitHub
+    auth_token:
+      secure: ddOtxvg/n8oNIk4EoOc32HnFyVjRN0uheW/ANR/35qfb3Smn3+YuwCOMrT6mWCrA
+    artifact: /gn-.*\.zip/
+    draft: false
+    prerelease: false
+    on:
+      appveyor_repo_tag: true
