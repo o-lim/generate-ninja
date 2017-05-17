@@ -6,23 +6,24 @@ matrix:
   include:
     - os: linux
       env:
-        - system="i686"
+        - system="i686-linux"
     - os: linux
       env:
-        - system="x86_64"
+        - system="x86_64-linux"
     - os: osx
       osx_image: xcode8
       env:
-        - system="i686"
+        - system="i686-darwin"
     - os: osx
       osx_image: xcode8
       env:
-        - system="x86_64"
+        - system="x86_64-darwin"
 
 before_install:
   - source .travis/setenv.sh
 
-script: make
+script:
+  - make
 
 branches:
   only:

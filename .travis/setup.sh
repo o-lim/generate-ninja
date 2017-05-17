@@ -9,17 +9,14 @@ source .travis/platform.sh
 mkdir $HOME/bin
 
 if [ "$PLATFORM" == "macosx" ]; then
-  system="$system-darwin"
   NINJA_ZIP=ninja-mac.zip
   CC=clang
   CXX=clang++
 elif [ "$PLATFORM" == "cygwin" ]; then
-  system="$system-cygwin"
   NINJA_ZIP=ninja-win.zip
   CC=gcc
   CXX=g++
 elif [ "$PLATFORM" == "linux" ]; then
-  system="$system-linux"
   NINJA_ZIP=ninja-linux.zip
   CC=gcc
   CXX=g++
