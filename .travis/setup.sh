@@ -23,7 +23,7 @@ elif [ "$PLATFORM" == "linux" ]; then
 
   sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y
   sudo apt-get update -qq
-  sudo apt-get install -qq gcc-4.9 g++-4.9
+  sudo apt-get install -qq gcc-4.9 g++-4.9 gcc-4.9-multilib g++-4.9-multilib
   sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-4.9 60 --slave /usr/bin/g++ g++ /usr/bin/g++-4.9
   sudo update-alternatives --install /usr/bin/cc cc /usr/bin/gcc 30
   sudo update-alternatives --install /usr/bin/c++ c++ /usr/bin/g++ 30
