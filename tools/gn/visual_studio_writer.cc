@@ -163,7 +163,7 @@ void ParseLinkerOptions(const std::vector<std::string>& ldflags,
 }
 
 void ParseLinkerOptions(const Target* target, LinkerOptions* options) {
-  for (ConfigValuesIterator iter(target); !iter.done(); iter.Next()) {
+  for (ConfigValuesReverseIterator iter(target); !iter.done(); iter.Next()) {
     ParseLinkerOptions(iter.cur().ldflags(), options);
   }
 }
