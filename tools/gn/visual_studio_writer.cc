@@ -149,7 +149,7 @@ void ParseCompilerOptions(const std::vector<std::string>& cflags,
 }
 
 void ParseCompilerOptions(const Target* target, CompilerOptions* options) {
-  for (ConfigValuesReverseIterator iter(target); !iter.done(); iter.Next()) {
+  for (ConfigValuesOutwardIterator iter(target); !iter.done(); iter.Next()) {
     ParseCompilerOptions(iter.cur().cflags(), options);
     ParseCompilerOptions(iter.cur().cflags_c(), options);
     ParseCompilerOptions(iter.cur().cflags_cc(), options);
@@ -163,7 +163,7 @@ void ParseLinkerOptions(const std::vector<std::string>& ldflags,
 }
 
 void ParseLinkerOptions(const Target* target, LinkerOptions* options) {
-  for (ConfigValuesReverseIterator iter(target); !iter.done(); iter.Next()) {
+  for (ConfigValuesOutwardIterator iter(target); !iter.done(); iter.Next()) {
     ParseLinkerOptions(iter.cur().ldflags(), options);
   }
 }
@@ -544,7 +544,7 @@ bool VisualStudioWriter::WriteProjectFileContents(
       {
         std::unique_ptr<XmlElementWriter> preprocessor_definitions =
             cl_compile->SubElement("PreprocessorDefinitions");
-        ReverseRecursiveTargetConfigToStream<std::string>(
+        OutwardRecursiveTargetConfigToStream<std::string>(
             target, &ConfigValues::defines, SemicolonSeparatedWriter(),
             preprocessor_definitions->StartContent(false));
         preprocessor_definitions->Text("%(PreprocessorDefinitions)");

@@ -73,9 +73,21 @@ class ConfigValuesIterator {
   int cur_index_;
 };
 
-class ConfigValuesReverseIterator {
+// Provides a way to iterate through all ConfigValues applying to a given
+// target. This is more complicated than normal because the target has a list
+// of configs applying to it, and also config values on the target itself.
+//
+// This iterator allows one to iterate through all of these in a defined order
+// in one convenient loop. The order is defined to be the ConfigValues on the
+// target's inner-most configs first, then the enclosing configs progressing
+// outward, and finally the target's own configs last, in order.
+//
+// Example:
+//   for (ConfigValueOutwardIterator iter(target); !iter.done(); iter.Next())
+//     DoSomething(iter.cur());
+class ConfigValuesOutwardIterator {
  public:
-  explicit ConfigValuesReverseIterator(const Target* target)
+  explicit ConfigValuesOutwardIterator(const Target* target)
       : target_(target),
         cur_index_(static_cast<int>(target_->reverse_configs().size()) - 1) {
   }
@@ -143,12 +155,12 @@ inline void RecursiveTargetConfigToStream(
 }
 
 template<typename T, class Writer>
-inline void ReverseRecursiveTargetConfigToStream(
+inline void OutwardRecursiveTargetConfigToStream(
     const Target* target,
     const std::vector<T>& (ConfigValues::* getter)() const,
     const Writer& writer,
     std::ostream& out) {
-  for (ConfigValuesReverseIterator iter(target); !iter.done(); iter.Next())
+  for (ConfigValuesOutwardIterator iter(target); !iter.done(); iter.Next())
     ConfigValuesToStream(iter.cur(), getter, writer, out);
 }
 
@@ -159,7 +171,7 @@ void RecursiveTargetConfigStringsToStream(
     const EscapeOptions& escape_options,
     std::ostream& out);
 
-void ReverseRecursiveTargetConfigStringsToStream(
+void OutwardRecursiveTargetConfigStringsToStream(
     const Target* target,
     const std::vector<std::string>& (ConfigValues::* getter)() const,
     const EscapeOptions& escape_options,

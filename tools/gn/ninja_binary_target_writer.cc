@@ -357,7 +357,7 @@ void NinjaBinaryTargetWriter::WriteCompilerVars(
   // Defines.
   if (subst.used[SUBSTITUTION_DEFINES]) {
     out_ << kSubstitutionNinjaNames[SUBSTITUTION_DEFINES] << " =";
-    ReverseRecursiveTargetConfigToStream<std::string>(
+    OutwardRecursiveTargetConfigToStream<std::string>(
         target_, &ConfigValues::defines,
         DefineWriter(target_->toolchain()->define_switch()), out_);
     out_ << std::endl;
@@ -492,14 +492,14 @@ void NinjaBinaryTargetWriter::WriteOneFlag(
       // Enables precompiled headers and names the .h file. It's a string
       // rather than a file name (so no need to rebase or use path_output_).
       out_ << " /Yu" << target_->config_values().precompiled_header();
-      ReverseRecursiveTargetConfigStringsToStream(target_, getter,
+      OutwardRecursiveTargetConfigStringsToStream(target_, getter,
                                                   flag_escape_options, out_);
     } else if (tool && tool->precompiled_header_type() == Tool::PCH_GCC) {
       // The targets to build the .gch files should omit the -include flag
       // below. To accomplish this, each substitution flag is overwritten in the
       // target rule and these values are repeated. The -include flag is omitted
       // in place of the required -x <header lang> flag for .gch targets.
-      ReverseRecursiveTargetConfigStringsToStream(target_, getter,
+      OutwardRecursiveTargetConfigStringsToStream(target_, getter,
                                                   flag_escape_options, out_);
 
       // Compute the gch file (it will be language-specific).
@@ -514,11 +514,11 @@ void NinjaBinaryTargetWriter::WriteOneFlag(
         out_ << " -include " << pch_file;
       }
     } else {
-      ReverseRecursiveTargetConfigStringsToStream(target_, getter,
+      OutwardRecursiveTargetConfigStringsToStream(target_, getter,
                                                   flag_escape_options, out_);
     }
   } else {
-    ReverseRecursiveTargetConfigStringsToStream(target_, getter,
+    OutwardRecursiveTargetConfigStringsToStream(target_, getter,
                                                 flag_escape_options, out_);
   }
   out_ << std::endl;
@@ -637,24 +637,24 @@ void NinjaBinaryTargetWriter::WriteGCCPCHCommand(
   // for .gch targets.
   EscapeOptions opts = GetFlagOptions();
   if (tool_type == Toolchain::TYPE_CC) {
-    ReverseRecursiveTargetConfigStringsToStream(target_,
+    OutwardRecursiveTargetConfigStringsToStream(target_,
         &ConfigValues::cflags_c, opts, out_);
-    ReverseRecursiveTargetConfigStringsToStream(target_,
+    OutwardRecursiveTargetConfigStringsToStream(target_,
         &ConfigValues::cppflags_c, opts, out_);
   } else if (tool_type == Toolchain::TYPE_CXX) {
-    ReverseRecursiveTargetConfigStringsToStream(target_,
+    OutwardRecursiveTargetConfigStringsToStream(target_,
         &ConfigValues::cflags_cc, opts, out_);
-    ReverseRecursiveTargetConfigStringsToStream(target_,
+    OutwardRecursiveTargetConfigStringsToStream(target_,
         &ConfigValues::cppflags_cc, opts, out_);
   } else if (tool_type == Toolchain::TYPE_OBJC) {
-    ReverseRecursiveTargetConfigStringsToStream(target_,
+    OutwardRecursiveTargetConfigStringsToStream(target_,
         &ConfigValues::cflags_objc, opts, out_);
-    ReverseRecursiveTargetConfigStringsToStream(target_,
+    OutwardRecursiveTargetConfigStringsToStream(target_,
         &ConfigValues::cppflags_objc, opts, out_);
   } else if (tool_type == Toolchain::TYPE_OBJCXX) {
-    ReverseRecursiveTargetConfigStringsToStream(target_,
+    OutwardRecursiveTargetConfigStringsToStream(target_,
         &ConfigValues::cflags_objcc, opts, out_);
-    ReverseRecursiveTargetConfigStringsToStream(target_,
+    OutwardRecursiveTargetConfigStringsToStream(target_,
         &ConfigValues::cppflags_objcc, opts, out_);
   }
 
@@ -917,7 +917,7 @@ void NinjaBinaryTargetWriter::WriteLinkerStuff(
     WriteLibs();
   } else if (target_->output_type() == Target::STATIC_LIBRARY) {
     out_ << "  arflags =";
-    ReverseRecursiveTargetConfigStringsToStream(target_, &ConfigValues::arflags,
+    OutwardRecursiveTargetConfigStringsToStream(target_, &ConfigValues::arflags,
                                                 GetFlagOptions(), out_);
     out_ << std::endl;
   }
@@ -930,7 +930,7 @@ void NinjaBinaryTargetWriter::WriteLinkerFlags(
   out_ << "  ldflags =";
 
   // First the ldflags from the target and its config.
-  ReverseRecursiveTargetConfigStringsToStream(target_, &ConfigValues::ldflags,
+  OutwardRecursiveTargetConfigStringsToStream(target_, &ConfigValues::ldflags,
                                               GetFlagOptions(), out_);
 
   // Followed by library search paths that have been recursively pushed

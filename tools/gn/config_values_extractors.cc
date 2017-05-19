@@ -34,12 +34,12 @@ void RecursiveTargetConfigStringsToStream(
                                 EscapedStringWriter(escape_options), out);
 }
 
-void ReverseRecursiveTargetConfigStringsToStream(
+void OutwardRecursiveTargetConfigStringsToStream(
     const Target* target,
     const std::vector<std::string>& (ConfigValues::* getter)() const,
     const EscapeOptions& escape_options,
     std::ostream& out) {
-  ReverseRecursiveTargetConfigToStream(target, getter,
+  OutwardRecursiveTargetConfigToStream(target, getter,
                                        EscapedStringWriter(escape_options),
                                        out);
 }
