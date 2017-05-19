@@ -400,10 +400,12 @@ bool Target::OnResolved(Err* err) {
   // public config's libs to be included here. And it needs to happen
   // after pulling the dependent target libs so the libs are in the correct
   // order (inner-most ones first, and outer-most ones last).
-  for (ConfigValuesReverseIterator iter(this); !iter.done(); iter.Next()) {
+  std::vector<LibFile> libs;
+  for (ConfigValuesIterator iter(this); !iter.done(); iter.Next()) {
     const ConfigValues& cur = iter.cur();
-    all_libs_.preappend(cur.libs().begin(), cur.libs().end());
+    libs.insert(libs.end(), cur.libs().begin(), cur.libs().end());
   }
+  all_libs_.preappend(libs.begin(), libs.end());
 
   FillOutputFiles();
 
