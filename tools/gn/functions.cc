@@ -294,17 +294,17 @@ const char kConfig_Help[] =
 
    1. The values specified directly on the target (rather than using a config).
    2. The configs specified in the target's "configs" list, in order.
-   3. Public_configs from a breadth-first traversal of the dependency tree in
-      the order that the targets appear in "deps".
-   4. All dependent configs from a breadth-first traversal of the dependency
+   3. All dependent configs from a breadth-first traversal of the dependency
       tree in the order that the targets appear in "deps".
+   4. Public_configs from a breadth-first traversal of the dependency tree in
+      the order that the targets appear in "deps".
 
   The ordering of flags and defines are as follows:
 
-   1. All dependent configs from a breadth-first traversal of the dependency
-      tree in the reverse order that the targets appear in "deps".
-   2. Public_configs from a breadth-first traversal of the dependency tree in
+   1. Public_configs from a breadth-first traversal of the dependency tree in
       the reverse order that the targets appear in "deps".
+   2. All dependent configs from a breadth-first traversal of the dependency
+      tree in the reverse order that the targets appear in "deps".
    3. The configs specified in the target's "configs" list, in order.
    4. The values specified directly on the target (rather than using a config).
 

@@ -42,7 +42,7 @@
     *   [get_target_outputs: [file list] Get the list of outputs from a target.](#get_target_outputs)
     *   [getenv: Get an environment variable.](#getenv)
     *   [import: Import a file into the current scope.](#import)
-    *   [mark_used_from: Marks variables as used from the current scope.](#mark_used_from)
+    *   [mark_used: Marks variables as used from the current scope.](#mark_used)
     *   [mark_used_from: Marks variables as used from a different scope.](#mark_used_from)
     *   [pool: Defines a pool object.](#pool)
     *   [print: Prints to the console.](#print)
@@ -1751,17 +1751,17 @@
 
    1. The values specified directly on the target (rather than using a config).
    2. The configs specified in the target's "configs" list, in order.
-   3. Public_configs from a breadth-first traversal of the dependency tree in
-      the order that the targets appear in "deps".
-   4. All dependent configs from a breadth-first traversal of the dependency
+   3. All dependent configs from a breadth-first traversal of the dependency
       tree in the order that the targets appear in "deps".
+   4. Public_configs from a breadth-first traversal of the dependency tree in
+      the order that the targets appear in "deps".
 
   The ordering of flags and defines are as follows:
 
-   1. All dependent configs from a breadth-first traversal of the dependency
-      tree in the reverse order that the targets appear in "deps".
-   2. Public_configs from a breadth-first traversal of the dependency tree in
+   1. Public_configs from a breadth-first traversal of the dependency tree in
       the reverse order that the targets appear in "deps".
+   2. All dependent configs from a breadth-first traversal of the dependency
+      tree in the reverse order that the targets appear in "deps".
    3. The configs specified in the target's "configs" list, in order.
    4. The values specified directly on the target (rather than using a config).
 
