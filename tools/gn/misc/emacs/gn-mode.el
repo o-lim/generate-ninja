@@ -64,7 +64,8 @@ variable name or the '{{' and '}}' which surround it."
 
 (defvar gn-font-lock-buildfile-fun-keywords
   '("assert" "config" "declare_args" "defined" "exec_script" "foreach"
-    "get_label_info" "get_path_info" "get_target_outputs" "getenv" "import"
+    "forward_variables_from" "get_label_info" "get_path_info"
+    "get_target_outputs" "getenv" "import" "mark_used" "mark_used_from"
     "print" "process_file_template" "read_file" "rebase_path"
     "set_default_toolchain" "set_defaults" "set_sources_assignment_filter"
     "template" "tool" "toolchain" "toolchain_args" "write_file"))
@@ -72,15 +73,23 @@ variable name or the '{{' and '}}' which surround it."
 (defvar gn-font-lock-predefined-var-keywords
   '("current_cpu" "current_os" "current_toolchain" "default_toolchain"
     "host_cpu" "host_os" "python_path" "root_build_dir" "root_gen_dir"
-    "root_out_dir" "target_cpu" "target_gen_dir" "target_os" "target_out_dir"))
+    "root_out_dir" "target_cpu" "target_gen_dir" "target_os" "target_out_dir"
+    "true" "false"))
 
 (defvar gn-font-lock-var-keywords
   '("all_dependent_configs" "allow_circular_includes_from" "args" "arflags"
-    "asmflags" "cflags" "cflags_c" "cflags_cc" "cflags_objc" "cflags_objcc"
-    "check_includes" "complete_static_lib" "configs" "data" "data_deps"
-    "defines" "depfile" "deps" "include_dirs" "inputs" "ldflags" "lib_dirs"
-    "libs" "output_extension" "output_name" "outputs" "public" "public_configs"
-    "public_deps" "script" "sources" "testonly" "visibility"))
+    "asmflags" "asmppflags" "cflags" "cflags_c" "cflags_cc" "cflags_objc"
+    "cflags_objcc" "check_includes" "command" "complete_static_lib" "configs"
+    "console" "cppflags" "cppflags_c" "cppflags_cc" "cppflags_objc"
+    "cppflags_objcc" "data" "data_deps" "default_output_extension"
+    "default_output_dir" "defines" "define_switch" "depend_output" "depfile"
+    "deps" "depsformat" "description" "include_dirs" "include_switch" "inputs"
+    "interpreter" "ldflags" "libs" "lib_dirs" "lib_dir_switch" "lib_switch"
+    "link_output" "output_dir" "output_extension" "output_prefix" "output_name"
+    "outputs" "precompiled_header" "precompiled_header_type"
+    "precompiled_source" "public" "public_configs" "public_deps" "rspfile"
+    "rspfile_content" "runtime_link_output" "script" "sources"
+    "sys_include_dirs" "sys_include_switch" "testonly" "visibility"))
 
 (defconst gn-font-lock-keywords
   `((,(regexp-opt gn-font-lock-target-declaration-keywords 'words) .

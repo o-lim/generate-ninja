@@ -46,20 +46,20 @@ hi def link     gnFunctions         Macro
 syn keyword     gnVariable all_dependent_configs allow_circular_includes_from
 syn keyword     gnVariable args arflags asmflags asmppflags cflags cflags_c
 syn keyword     gnVariable cflags_cc cflags_objc cflags_objcc check_includes
-syn keyword     gnVariable console complete_static_lib cppflags cppflags_c
-syn keyword     gnVariable cppflags_cc cppflags_objc cppflags_objcc command
-syn keyword     gnVariable configs data data_deps defines define_switch
+syn keyword     gnVariable command complete_static_lib configs console cppflags
+syn keyword     gnVariable cppflags_c cppflags_cc cppflags_objc cppflags_objcc
+syn keyword     gnVariable data data_deps defines define_switch
 syn keyword     gnVariable default_output_extension default_output_dir
-syn keyword     gnVariable depend_output depfile deps depsformat
-syn keyword     gnVariable description include_dirs inputs include_switch
-syn keyword     gnVariable interpreter ldflags lib_dirs libs output_extension
-syn keyword     gnVariable output_dir output_name outputs link_output
-syn keyword     gnVariable output_prefix lib_switch lib_dir_switch
-syn keyword     gnVariable precompiled_header precompiled_header_type
-syn keyword     gnVariable precompiled_source restat runtime_link_output
-syn keyword     gnVariable public public_configs public_deps rspfile
-syn keyword     gnVariable rspfile_content script sources sys_include_dirs
-syn keyword     gnVariable sys_include_switch testonly visibility
+syn keyword     gnVariable depend_output depfile deps depsformat description
+syn keyword     gnVariable include_dirs include_switch inputs interpreter
+syn keyword     gnVariable ldflags lib_dirs libs lib_dir_switch lib_switch
+syn keyword     gnVariable link_output output_extension output_dir output_name
+syn keyword     gnVariable output_prefix outputs precompiled_header
+syn keyword     gnVariable precompiled_header_type precompiled_source
+syn keyword     gnVariable restat runtime_link_output public public_configs
+syn keyword     gnVariable public_deps rspfile rspfile_content script sources
+syn keyword     gnVariable sys_include_dirs sys_include_switch testonly
+syn keyword     gnVariable visibility
 hi def link     gnVariable          Keyword
 
 " Strings
