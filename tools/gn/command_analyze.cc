@@ -21,7 +21,9 @@ const char kAnalyze[] = "analyze";
 const char kAnalyze_HelpShort[] =
     "analyze: Analyze which targets are affected by a list of files.";
 const char kAnalyze_Help[] =
-    R"(gn analyze <out_dir> <input_path> <output_path>
+    R"(gn analyze: Analyze which targets are affected by a list of files.
+
+  gn analyze <out_dir> <input_path> <output_path>
 
   Analyze which targets are affected by a list of files.
 

@@ -155,9 +155,11 @@
 
 ## <a name="commands"></a>Commands
 
-### <a name="analyze"></a>**gn analyze <out_dir> <input_path> <output_path>**
+### <a name="analyze:"></a>**gn analyze**: Analyze which targets are affected by a list of files.
 
 ```
+  gn analyze <out_dir> <input_path> <output_path>
+
   Analyze which targets are affected by a list of files.
 
   This command takes three arguments:
