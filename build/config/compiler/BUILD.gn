@@ -18,6 +18,7 @@ if (current_cpu == "mipsel" || current_cpu == "mips64el") {
 }
 if (is_mac) {
   import("//build/config/mac/symbols.gni")
+  import("//build/config/mac/mac_sdk.gni")
 }
 if (is_ios) {
   import("//build/config/ios/ios_sdk.gni")
