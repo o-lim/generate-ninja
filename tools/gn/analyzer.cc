@@ -59,9 +59,7 @@ LabelSet LabelsFor(const TargetSet& targets) {
 bool AnyBuildFilesWereModified(const SourceFileSet& source_files) {
   for (auto* file : source_files) {
     if (base::EndsWith(file->value(), ".gn", base::CompareCase::SENSITIVE) ||
-        base::EndsWith(file->value(), ".gni", base::CompareCase::SENSITIVE) ||
-        base::EndsWith(file->value(), "build/vs_toolchain.py",
-                       base::CompareCase::SENSITIVE))
+        base::EndsWith(file->value(), ".gni", base::CompareCase::SENSITIVE))
       return true;
   }
   return false;
