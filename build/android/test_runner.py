@@ -44,7 +44,7 @@ _DEVIL_STATIC_CONFIG_FILE = os.path.abspath(os.path.join(
     host_paths.DIR_SOURCE_ROOT, 'build', 'android', 'devil_config.json'))
 
 
-def AddTestLauncherArgs(parser):
+def AddTestLauncherOptions(parser):
   """Adds arguments mirroring //base/test/launcher.
 
   Args:
@@ -75,6 +75,17 @@ def AddTestLauncherArgs(parser):
       help='Total number of external shards.')
 
   return parser
+
+
+def AddCommandLineOptions(parser):
+  """Adds arguments to support passing command-line flags to the device."""
+  parser.add_argument(
+      '--device-flags-file',
+      type=os.path.realpath,
+      help='The relative filepath to a file containing '
+           'command-line flags to set on the device')
+  parser.set_defaults(allow_unknown=True)
+  parser.set_defaults(command_line_flags=None)
 
 
 def AddTracingOptions(parser):
@@ -146,6 +157,10 @@ def AddCommonOptions(parser):
       '--flakiness-dashboard-server',
       dest='flakiness_dashboard_server',
       help=argparse.SUPPRESS)
+  parser.add_argument(
+      '--gs-results-bucket',
+      help='Google Storage bucket to upload results to.')
+
 
   parser.add_argument(
       '--output-directory',
@@ -162,7 +177,7 @@ def AddCommonOptions(parser):
       dest='verbose_count', default=0, action='count',
       help='Verbose level (multiple times for more)')
 
-  AddTestLauncherArgs(parser)
+  AddTestLauncherOptions(parser)
 
 
 def ProcessCommonOptions(args):
@@ -293,10 +308,6 @@ def AddGTestOptions(parser):
       '--test-apk-incremental-install-script',
       type=os.path.realpath,
       help='Path to install script for the test apk.')
-  parser.add_argument(
-      '-a', '--test-arguments',
-      dest='test_arguments', default='',
-      help='Additional arguments to pass to the test.')
 
   filter_group = parser.add_mutually_exclusive_group()
   filter_group.add_argument(
@@ -343,17 +354,6 @@ def AddInstrumentationTestOptions(parser):
       action='store_true', dest='delete_stale_data',
       help='Delete stale test data on the device.')
   parser.add_argument(
-      '--device-flags',
-      dest='device_flags',
-      type=os.path.realpath,
-      help='The relative filepath to a file containing '
-           'command-line flags to set on the device')
-  parser.add_argument(
-      '--device-flags-file',
-      type=os.path.realpath,
-      help='The relative filepath to a file containing '
-           'command-line flags to set on the device')
-  parser.add_argument(
       '--disable-dalvik-asserts',
       dest='set_asserts', action='store_false', default=True,
       help='Removes the dalvik.vm.enableassertions property')
@@ -377,13 +377,13 @@ def AddInstrumentationTestOptions(parser):
            'fails or the golden image is missing but to render'
            'the view and carry on.')
   parser.add_argument(
+      '--render-results-directory',
+      dest='render_results_dir',
+      help='Directory to pull render test result images off of the device to.')
+  parser.add_argument(
       '--runtime-deps-path',
       dest='runtime_deps_path', type=os.path.realpath,
       help='Runtime data dependency file from GN.')
-  parser.add_argument(
-      '--save-perf-json',
-      action='store_true',
-      help='Saves the JSON file for each UI Perf test.')
   parser.add_argument(
       '--screenshot-directory',
       dest='screenshot_dir', type=os.path.realpath,
@@ -425,10 +425,6 @@ def AddInstrumentationTestOptions(parser):
       '--timeout-scale',
       type=float,
       help='Factor by which timeouts should be scaled.')
-  parser.add_argument(
-      '-w', '--wait_debugger',
-      action='store_true', dest='wait_for_debugger',
-      help='Wait for debugger.')
 
   # These arguments are suppressed from the help text because they should
   # only ever be specified by an intermediate script.
@@ -466,6 +462,21 @@ def AddJUnitTestOptions(parser):
       '-s', '--test-suite',
       dest='test_suite', required=True,
       help='JUnit test suite to run.')
+
+  # These arguments are for Android Robolectric tests.
+  parser.add_argument(
+      '--android-manifest-path',
+      help='Path to Android Manifest to configure Robolectric.')
+  parser.add_argument(
+      '--package-name',
+      help='Default app package name for Robolectric tests.')
+  parser.add_argument(
+      '--resource-zip',
+      action='append', dest='resource_zips', default=[],
+      help='Path to resource zips to configure Robolectric.')
+  parser.add_argument(
+      '--robolectric-runtime-deps-dir',
+      help='Path to runtime deps for Robolectric.')
 
 
 def AddLinkerTestOptions(parser):
@@ -754,6 +765,10 @@ def RunTestsInPlatformMode(args):
           dst = logdog_helper.open_text('unified_logcats')
           if dst:
             shutil.copyfileobj(src, dst)
+            dst.close()
+            logging.critical(
+                'Logcat: %s', logdog_helper.get_viewer_url('unified_logcats'))
+
 
   logcats_uploader = contextlib_ext.Optional(
       upload_logcats_file(),
@@ -851,6 +866,7 @@ def main():
   AddDeviceOptions(subp)
   AddGTestOptions(subp)
   AddTracingOptions(subp)
+  AddCommandLineOptions(subp)
 
   subp = command_parsers.add_parser(
       'instrumentation',
@@ -859,6 +875,7 @@ def main():
   AddDeviceOptions(subp)
   AddInstrumentationTestOptions(subp)
   AddTracingOptions(subp)
+  AddCommandLineOptions(subp)
 
   subp = command_parsers.add_parser(
       'junit',
@@ -894,7 +911,12 @@ def main():
   AddCommonOptions(subp)
   AddPythonTestOptions(subp)
 
-  args = parser.parse_args()
+  args, unknown_args = parser.parse_known_args()
+  if unknown_args:
+    if hasattr(args, 'allow_unknown') and args.allow_unknown:
+      args.command_line_flags = unknown_args
+    else:
+      parser.error('unrecognized arguments: %s' % ' '.join(unknown_args))
 
   try:
     return RunTestsCommand(args)

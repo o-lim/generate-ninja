@@ -14,6 +14,7 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "tools/gn/args.h"
+#include "tools/gn/label.h"
 #include "tools/gn/scope.h"
 #include "tools/gn/source_dir.h"
 #include "tools/gn/source_file.h"
@@ -31,9 +32,14 @@ class BuildSettings {
   BuildSettings(const BuildSettings& other);
   ~BuildSettings();
 
+  // Dot file path.
   const base::FilePath& dotfile_path() const { return dotfile_path_; }
   const std::string& dotfile_path_utf8() const { return dotfile_path_utf8_; }
   void SetDotFilePath(const base::FilePath& d);
+
+  // Root target label.
+  const Label& root_target_label() const { return root_target_label_; }
+  void SetRootTargetLabel(const Label& r);
 
   // Absolute path of the source root on the local system. Everything is
   // relative to this. Does not end in a [back]slash.
@@ -110,6 +116,7 @@ class BuildSettings {
  private:
   base::FilePath dotfile_path_;
   std::string dotfile_path_utf8_;
+  Label root_target_label_;
   base::FilePath root_path_;
   std::string root_path_utf8_;
   base::FilePath secondary_source_path_;

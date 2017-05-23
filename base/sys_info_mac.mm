@@ -19,9 +19,27 @@
 #include "base/mac/scoped_mach_port.h"
 #import "base/mac/sdk_forward_declarations.h"
 #include "base/macros.h"
+#include "base/process/process_metrics.h"
 #include "base/strings/stringprintf.h"
 
 namespace base {
+
+namespace {
+
+// Queries sysctlbyname() for the given key and returns the value from the
+// system or the empty string on failure.
+std::string GetSysctlValue(const char* key_name) {
+  char value[256];
+  size_t len = arraysize(value);
+  if (sysctlbyname(key_name, &value, &len, nullptr, 0) == 0) {
+    DCHECK_GE(len, 1u);
+    DCHECK_EQ('\0', value[len - 1]);
+    return std::string(value, len - 1);
+  }
+  return std::string();
+}
+
+}  // namespace
 
 // static
 std::string SysInfo::OperatingSystemName() {
@@ -83,37 +101,22 @@ int64_t SysInfo::AmountOfPhysicalMemory() {
 
 // static
 int64_t SysInfo::AmountOfAvailablePhysicalMemory() {
-  base::mac::ScopedMachSendRight host(mach_host_self());
-  vm_statistics_data_t vm_info;
-  mach_msg_type_number_t count = HOST_VM_INFO_COUNT;
-
-  if (host_statistics(host.get(),
-                      HOST_VM_INFO,
-                      reinterpret_cast<host_info_t>(&vm_info),
-                      &count) != KERN_SUCCESS) {
-    NOTREACHED();
+  SystemMemoryInfoKB info;
+  if (!GetSystemMemoryInfo(&info))
     return 0;
-  }
-
-  return static_cast<int64_t>(vm_info.free_count - vm_info.speculative_count) *
-         PAGE_SIZE;
+  // We should add inactive file-backed memory also but there is no such
+  // information from Mac OS unfortunately.
+  return static_cast<int64_t>(info.free + info.speculative) * 1024;
 }
 
 // static
 std::string SysInfo::CPUModelName() {
-  char name[256];
-  size_t len = arraysize(name);
-  if (sysctlbyname("machdep.cpu.brand_string", &name, &len, NULL, 0) == 0)
-    return name;
-  return std::string();
+  return GetSysctlValue("machdep.cpu.brand_string");
 }
 
+// static
 std::string SysInfo::HardwareModelName() {
-  char model[256];
-  size_t len = sizeof(model);
-  if (sysctlbyname("hw.model", model, &len, NULL, 0) == 0)
-    return std::string(model, 0, len);
-  return std::string();
+  return GetSysctlValue("hw.model");
 }
 
 }  // namespace base

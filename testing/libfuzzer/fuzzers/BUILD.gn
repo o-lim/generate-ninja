@@ -8,7 +8,7 @@ import("//build/config/features.gni")
 import("//media/media_options.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 
-# root BUILD depenends on this target. Needed for package discovery
+# root BUILD depends on this target. Needed for package discovery
 group("fuzzers") {
 }
 
@@ -17,16 +17,6 @@ fuzzer_test("empty_fuzzer") {
     "empty_fuzzer.cc",
   ]
   additional_configs = [ "//testing/libfuzzer:no_clusterfuzz" ]
-}
-
-fuzzer_test("brotli_fuzzer") {
-  sources = [
-    "brotli_fuzzer.cc",
-  ]
-  deps = [
-    "//third_party/brotli:dec",
-  ]
-  libfuzzer_options = [ "max_len=1280" ]
 }
 
 fuzzer_test("courgette_fuzzer") {
@@ -121,6 +111,19 @@ fuzzer_test("string_to_int_fuzzer") {
   deps = [
     "//base",
   ]
+}
+
+fuzzer_test("template_url_parser_fuzzer") {
+  sources = [
+    "template_url_parser_fuzzer.cc",
+  ]
+  deps = [
+    "//base",
+    "//base:i18n",
+    "//components/search_engines:search_engines",
+  ]
+  dict = "dicts/xml.dict"
+  libfuzzer_options = [ "max_len=4096" ]
 }
 
 fuzzer_test("url_parse_fuzzer") {
@@ -232,6 +235,7 @@ fuzzer_test("v8_script_parser_fuzzer") {
   ]
   dict = "dicts/generated/v8_script_parser_fuzzer.dict"
   seed_corpus = "//v8/test/mjsunit/regress/"
+  libfuzzer_options = [ "only_ascii=1" ]
 }
 
 fuzzer_test("v8_json_parser_fuzzer") {
@@ -282,7 +286,7 @@ fuzzer_test("v8_wasm_fuzzer") {
     "//v8:wasm_fuzzer",
   ]
   dict = "dicts/v8_wasm.dict"
-  seed_corpus = "//v8/test/fuzzer/wasm/"
+  seed_corpus = "//v8/test/fuzzer/wasm_corpus/"
   libfuzzer_options = [ "max_len=500" ]
 }
 
@@ -292,7 +296,7 @@ fuzzer_test("v8_wasm_asmjs_fuzzer") {
     "//v8:wasm_asmjs_fuzzer",
   ]
   dict = "dicts/v8_wasm.dict"
-  seed_corpus = "//v8/test/fuzzer/wasm_asmjs/"
+  seed_corpus = "//v8/test/fuzzer/wasm_asmjs_corpus/"
   libfuzzer_options = [ "max_len=500" ]
 }
 
@@ -352,17 +356,6 @@ fuzzer_test("v8_wasm_types_section_fuzzer") {
   libfuzzer_options = [ "max_len=500" ]
 }
 
-fuzzer_test("libxml_xml_regexp_compile_fuzzer") {
-  sources = [
-    "libxml_xml_regexp_compile_fuzzer.cc",
-  ]
-  deps = [
-    "//third_party/libxml",
-  ]
-  libfuzzer_options = [ "max_len=32" ]
-  additional_configs = [ "//testing/libfuzzer:no_clusterfuzz" ]
-}
-
 fuzzer_test("convert_woff2ttf_fuzzer") {
   sources = [
     "convert_woff2ttf_fuzzer.cc",
@@ -417,6 +410,19 @@ fuzzer_test("skia_pathop_fuzzer") {
     # Disabled due to crashing on SkASSERT (crbug.com/642750, crbug.com/643275).
     additional_configs = [ "//testing/libfuzzer:no_clusterfuzz" ]
   }
+}
+
+fuzzer_test("skia_color_space_fuzzer") {
+  sources = [
+    "color_space_data.h",
+    "skia_color_space_fuzzer.cc",
+  ]
+  deps = [
+    "//base",
+    "//skia",
+  ]
+  dict = "dicts/icc.dict"
+  libfuzzer_options = [ "max_len=4194304" ]
 }
 
 fuzzer_test("prtime_fuzzer") {

@@ -6,6 +6,8 @@
 
 #include <stddef.h>
 
+#include <unordered_map>
+
 #include "base/allocator/allocator_extension.h"
 #include "base/allocator/allocator_shim.h"
 #include "base/allocator/features.h"
@@ -54,10 +56,10 @@ void* HookZeroInitAlloc(const AllocatorDispatch* self,
   return ptr;
 }
 
-void* HookllocAligned(const AllocatorDispatch* self,
-                      size_t alignment,
-                      size_t size,
-                      void* context) {
+void* HookAllocAligned(const AllocatorDispatch* self,
+                       size_t alignment,
+                       size_t size,
+                       void* context) {
   const AllocatorDispatch* const next = self->next;
   void* ptr = next->alloc_aligned_function(next, alignment, size, context);
   if (ptr)
@@ -129,7 +131,7 @@ void HookFreeDefiniteSize(const AllocatorDispatch* self,
 AllocatorDispatch g_allocator_hooks = {
     &HookAlloc,            /* alloc_function */
     &HookZeroInitAlloc,    /* alloc_zero_initialized_function */
-    &HookllocAligned,      /* alloc_aligned_function */
+    &HookAllocAligned,     /* alloc_aligned_function */
     &HookRealloc,          /* realloc_function */
     &HookFree,             /* free_function */
     &HookGetSizeEstimate,  /* get_size_estimate_function */
@@ -292,11 +294,13 @@ bool MallocDumpProvider::OnMemoryDump(const MemoryDumpArgs& args,
 
   tid_dumping_heap_ = PlatformThread::CurrentId();
   // At this point the Insert/RemoveAllocation hooks will ignore this thread.
-  // Enclosing all the temporariy data structures in a scope, so that the heap
-  // profiler does not see unabalanced malloc/free calls from these containers.
+  // Enclosing all the temporary data structures in a scope, so that the heap
+  // profiler does not see unbalanced malloc/free calls from these containers.
   {
+    size_t shim_allocated_objects_size = 0;
+    size_t shim_allocated_objects_count = 0;
     TraceEventMemoryOverhead overhead;
-    hash_map<AllocationContext, AllocationMetrics> metrics_by_context;
+    std::unordered_map<AllocationContext, AllocationMetrics> metrics_by_context;
     {
       AutoLock lock(allocation_register_lock_);
       if (allocation_register_) {
@@ -305,10 +309,21 @@ bool MallocDumpProvider::OnMemoryDump(const MemoryDumpArgs& args,
             AllocationMetrics& metrics = metrics_by_context[alloc_size.context];
             metrics.size += alloc_size.size;
             metrics.count++;
+
+            // Aggregate data for objects allocated through the shim.
+            shim_allocated_objects_size += alloc_size.size;
+            shim_allocated_objects_count++;
           }
         }
         allocation_register_->EstimateTraceMemoryOverhead(&overhead);
       }
+
+      inner_dump->AddScalar("shim_allocated_objects_size",
+                             MemoryAllocatorDump::kUnitsBytes,
+                             shim_allocated_objects_size);
+      inner_dump->AddScalar("shim_allocator_object_count",
+                             MemoryAllocatorDump::kUnitsObjects,
+                             shim_allocated_objects_count);
     }  // lock(allocation_register_lock_)
     pmd->DumpHeapUsage(metrics_by_context, overhead, "malloc");
   }

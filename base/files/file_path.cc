@@ -174,7 +174,7 @@ FilePath::FilePath() {
 
 FilePath::FilePath(const FilePath& that) : path_(that.path_) {
 }
-FilePath::FilePath(FilePath&& that) = default;
+FilePath::FilePath(FilePath&& that) noexcept = default;
 
 FilePath::FilePath(StringPieceType path) {
   path.CopyToString(&path_);
@@ -207,6 +207,10 @@ bool FilePath::operator!=(const FilePath& that) const {
 #else  // defined(FILE_PATH_USES_DRIVE_LETTERS)
   return path_ != that.path_;
 #endif  // defined(FILE_PATH_USES_DRIVE_LETTERS)
+}
+
+std::ostream& operator<<(std::ostream& out, const FilePath& file_path) {
+  return out << file_path.value();
 }
 
 // static

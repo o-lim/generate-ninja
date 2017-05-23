@@ -9,13 +9,17 @@
 #include <vector>
 
 #include "base/base_export.h"
-#include "base/callback_forward.h"
+#include "base/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
+#include "base/strings/string_piece.h"
 #include "base/task_runner.h"
+#include "base/task_scheduler/scheduler_worker_pool_params.h"
+#include "base/task_scheduler/single_thread_task_runner_thread_mode.h"
 #include "base/task_scheduler/task_traits.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 
 namespace gin {
 class V8Platform;
@@ -28,31 +32,51 @@ class Location;
 namespace base {
 
 class HistogramBase;
-class SchedulerWorkerPoolParams;
 
 // Interface for a task scheduler and static methods to manage the instance used
-// by the post_task.h API. Note: all base/task_scheduler users should go through
-// post_task.h instead of TaskScheduler except for the one callsite per process
-// which manages the process' instance.
+// by the post_task.h API.
+//
+// The task scheduler doesn't create threads until Start() is called. Tasks can
+// be posted at any time but will not run until after Start() is called.
+//
+// The instance methods of this class are thread-safe.
+//
+// Note: All base/task_scheduler users should go through post_task.h instead of
+// TaskScheduler except for the one callsite per process which manages the
+// process's instance.
 class BASE_EXPORT TaskScheduler {
  public:
-  // Returns the index of the worker pool in which a task with |traits| should
-  // run. This should be coded in a future-proof way: new traits should
-  // gracefully map to a default pool.
-  using WorkerPoolIndexForTraitsCallback =
-      Callback<size_t(const TaskTraits& traits)>;
+  struct BASE_EXPORT InitParams {
+    InitParams(
+        const SchedulerWorkerPoolParams& background_worker_pool_params_in,
+        const SchedulerWorkerPoolParams&
+            background_blocking_worker_pool_params_in,
+        const SchedulerWorkerPoolParams& foreground_worker_pool_params_in,
+        const SchedulerWorkerPoolParams&
+            foreground_blocking_worker_pool_params_in);
+    ~InitParams();
+
+    const SchedulerWorkerPoolParams background_worker_pool_params;
+    const SchedulerWorkerPoolParams background_blocking_worker_pool_params;
+    const SchedulerWorkerPoolParams foreground_worker_pool_params;
+    const SchedulerWorkerPoolParams foreground_blocking_worker_pool_params;
+  };
 
   // Destroying a TaskScheduler is not allowed in production; it is always
   // leaked. In tests, it should only be destroyed after JoinForTesting() has
   // returned.
   virtual ~TaskScheduler() = default;
 
+  // Allows the task scheduler to create threads and run tasks following the
+  // |init_params| specification. CHECKs on failure.
+  virtual void Start(const InitParams& init_params) = 0;
+
   // Posts |task| with a |delay| and specific |traits|. |delay| can be zero.
   // For one off tasks that don't require a TaskRunner.
   virtual void PostDelayedTaskWithTraits(
       const tracked_objects::Location& from_here,
       const TaskTraits& traits,
-      const Closure& task,
+      OnceClosure task,
       TimeDelta delay) = 0;
 
   // Returns a TaskRunner whose PostTask invocations result in scheduling tasks
@@ -69,7 +93,24 @@ class BASE_EXPORT TaskScheduler {
   // scheduling tasks using |traits|. Tasks run on a single thread in posting
   // order.
   virtual scoped_refptr<SingleThreadTaskRunner>
-  CreateSingleThreadTaskRunnerWithTraits(const TaskTraits& traits) = 0;
+  CreateSingleThreadTaskRunnerWithTraits(
+      const TaskTraits& traits,
+      SingleThreadTaskRunnerThreadMode thread_mode) = 0;
+
+#if defined(OS_WIN)
+  // Returns a SingleThreadTaskRunner whose PostTask invocations result in
+  // scheduling tasks using |traits| in a COM Single-Threaded Apartment. Tasks
+  // run in the same Single-Threaded Apartment in posting order for the returned
+  // SingleThreadTaskRunner. There is not necessarily a one-to-one
+  // correspondence between SingleThreadTaskRunners and Single-Threaded
+  // Apartments. The implementation is free to share apartments or create new
+  // apartments as necessary. In either case, care should be taken to make sure
+  // COM pointers are not smuggled across apartments.
+  virtual scoped_refptr<SingleThreadTaskRunner>
+  CreateCOMSTATaskRunnerWithTraits(
+      const TaskTraits& traits,
+      SingleThreadTaskRunnerThreadMode thread_mode) = 0;
+#endif  // defined(OS_WIN)
 
   // Returns a vector of all histograms available in this task scheduler.
   virtual std::vector<const HistogramBase*> GetHistograms() const = 0;
@@ -98,29 +139,38 @@ class BASE_EXPORT TaskScheduler {
   // after this call.
   virtual void JoinForTesting() = 0;
 
-  // CreateAndSetSimpleTaskScheduler(), CreateAndSetDefaultTaskScheduler(), and
-  // SetInstance() register a TaskScheduler to handle tasks posted through the
-  // post_task.h API for this process. The registered TaskScheduler will only be
-  // deleted when a new TaskScheduler is registered and is leaked on shutdown.
-  // The methods must not be called when TaskRunners created by the previous
-  // TaskScheduler are still alive. The methods are not thread-safe; proper
-  // synchronization is required to use the post_task.h API after registering a
-  // new TaskScheduler.
+// CreateAndStartWithDefaultParams(), Create(), and SetInstance() register a
+// TaskScheduler to handle tasks posted through the post_task.h API for this
+// process.
+//
+// Processes that need to initialize TaskScheduler with custom params or that
+// need to allow tasks to be posted before the TaskScheduler creates its
+// threads should use Create() followed by Start(). Other processes can use
+// CreateAndStartWithDefaultParams().
+//
+// A registered TaskScheduler is only deleted when a new TaskScheduler is
+// registered. The last registered TaskScheduler is leaked on shutdown. The
+// methods below must not be called when TaskRunners created by a previous
+// TaskScheduler are still alive. The methods are not thread-safe; proper
+// synchronization is required to use the post_task.h API after registering a
+// new TaskScheduler.
 
-  // Creates and sets a task scheduler with one worker pool that can have up to
-  // |max_threads| threads. CHECKs on failure. For tests, prefer
-  // base::test::ScopedTaskScheduler (ensures isolation).
-  static void CreateAndSetSimpleTaskScheduler(int max_threads);
+#if !defined(OS_NACL)
+  // Creates and starts a task scheduler using default params. |name| is used to
+  // label threads and histograms. It should identify the component that calls
+  // this. Start() is called by this method; it is invalid to call it again
+  // afterwards. CHECKs on failure. For tests, prefer
+  // base::test::ScopedTaskEnvironment (ensures isolation).
+  static void CreateAndStartWithDefaultParams(StringPiece name);
+#endif  // !defined(OS_NACL)
 
-  // Creates and sets a task scheduler with custom worker pools. CHECKs on
-  // failure. |worker_pool_params_vector| describes the worker pools to create.
-  // |worker_pool_index_for_traits_callback| returns the index in |worker_pools|
-  // of the worker pool in which a task with given traits should run. For tests,
-  // prefer base::test::ScopedTaskScheduler (ensures isolation).
-  static void CreateAndSetDefaultTaskScheduler(
-      const std::vector<SchedulerWorkerPoolParams>& worker_pool_params_vector,
-      const WorkerPoolIndexForTraitsCallback&
-          worker_pool_index_for_traits_callback);
+  // Creates a ready to start task scheduler. |name| is used to label threads
+  // and histograms. It should identify the component that creates the
+  // TaskScheduler. The task scheduler doesn't create threads until Start() is
+  // called. Tasks can be posted at any time but will not run until after
+  // Start() is called. For tests, prefer base::test::ScopedTaskEnvironment
+  // (ensures isolation).
+  static void Create(StringPiece name);
 
   // Registers |task_scheduler| to handle tasks posted through the post_task.h
   // API for this process. For tests, prefer base::test::ScopedTaskScheduler

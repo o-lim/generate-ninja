@@ -30,16 +30,18 @@ with the following files/directories exported directly via `git archive`:
  - testing/\*.mm
  - third\_party/apple\_apsl
  - third\_party/ced
+ - third\_party/googletest
  - third\_party/libxml
  - third\_party/modp\_b64
  - third\_party/zlib
 
-and the following git submodules exported into their respective directories:
+and the following git sub-repos exported into their respective directories:
 
  - testing/gmock
  - testing/gtest
  - third\_party/ced/src
  - third\_party/icu
+ - third\_party/googletest/src
 
 Furthermore, this fork adds some minor features as well as some bug fixes:
 

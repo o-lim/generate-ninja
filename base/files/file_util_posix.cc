@@ -56,6 +56,12 @@
 #include <grp.h>
 #endif
 
+// We need to do this on AIX due to some inconsistencies in how AIX
+// handles XOPEN_SOURCE and ALL_SOURCE.
+#if defined(OS_AIX)
+extern "C" char* mkdtemp(char* path);
+#endif
+
 namespace base {
 
 namespace {
@@ -81,17 +87,6 @@ static int CallLstat(const char *path, stat_wrapper_t *sb) {
 #endif  // !(defined(OS_BSD) || defined(OS_MACOSX) || defined(OS_NACL))
 
 #if !defined(OS_NACL_NONSFI)
-// Helper for NormalizeFilePath(), defined below.
-bool RealPath(const FilePath& path, FilePath* real_path) {
-  ThreadRestrictions::AssertIOAllowed();  // For realpath().
-  FilePath::CharType buf[PATH_MAX];
-  if (!realpath(path.value().c_str(), buf))
-    return false;
-
-  *real_path = FilePath(buf);
-  return true;
-}
-
 // Helper for VerifyPathControlledByUser.
 bool VerifySpecificPathControlledByUser(const FilePath& path,
                                         uid_t owner_uid,
@@ -156,7 +151,7 @@ int CreateAndOpenFdForTemporaryFile(FilePath directory, FilePath* path) {
   return HANDLE_EINTR(mkstemp(buffer));
 }
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_AIX)
 // Determine if /dev/shm files can be mapped and then mprotect'd PROT_EXEC.
 // This depends on the mount options used for /dev/shm, which vary among
 // different Linux distributions and possibly local configuration.  It also
@@ -671,8 +666,8 @@ bool CreateDirectoryAndGetError(const FilePath& full_path,
 }
 
 bool NormalizeFilePath(const FilePath& path, FilePath* normalized_path) {
-  FilePath real_path_result;
-  if (!RealPath(path, &real_path_result))
+  FilePath real_path_result = MakeAbsoluteFilePath(path);
+  if (real_path_result.empty())
     return false;
 
   // To be consistant with windows, fail if |real_path_result| is a
@@ -922,7 +917,7 @@ int GetMaximumPathComponentLength(const FilePath& path) {
 #if !defined(OS_ANDROID)
 // This is implemented in file_util_android.cc for that platform.
 bool GetShmemTempDir(bool executable, FilePath* path) {
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_AIX)
   bool use_dev_shm = true;
   if (executable) {
     static const bool s_dev_shm_executable = DetermineDevShmExecutable();

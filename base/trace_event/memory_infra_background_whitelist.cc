@@ -40,6 +40,12 @@ const char* const kDumpProviderWhitelist[] = {
     nullptr  // End of list marker.
 };
 
+// The names of dump providers whitelisted for summary tracing.
+const char* const kDumpProviderSummaryWhitelist[] = {
+    "Malloc", "PartitionAlloc", "ProcessMemoryMetrics", "V8Isolate",
+    nullptr  // End of list marker.
+};
+
 // A list of string names that are allowed for the memory allocator dumps in
 // background mode.
 const char* const kAllocatorDumpNameWhitelist[] = {
@@ -69,10 +75,70 @@ const char* const kAllocatorDumpNameWhitelist[] = {
     "net/http_network_session_0x?/stream_factory",
     "net/sdch_manager_0x?",
     "net/ssl_session_cache",
-    "net/url_request_context_0x?",
-    "net/url_request_context_0x?/http_cache",
-    "net/url_request_context_0x?/http_network_session",
-    "net/url_request_context_0x?/sdch_manager",
+    "net/url_request_context",
+    "net/url_request_context/app_request",
+    "net/url_request_context/app_request/0x?",
+    "net/url_request_context/app_request/0x?/http_cache",
+    "net/url_request_context/app_request/0x?/http_cache/memory_backend",
+    "net/url_request_context/app_request/0x?/http_cache/simple_backend",
+    "net/url_request_context/app_request/0x?/http_network_session",
+    "net/url_request_context/app_request/0x?/sdch_manager",
+    "net/url_request_context/extensions",
+    "net/url_request_context/extensions/0x?",
+    "net/url_request_context/extensions/0x?/http_cache",
+    "net/url_request_context/extensions/0x?/http_cache/memory_backend",
+    "net/url_request_context/extensions/0x?/http_cache/simple_backend",
+    "net/url_request_context/extensions/0x?/http_network_session",
+    "net/url_request_context/extensions/0x?/sdch_manager",
+    "net/url_request_context/isolated_media",
+    "net/url_request_context/isolated_media/0x?",
+    "net/url_request_context/isolated_media/0x?/http_cache",
+    "net/url_request_context/isolated_media/0x?/http_cache/memory_backend",
+    "net/url_request_context/isolated_media/0x?/http_cache/simple_backend",
+    "net/url_request_context/isolated_media/0x?/http_network_session",
+    "net/url_request_context/isolated_media/0x?/sdch_manager",
+    "net/url_request_context/main",
+    "net/url_request_context/main/0x?",
+    "net/url_request_context/main/0x?/http_cache",
+    "net/url_request_context/main/0x?/http_cache/memory_backend",
+    "net/url_request_context/main/0x?/http_cache/simple_backend",
+    "net/url_request_context/main/0x?/http_network_session",
+    "net/url_request_context/main/0x?/sdch_manager",
+    "net/url_request_context/main_media",
+    "net/url_request_context/main_media/0x?",
+    "net/url_request_context/main_media/0x?/http_cache",
+    "net/url_request_context/main_media/0x?/http_cache/memory_backend",
+    "net/url_request_context/main_media/0x?/http_cache/simple_backend",
+    "net/url_request_context/main_media/0x?/http_network_session",
+    "net/url_request_context/main_media/0x?/sdch_manager",
+    "net/url_request_context/proxy",
+    "net/url_request_context/proxy/0x?",
+    "net/url_request_context/proxy/0x?/http_cache",
+    "net/url_request_context/proxy/0x?/http_cache/memory_backend",
+    "net/url_request_context/proxy/0x?/http_cache/simple_backend",
+    "net/url_request_context/proxy/0x?/http_network_session",
+    "net/url_request_context/proxy/0x?/sdch_manager",
+    "net/url_request_context/safe_browsing",
+    "net/url_request_context/safe_browsing/0x?",
+    "net/url_request_context/safe_browsing/0x?/http_cache",
+    "net/url_request_context/safe_browsing/0x?/http_cache/memory_backend",
+    "net/url_request_context/safe_browsing/0x?/http_cache/simple_backend",
+    "net/url_request_context/safe_browsing/0x?/http_network_session",
+    "net/url_request_context/safe_browsing/0x?/sdch_manager",
+    "net/url_request_context/system",
+    "net/url_request_context/system/0x?",
+    "net/url_request_context/system/0x?/http_cache",
+    "net/url_request_context/system/0x?/http_cache/memory_backend",
+    "net/url_request_context/system/0x?/http_cache/simple_backend",
+    "net/url_request_context/system/0x?/http_network_session",
+    "net/url_request_context/system/0x?/sdch_manager",
+    "net/url_request_context/unknown",
+    "net/url_request_context/unknown/0x?",
+    "net/url_request_context/unknown/0x?/http_cache",
+    "net/url_request_context/unknown/0x?/http_cache/memory_backend",
+    "net/url_request_context/unknown/0x?/http_cache/simple_backend",
+    "net/url_request_context/unknown/0x?/http_network_session",
+    "net/url_request_context/unknown/0x?/sdch_manager",
     "web_cache/Image_resources",
     "web_cache/CSS stylesheet_resources",
     "web_cache/Script_resources",
@@ -145,17 +211,28 @@ const char* const kAllocatorDumpNameWhitelist[] = {
 };
 
 const char* const* g_dump_provider_whitelist = kDumpProviderWhitelist;
+const char* const* g_dump_provider_whitelist_for_summary =
+    kDumpProviderSummaryWhitelist;
 const char* const* g_allocator_dump_name_whitelist =
     kAllocatorDumpNameWhitelist;
+
+bool IsMemoryDumpProviderInList(const char* mdp_name, const char* const* list) {
+  for (size_t i = 0; list[i] != nullptr; ++i) {
+    if (strcmp(mdp_name, list[i]) == 0)
+      return true;
+  }
+  return false;
+}
 
 }  // namespace
 
 bool IsMemoryDumpProviderWhitelisted(const char* mdp_name) {
-  for (size_t i = 0; g_dump_provider_whitelist[i] != nullptr; ++i) {
-    if (strcmp(mdp_name, g_dump_provider_whitelist[i]) == 0)
-      return true;
-  }
-  return false;
+  return IsMemoryDumpProviderInList(mdp_name, g_dump_provider_whitelist);
+}
+
+bool IsMemoryDumpProviderWhitelistedForSummary(const char* mdp_name) {
+  return IsMemoryDumpProviderInList(mdp_name,
+                                    g_dump_provider_whitelist_for_summary);
 }
 
 bool IsMemoryAllocatorDumpNameWhitelisted(const std::string& name) {
@@ -188,6 +265,10 @@ bool IsMemoryAllocatorDumpNameWhitelisted(const std::string& name) {
 
 void SetDumpProviderWhitelistForTesting(const char* const* list) {
   g_dump_provider_whitelist = list;
+}
+
+void SetDumpProviderSummaryWhitelistForTesting(const char* const* list) {
+  g_dump_provider_whitelist_for_summary = list;
 }
 
 void SetAllocatorDumpNameWhitelistForTesting(const char* const* list) {

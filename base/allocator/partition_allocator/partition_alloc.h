@@ -60,6 +60,7 @@
 // - Better freelist masking function to guarantee fault on 32-bit.
 
 #include <limits.h>
+#include <string.h>
 
 #include "base/allocator/partition_allocator/page_allocator.h"
 #include "base/allocator/partition_allocator/spin_lock.h"
@@ -873,9 +874,6 @@ ALWAYS_INLINE size_t PartitionAllocGetSize(void* ptr) {
   return PartitionCookieSizeAdjustSubtract(size);
 }
 
-// N (or more accurately, N - sizeof(void*)) represents the largest size in
-// bytes that will be handled by a SizeSpecificPartitionAllocator.
-// Attempts to partitionAlloc() more than this amount will fail.
 template <size_t N>
 class SizeSpecificPartitionAllocator {
  public:

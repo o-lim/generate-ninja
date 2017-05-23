@@ -200,7 +200,10 @@ config("default_sanitizer_ldflags") {
     ldflags = []
     if (is_asan) {
       ldflags += [ "-fsanitize=address" ]
-      if (!is_mac) {
+      if (is_mac) {
+        # https://crbug.com/708707
+        ldflags += [ "-fno-sanitize-address-use-after-scope" ]
+      } else {
         ldflags += [ "-fsanitize-address-use-after-scope" ]
       }
     }
@@ -274,12 +277,15 @@ config("common_sanitizer_flags") {
   cflags_cc = []
 
   # Sanitizers need line table info for stack traces. They don't need type info
-  # or variable info, so we can leave that out to speed up the build.
+  # or variable info, so we can leave that out to speed up the build (unless
+  # it's explicitly asked for by setting |sanitizer_keep_symbols| to true).
   if (using_sanitizer) {
     assert(is_clang, "sanitizers only supported with clang")
-    cflags += [
-      "-gline-tables-only",
+    if (!sanitizer_keep_symbols) {
+      cflags += [ "-gline-tables-only" ]
+    }
 
+    cflags += [
       # Column info in debug data confuses Visual Studio's debugger, so don't
       # use this by default.  However, clusterfuzz needs it for good attribution
       # of reports to CLs, so turn it on there.
@@ -314,6 +320,9 @@ config("asan_flags") {
     cflags += [ "-fsanitize=address" ]
     if (!is_mac && !is_win) {
       cflags += [ "-fsanitize-address-use-after-scope" ]
+    } else if (!is_win) {
+      # https://crbug.com/708707
+      cflags += [ "-fno-sanitize-address-use-after-scope" ]
     }
     if (!asan_globals) {
       cflags += [
@@ -383,6 +392,10 @@ config("cfi_flags") {
         "-fsanitize=cfi-derived-cast",
         "-fsanitize=cfi-unrelated-cast",
       ]
+    }
+
+    if (use_cfi_icall) {
+      cflags += [ "-fsanitize=cfi-icall" ]
     }
 
     if (use_cfi_diag) {

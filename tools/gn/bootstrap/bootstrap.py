@@ -32,7 +32,8 @@ SRC_ROOT = os.path.dirname(os.path.dirname(GN_ROOT))
 is_win = sys.platform.startswith('win')
 is_linux = sys.platform.startswith('linux')
 is_mac = sys.platform.startswith('darwin')
-is_posix = is_linux or is_mac
+is_aix = sys.platform.startswith('aix')
+is_posix = is_linux or is_mac or is_aix
 
 def check_call(cmd, **kwargs):
   logging.debug('Running: %s', ' '.join(cmd))
@@ -171,7 +172,8 @@ def build_gn_with_ninja_manually(tempdir, options):
   write_buildflag_header_manually(root_gen_dir, 'base/debug/debugging_flags.h',
       {
           'ENABLE_PROFILING': 'false',
-          'ENABLE_MEMORY_TASK_PROFILER': 'false'
+          'ENABLE_MEMORY_TASK_PROFILER': 'false',
+          'CAN_UNWIND_WITH_FRAME_POINTERS': 'false'
       })
 
   write_build_date_header(root_gen_dir)
@@ -212,6 +214,8 @@ def write_generic_ninja(path, static_libraries, executables,
     template_filename = 'build_vs.ninja.template'
   elif is_mac:
     template_filename = 'build_mac.ninja.template'
+  elif is_aix:
+    template_filename = 'build_aix.ninja.template'
   else:
     template_filename = 'build.ninja.template'
 
@@ -290,6 +294,11 @@ def write_gn_ninja(path, root_gen_dir, options):
     cxx = os.environ.get('CXX', 'cl.exe')
     ld = os.environ.get('LD', 'link.exe')
     ar = os.environ.get('AR', 'lib.exe')
+  elif is_aix:
+    cc = os.environ.get('CC', 'gcc')
+    cxx = os.environ.get('CXX', 'c++')
+    ld = os.environ.get('LD', cxx)
+    ar = os.environ.get('AR', 'ar -X64')
   else:
     cc = os.environ.get('CC', 'cc')
     cxx = os.environ.get('CXX', 'c++')
@@ -311,6 +320,12 @@ def write_gn_ninja(path, root_gen_dir, options):
     if options.debug:
       cflags.extend(['-O0', '-g'])
     else:
+      # The linux::ppc64 BE binary doesn't "work" when
+      # optimization level is set to 2 (0 works fine).
+      # Note that the current bootstrap script has no way to detect host_cpu.
+      # This can be easily fixed once we start building using a GN binary,
+      # as the optimization flag can then just be set using the
+      # logic inside //build/toolchain.
       cflags.extend(['-O2', '-g0'])
 
     cflags.extend([
@@ -321,6 +336,9 @@ def write_gn_ninja(path, root_gen_dir, options):
         '-fno-exceptions'
     ])
     cflags_cc.extend(['-std=c++11', '-Wno-c++11-narrowing', '-Wno-deprecated-register'])
+    if is_aix:
+     cflags.extend(['-maix64'])
+     ldflags.extend([ '-maix64 -Wl,-bbigtoc' ])
   elif is_win:
     if not options.debug:
       cflags.extend(['/Ox', '/DNDEBUG', '/GL'])
@@ -383,6 +401,7 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/command_line.cc',
       'base/debug/activity_tracker.cc',
       'base/debug/alias.cc',
+      'base/debug/crash_logging.cc',
       'base/debug/dump_without_crashing.cc',
       'base/debug/stack_trace.cc',
       'base/debug/task_annotator.cc',
@@ -410,6 +429,7 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/memory/ref_counted.cc',
       'base/memory/ref_counted_memory.cc',
       'base/memory/singleton.cc',
+      'base/memory/shared_memory_handle.cc',
       'base/memory/weak_ptr.cc',
       'base/message_loop/incoming_task_queue.cc',
       'base/message_loop/message_loop.cc',
@@ -464,7 +484,7 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/task_scheduler/post_task.cc',
       'base/task_scheduler/priority_queue.cc',
       'base/task_scheduler/scheduler_lock_impl.cc',
-      "base/task_scheduler/scheduler_single_thread_task_runner_manager.cc",
+      'base/task_scheduler/scheduler_single_thread_task_runner_manager.cc',
       'base/task_scheduler/scheduler_worker.cc',
       'base/task_scheduler/scheduler_worker_pool_impl.cc',
       'base/task_scheduler/scheduler_worker_pool_params.cc',
@@ -494,6 +514,10 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/threading/thread_restrictions.cc',
       'base/threading/thread_task_runner_handle.cc',
       'base/threading/worker_pool.cc',
+      'base/time/clock.cc',
+      'base/time/default_clock.cc',
+      'base/time/default_tick_clock.cc',
+      'base/time/tick_clock.cc',
       'base/time/time.cc',
       'base/timer/elapsed_timer.cc',
       'base/timer/timer.cc',
@@ -504,20 +528,26 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/trace_event/heap_profiler_allocation_register.cc',
       'base/trace_event/heap_profiler_event_filter.cc',
       'base/trace_event/heap_profiler_heap_dump_writer.cc',
+      'base/trace_event/heap_profiler_serialization_state.cc',
       'base/trace_event/heap_profiler_stack_frame_deduplicator.cc',
       'base/trace_event/heap_profiler_type_name_deduplicator.cc',
+      'base/trace_event/malloc_dump_provider.cc',
       'base/trace_event/memory_allocator_dump.cc',
       'base/trace_event/memory_allocator_dump_guid.cc',
       'base/trace_event/memory_dump_manager.cc',
+      'base/trace_event/memory_dump_provider_info.cc',
       'base/trace_event/memory_dump_request_args.cc',
       'base/trace_event/memory_dump_scheduler.cc',
-      'base/trace_event/memory_dump_session_state.cc',
       'base/trace_event/memory_infra_background_whitelist.cc',
+      'base/trace_event/memory_peak_detector.cc',
+      'base/trace_event/memory_tracing_observer.cc',
+      'base/trace_event/memory_usage_estimator.cc',
       'base/trace_event/process_memory_dump.cc',
       'base/trace_event/process_memory_maps.cc',
       'base/trace_event/process_memory_totals.cc',
       'base/trace_event/trace_buffer.cc',
       'base/trace_event/trace_config.cc',
+      'base/trace_event/trace_config_category_filter.cc',
       'base/trace_event/trace_event_argument.cc',
       'base/trace_event/trace_event_filter.cc',
       'base/trace_event/trace_event_impl.cc',
@@ -528,6 +558,7 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/trace_event/tracing_agent.cc',
       'base/tracked_objects.cc',
       'base/tracking_info.cc',
+      'base/unguessable_token.cc',
       'base/values.cc',
       'base/vlog.cc',
   ])
@@ -537,8 +568,8 @@ def write_gn_ninja(path, root_gen_dir, options):
         'base/base_paths_posix.cc',
         'base/debug/debugger_posix.cc',
         'base/debug/stack_trace_posix.cc',
-        'base/files/file_descriptor_watcher_posix.cc',
         'base/files/file_enumerator_posix.cc',
+        'base/files/file_descriptor_watcher_posix.cc',
         'base/files/file_posix.cc',
         'base/files/file_util_posix.cc',
         'base/files/memory_mapped_file_posix.cc',
@@ -587,8 +618,7 @@ def write_gn_ninja(path, root_gen_dir, options):
         'cflags': cflags + ['-DHAVE_CONFIG_H'],
     }
 
-  if is_linux:
-    libs.extend(['-lrt', '-latomic'])
+  if is_linux or is_aix:
     ldflags.extend(['-pthread'])
 
     static_libraries['xdg_user_dirs'] = {
@@ -598,29 +628,44 @@ def write_gn_ninja(path, root_gen_dir, options):
         'tool': 'cxx',
     }
     static_libraries['base']['sources'].extend([
-        'base/allocator/allocator_shim.cc',
-        'base/allocator/allocator_shim_default_dispatch_to_glibc.cc',
+        'base/memory/shared_memory_handle_posix.cc',
         'base/memory/shared_memory_posix.cc',
         'base/memory/shared_memory_tracker.cc',
         'base/nix/xdg_util.cc',
         'base/process/internal_linux.cc',
         'base/process/memory_linux.cc',
         'base/process/process_handle_linux.cc',
+        'base/process/process_info_linux.cc',
         'base/process/process_iterator_linux.cc',
         'base/process/process_linux.cc',
         'base/process/process_metrics_linux.cc',
         'base/strings/sys_string_conversions_posix.cc',
         'base/sys_info_linux.cc',
         'base/threading/platform_thread_linux.cc',
-        'base/trace_event/malloc_dump_provider.cc',
     ])
-    static_libraries['libevent']['include_dirs'].extend([
-        os.path.join(SRC_ROOT, 'base', 'third_party', 'libevent', 'linux')
-    ])
-    static_libraries['libevent']['sources'].extend([
-        'base/third_party/libevent/epoll.c',
-    ])
-
+    if is_linux:
+      static_libraries['base']['sources'].extend([
+        'base/allocator/allocator_shim.cc',
+        'base/allocator/allocator_shim_default_dispatch_to_glibc.cc',
+      ])
+      libs.extend(['-lrt', '-latomic'])
+      static_libraries['libevent']['include_dirs'].extend([
+          os.path.join(SRC_ROOT, 'base', 'third_party', 'libevent', 'linux')
+      ])
+      static_libraries['libevent']['sources'].extend([
+         'base/third_party/libevent/epoll.c',
+      ])
+    else:
+      libs.extend(['-lrt'])
+      static_libraries['base']['sources'].extend([
+          'base/process/internal_aix.cc'
+      ])
+      static_libraries['libevent']['include_dirs'].extend([
+          os.path.join(SRC_ROOT, 'base', 'third_party', 'libevent', 'aix')
+      ])
+      static_libraries['libevent']['include_dirs'].extend([
+          os.path.join(SRC_ROOT, 'base', 'third_party', 'libevent', 'compat')
+      ])
 
   if is_mac:
     static_libraries['base']['sources'].extend([
@@ -639,12 +684,13 @@ def write_gn_ninja(path, root_gen_dir, options):
         'base/message_loop/message_pump_mac.mm',
         'base/process/memory_mac.mm',
         'base/process/process_handle_mac.cc',
+        'base/process/process_info_mac.cc',
         'base/process/process_iterator_mac.cc',
         'base/process/process_metrics_mac.cc',
         'base/strings/sys_string_conversions_mac.mm',
+        'base/sys_info_mac.mm',
         'base/time/time_mac.cc',
         'base/threading/platform_thread_mac.mm',
-        'base/trace_event/malloc_dump_provider.cc',
     ])
     static_libraries['libevent']['include_dirs'].extend([
         os.path.join(SRC_ROOT, 'base', 'third_party', 'libevent', 'mac')
@@ -675,6 +721,7 @@ def write_gn_ninja(path, root_gen_dir, options):
         'base/files/file_util_win.cc',
         'base/files/file_win.cc',
         'base/files/memory_mapped_file_win.cc',
+        'base/guid.cc',
         'base/logging_win.cc',
         'base/memory/memory_pressure_monitor_win.cc',
         'base/memory/shared_memory_handle_win.cc',
@@ -735,15 +782,15 @@ def write_gn_ninja(path, root_gen_dir, options):
 
     libs.extend([
         'advapi32.lib',
+        'dbghelp.lib',
         'kernel32.lib',
-        'user32.lib',
-        'shell32.lib',
         'ole32.lib',
-        'winmm.lib',
-        'ws2_32.lib',
+        'shell32.lib',
+        'user32.lib',
         'userenv.lib',
         'version.lib',
-        'dbghelp.lib',
+        'winmm.lib',
+        'ws2_32.lib',
     ])
 
   # we just build static libraries that GN needs

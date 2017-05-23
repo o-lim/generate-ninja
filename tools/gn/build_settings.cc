@@ -31,6 +31,10 @@ void BuildSettings::SetDotFilePath(const base::FilePath& d) {
   dotfile_path_utf8_ = FilePathToUTF8(dotfile_path_);
 }
 
+void BuildSettings::SetRootTargetLabel(const Label& r) {
+  root_target_label_ = r;
+}
+
 void BuildSettings::SetRootPath(const base::FilePath& r) {
   DCHECK(r.value()[r.value().size() - 1] != base::FilePath::kSeparators[0]);
   root_path_ = r.NormalizePathSeparatorsTo('/');

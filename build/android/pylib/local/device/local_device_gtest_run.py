@@ -172,6 +172,8 @@ class _ApkDelegate(object):
         logging.exception('gtest shard failed.')
       except device_errors.CommandTimeoutError:
         logging.exception('gtest shard timed out.')
+      except device_errors.DeviceUnreachableError:
+        logging.exception('gtest shard device unreachable.')
       except Exception:
         device.ForceStop(self._package)
         raise
@@ -234,6 +236,8 @@ class _ExeDelegate(object):
     except (device_errors.CommandFailedError, KeyError):
       pass
 
+    # Executable tests return a nonzero exit code on test failure, which is
+    # fine from the test runner's perspective; thus check_return=False.
     output = device.RunShellCommand(
         cmd, cwd=cwd, env=env, check_return=False, large_output=True, **kwargs)
     return output
@@ -388,17 +392,19 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
         dir=self._delegate.ResultsDirectory(device),
         suffix='.xml') as device_tmp_results_file:
 
-      flags = self._test_instance.test_arguments or ''
+      flags = list(self._test_instance.flags)
       if self._test_instance.enable_xml_result_parsing:
-        flags += ' --gtest_output=xml:%s' % device_tmp_results_file.name
-      if self._test_instance.gtest_also_run_disabled_tests:
-        flags += ' --gtest_also_run_disabled_tests'
+        flags.append('--gtest_output=xml:%s' % device_tmp_results_file.name)
+
+      logging.info('flags:')
+      for f in flags:
+        logging.info('  %s', f)
 
       with contextlib_ext.Optional(
           trace_event.trace(str(test)),
           self._env.trace_output):
         output = self._delegate.Run(
-            test, device, flags=flags,
+            test, device, flags=' '.join(flags),
             timeout=timeout, retries=0)
 
       if self._test_instance.enable_xml_result_parsing:
@@ -413,6 +419,9 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
                                   self._test_instance.app_file_dir)
     if not self._env.skip_clear_data:
       self._delegate.Clear(device)
+
+    for l in output:
+      logging.info(l)
 
     # Parse the output.
     # TODO(jbudorick): Transition test scripts away from parsing stdout.
@@ -439,10 +448,15 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
                 time.strftime('%Y%m%dT%H%M%S', time.localtime()),
                 device.serial)
             tombstones_url = logdog_helper.text(
-                stream_name, resolved_tombstones)
+                stream_name, '\n'.join(resolved_tombstones))
           result.SetLink('tombstones', tombstones_url)
 
-    not_run_tests = set(test).difference(set(r.GetName() for r in results))
+    tests_stripped_disabled_prefix = set()
+    for t in test:
+      tests_stripped_disabled_prefix.add(
+          gtest_test_instance.TestNameWithoutDisabledPrefix(t))
+    not_run_tests = tests_stripped_disabled_prefix.difference(
+        set(r.GetName() for r in results))
     return results, list(not_run_tests) if results else None
 
   #override

@@ -6,12 +6,15 @@ package org.chromium.base.test;
 
 import android.content.Context;
 import android.support.test.InstrumentationRegistry;
+import android.support.test.internal.runner.junit4.AndroidJUnit4ClassRunner;
+import android.support.test.internal.util.AndroidRunnerParams;
 
 import org.junit.runner.notification.RunNotifier;
-import org.junit.runners.BlockJUnit4ClassRunner;
 import org.junit.runners.model.FrameworkMethod;
 import org.junit.runners.model.InitializationError;
+import org.junit.runners.model.Statement;
 
+import org.chromium.base.CollectionUtil;
 import org.chromium.base.test.BaseTestResult.PreTestHook;
 import org.chromium.base.test.util.DisableIfSkipCheck;
 import org.chromium.base.test.util.MinAndroidSdkLevelSkipCheck;
@@ -20,13 +23,17 @@ import org.chromium.base.test.util.SkipCheck;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 /**
  *  A custom runner for JUnit4 tests that checks requirements to conditionally ignore tests.
+ *
+ *  This ClassRunner imports from AndroidJUnit4ClassRunner which is a hidden but accessible
+ *  class. The reason is that default JUnit4 runner for Android is a final class,
+ *  AndroidJUnit4. We need to extends an inheritable class to change {@link #runChild}
+ *  and {@link #isIgnored} to add SkipChecks and PreTesthook.
  */
-public class BaseJUnit4ClassRunner extends BlockJUnit4ClassRunner {
+public class BaseJUnit4ClassRunner extends AndroidJUnit4ClassRunner {
     private final List<SkipCheck> mSkipChecks;
     private final List<PreTestHook> mPreTestHooks;
 
@@ -74,9 +81,11 @@ public class BaseJUnit4ClassRunner extends BlockJUnit4ClassRunner {
     public BaseJUnit4ClassRunner(
             final Class<?> klass, List<SkipCheck> checks, List<PreTestHook> hooks)
             throws InitializationError {
-        super(klass);
+        super(klass,
+                new AndroidRunnerParams(InstrumentationRegistry.getInstrumentation(),
+                        InstrumentationRegistry.getArguments(), false, 0L, false));
         mSkipChecks = mergeList(checks, defaultSkipChecks());
-        mPreTestHooks = defaultPreTestHooks();
+        mPreTestHooks = mergeList(hooks, defaultPreTestHooks());
     }
 
     /**
@@ -100,18 +109,16 @@ public class BaseJUnit4ClassRunner extends BlockJUnit4ClassRunner {
      * Change this static function to add or take out default {@code SkipCheck}s.
      */
     private static List<SkipCheck> defaultSkipChecks() {
-        return Arrays.asList(new SkipCheck[]{
+        return CollectionUtil.newArrayList(
             new RestrictionSkipCheck(InstrumentationRegistry.getTargetContext()),
-            new MinAndroidSdkLevelSkipCheck(),
-            new DisableIfSkipCheck()
-        });
+            new MinAndroidSdkLevelSkipCheck(), new DisableIfSkipCheck());
     }
 
     /**
      * Change this static function to add or take out default {@code PreTestHook}s.
      */
     private static List<PreTestHook> defaultPreTestHooks() {
-        return new ArrayList<PreTestHook>();
+        return null;
     }
 
     /**
@@ -149,5 +156,13 @@ public class BaseJUnit4ClassRunner extends BlockJUnit4ClassRunner {
             }
         }
         return false;
+    }
+
+    /*
+     * Overriding this method to take screenshot of failure before tear down functions are run.
+     */
+    @Override
+    protected Statement withAfters(FrameworkMethod method, Object test, Statement base) {
+        return super.withAfters(method, test, new ScreenshotOnFailureStatement(base));
     }
 }

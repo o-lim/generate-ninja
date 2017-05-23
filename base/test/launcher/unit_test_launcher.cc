@@ -92,6 +92,11 @@ void PrintUsage() {
           "    Controls when full test output is printed.\n"
           "    auto means to print it when the test failed.\n"
           "\n"
+          "  --test-launcher-test-part-results-limit=N\n"
+          "    Sets the limit of failed EXPECT/ASSERT entries in the xml and\n"
+          "    JSON outputs per test to N (default N=10). Negative value \n"
+          "    will disable this limit.\n"
+          "\n"
           "  --test-launcher-total-shards=N\n"
           "    Sets the total number of shards to N.\n"
           "\n"
@@ -439,9 +444,9 @@ void SerialGTestCallback(
   DeleteFile(callback_state.output_file.DirName(), true);
 
   ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, Bind(&RunUnitTestsSerially, callback_state.test_launcher,
-                      callback_state.platform_delegate, test_names,
-                      callback_state.launch_flags));
+      FROM_HERE, BindOnce(&RunUnitTestsSerially, callback_state.test_launcher,
+                          callback_state.platform_delegate, test_names,
+                          callback_state.launch_flags));
 }
 
 }  // namespace
@@ -636,8 +641,9 @@ size_t UnitTestLauncherDelegate::RetryTests(
     const std::vector<std::string>& test_names) {
   ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      Bind(&RunUnitTestsSerially, test_launcher, platform_delegate_, test_names,
-           use_job_objects_ ? TestLauncher::USE_JOB_OBJECTS : 0));
+      BindOnce(&RunUnitTestsSerially, test_launcher, platform_delegate_,
+               test_names,
+               use_job_objects_ ? TestLauncher::USE_JOB_OBJECTS : 0));
   return test_names.size();
 }
 

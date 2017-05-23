@@ -21,6 +21,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
@@ -56,8 +57,8 @@ class NotificationCollector
   // Called from the file thread by the delegates.
   void OnChange(TestDelegate* delegate) {
     task_runner_->PostTask(
-        FROM_HERE, base::Bind(&NotificationCollector::RecordChange, this,
-                              base::Unretained(delegate)));
+        FROM_HERE, base::BindOnce(&NotificationCollector::RecordChange, this,
+                                  base::Unretained(delegate)));
   }
 
   void Register(TestDelegate* delegate) {

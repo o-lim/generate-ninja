@@ -39,7 +39,7 @@ namespace {
 
 struct SemicolonSeparatedWriter {
   void operator()(const std::string& value, std::ostream& out) const {
-    out << value + ';';
+    out << XmlEscape(value) + ';';
   }
 };
 
@@ -435,6 +435,8 @@ bool VisualStudioWriter::WriteProjectFileContents(
     globals->SubElement("RootNamespace")->Text(target->label().name());
     globals->SubElement("IgnoreWarnCompileDuplicatedFilename")->Text("true");
     globals->SubElement("PreferredToolArchitecture")->Text("x64");
+    globals->SubElement("WindowsTargetPlatformVersion")
+        ->Text(kWindowsKitsIncludeVersion);
   }
 
   project.SubElement(

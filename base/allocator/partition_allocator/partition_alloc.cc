@@ -1051,8 +1051,13 @@ void* PartitionReallocGeneric(PartitionRootGeneric* root,
   // determine it is a win.
   if (actual_new_size == actual_old_size) {
     // Trying to allocate a block of size new_size would give us a block of
-    // the same size as the one we've already got, so no point in doing
-    // anything here.
+    // the same size as the one we've already got, so re-use the allocation
+    // after updating statistics (and cookies, if present).
+    PartitionPageSetRawSize(page, PartitionCookieSizeAdjustAdd(new_size));
+#if DCHECK_IS_ON()
+    // Write a new trailing cookie.
+    PartitionCookieWriteValue(static_cast<char*>(ptr) + new_size);
+#endif
     return ptr;
   }
 
@@ -1396,27 +1401,42 @@ void PartitionDumpStats(PartitionRoot* partition,
                         const char* partition_name,
                         bool is_light_dump,
                         PartitionStatsDumper* dumper) {
-  static const size_t kMaxReportableBuckets = 4096 / sizeof(void*);
-  PartitionBucketMemoryStats memory_stats[kMaxReportableBuckets];
-  const size_t partitionNumBuckets = partition->num_buckets;
-  DCHECK(partitionNumBuckets <= kMaxReportableBuckets);
 
-  for (size_t i = 0; i < partitionNumBuckets; ++i)
-    PartitionDumpBucketStats(&memory_stats[i], &partition->buckets()[i]);
-
-  // PartitionsDumpBucketStats is called after collecting stats because it
-  // can use PartitionAlloc to allocate and this can affect the statistics.
   PartitionMemoryStats stats = {0};
   stats.total_mmapped_bytes = partition->total_size_of_super_pages;
   stats.total_committed_bytes = partition->total_size_of_committed_pages;
   DCHECK(!partition->total_size_of_direct_mapped_pages);
+
+  static const size_t kMaxReportableBuckets = 4096 / sizeof(void*);
+  std::unique_ptr<PartitionBucketMemoryStats[]> memory_stats;
+  if (!is_light_dump)
+    memory_stats = std::unique_ptr<PartitionBucketMemoryStats[]>(
+        new PartitionBucketMemoryStats[kMaxReportableBuckets]);
+
+  const size_t partitionNumBuckets = partition->num_buckets;
+  DCHECK(partitionNumBuckets <= kMaxReportableBuckets);
+
   for (size_t i = 0; i < partitionNumBuckets; ++i) {
-    if (memory_stats[i].is_valid) {
-      stats.total_resident_bytes += memory_stats[i].resident_bytes;
-      stats.total_active_bytes += memory_stats[i].active_bytes;
-      stats.total_decommittable_bytes += memory_stats[i].decommittable_bytes;
-      stats.total_discardable_bytes += memory_stats[i].discardable_bytes;
-      if (!is_light_dump)
+    PartitionBucketMemoryStats bucket_stats = {0};
+    PartitionDumpBucketStats(&bucket_stats, &partition->buckets()[i]);
+    if (bucket_stats.is_valid) {
+      stats.total_resident_bytes += bucket_stats.resident_bytes;
+      stats.total_active_bytes += bucket_stats.active_bytes;
+      stats.total_decommittable_bytes += bucket_stats.decommittable_bytes;
+      stats.total_discardable_bytes += bucket_stats.discardable_bytes;
+    }
+    if (!is_light_dump) {
+      if (bucket_stats.is_valid)
+        memory_stats[i] = bucket_stats;
+      else
+        memory_stats[i].is_valid = false;
+    }
+  }
+  if (!is_light_dump) {
+    // PartitionsDumpBucketStats is called after collecting stats because it
+    // can use PartitionAlloc to allocate and this can affect the statistics.
+    for (size_t i = 0; i < partitionNumBuckets; ++i) {
+      if (memory_stats[i].is_valid)
         dumper->PartitionsDumpBucketStats(partition_name, &memory_stats[i]);
     }
   }

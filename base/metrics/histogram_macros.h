@@ -41,10 +41,9 @@
 // delete and reused. The value in |sample| must be strictly less than
 // |enum_max|.
 
-#define UMA_HISTOGRAM_ENUMERATION(name, sample, enum_max)                      \
-    INTERNAL_HISTOGRAM_ENUMERATION_WITH_FLAG(                                  \
-        name, sample, enum_max,                                                \
-        base::HistogramBase::kUmaTargetedHistogramFlag)
+#define UMA_HISTOGRAM_ENUMERATION(name, sample, enum_max) \
+  INTERNAL_HISTOGRAM_ENUMERATION_WITH_FLAG(               \
+      name, sample, enum_max, base::HistogramBase::kUmaTargetedHistogramFlag)
 
 // Histogram for boolean values.
 
@@ -68,14 +67,15 @@
 // Sample usage:
 //   UMA_HISTOGRAM_EXACT_LINEAR("Histogram.Linear", count, 10);
 #define UMA_HISTOGRAM_EXACT_LINEAR(name, sample, value_max) \
-  UMA_HISTOGRAM_ENUMERATION(name, sample, value_max)
+  INTERNAL_HISTOGRAM_EXACT_LINEAR_WITH_FLAG(                \
+      name, sample, value_max, base::HistogramBase::kUmaTargetedHistogramFlag)
 
 // Used for capturing basic percentages. This will be 100 buckets of size 1.
 
 // Sample usage:
 //   UMA_HISTOGRAM_PERCENTAGE("Histogram.Percent", percent_as_int);
-#define UMA_HISTOGRAM_PERCENTAGE(name, percent_as_int)                         \
-    UMA_HISTOGRAM_ENUMERATION(name, percent_as_int, 101)
+#define UMA_HISTOGRAM_PERCENTAGE(name, percent_as_int) \
+  UMA_HISTOGRAM_EXACT_LINEAR(name, percent_as_int, 101)
 
 //------------------------------------------------------------------------------
 // Count histograms. These are used for collecting numeric data. Note that we
@@ -247,7 +247,17 @@
 //
 // UMA_HISTOGRAM_SPARSE_SLOWLY is good for sparsely distributed and/or
 // infrequently recorded values since the implementation is slower
-// and takes more memory.
+// and takes more memory. For sparse data, sparse histograms have the advantage
+// of using less memory client-side, because they allocate buckets on demand
+// rather than preallocating. However, server-side, we still need to load all
+// buckets, across all users, at once.
+
+// Thus, please avoid exploding such histograms, i.e. uploading many many
+// distinct values to the server (across all users). Concretely, keep the number
+// of distinct values <= 100 at best, definitely <= 1000. If you have no
+// guarantees on the range of your data, use capping, e.g.:
+//   UMA_HISTOGRAM_SPARSE_SLOWLY("MyHistogram",
+//                               std::max(0, std::min(200, value)));
 //
 // For instance, Sqlite.Version.* are sparse because for any given database,
 // there's going to be exactly one version logged.
