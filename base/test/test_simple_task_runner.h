@@ -7,6 +7,7 @@
 
 #include <deque>
 
+#include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
@@ -43,13 +44,13 @@ class TestSimpleTaskRunner : public SingleThreadTaskRunner {
 
   // SingleThreadTaskRunner implementation.
   bool PostDelayedTask(const tracked_objects::Location& from_here,
-                       const Closure& task,
+                       OnceClosure task,
                        TimeDelta delay) override;
   bool PostNonNestableDelayedTask(const tracked_objects::Location& from_here,
-                                  const Closure& task,
+                                  OnceClosure task,
                                   TimeDelta delay) override;
 
-  bool RunsTasksOnCurrentThread() const override;
+  bool RunsTasksInCurrentSequence() const override;
 
   std::deque<TestPendingTask> TakePendingTasks();
   size_t NumPendingTasks() const;

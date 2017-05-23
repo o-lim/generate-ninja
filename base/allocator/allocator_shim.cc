@@ -23,6 +23,8 @@
 
 #if defined(OS_MACOSX)
 #include <malloc/malloc.h>
+
+#include "base/allocator/allocator_interception_mac.h"
 #endif
 
 // No calls to malloc / new in this file. They would would cause re-entrancy of
@@ -56,9 +58,12 @@ bool CallNewHandler(size_t size) {
 #if defined(OS_WIN)
   return base::allocator::WinCallNewHandler(size);
 #else
-  // TODO(primiano): C++11 has introduced ::get_new_handler() which is supposed
-  // to be thread safe and would avoid the spinlock boilerplate here. However
-  // it doesn't seem to be available yet in the Linux chroot headers yet.
+  // TODO(primiano): C++11 has introduced std::get_new_handler() which is
+  // supposed to be thread safe and would avoid the spinlock boilerplate here.
+  // However, it is not available in the headers in the current Debian Jessie
+  // sysroot, which has libstdc++ 4.8. The function is available in libstdc++
+  // 4.9 and newer, but it will be a few more years before a newer sysroot
+  // becomes available.
   std::new_handler nh;
   {
     while (subtle::Acquire_CompareAndSwap(&g_new_handler_lock, 0, 1))
@@ -326,9 +331,11 @@ void InitializeAllocatorShim() {
   // traversed the shim this will route them to the default malloc zone.
   InitializeDefaultDispatchToMacAllocator();
 
+  MallocZoneFunctions functions = MallocZoneFunctionsToReplaceDefault();
+
   // This replaces the default malloc zone, causing calls to malloc & friends
   // from the codebase to be routed to ShimMalloc() above.
-  OverrideMacSymbols();
+  base::allocator::ReplaceFunctionsForStoredZones(&functions);
 }
 }  // namespace allocator
 }  // namespace base

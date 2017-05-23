@@ -12,6 +12,11 @@
 
 namespace base {
 
+SystemMemoryInfoKB::SystemMemoryInfoKB() = default;
+
+SystemMemoryInfoKB::SystemMemoryInfoKB(const SystemMemoryInfoKB& other) =
+    default;
+
 SystemMetrics::SystemMetrics() {
   committed_memory_ = 0;
 }
@@ -62,7 +67,7 @@ double ProcessMetrics::GetPlatformIndependentCPUUsage() {
 #endif
 }
 
-#if defined(OS_MACOSX) || defined(OS_LINUX)
+#if defined(OS_MACOSX) || defined(OS_LINUX) || defined(OS_AIX)
 int ProcessMetrics::CalculateIdleWakeupsPerSecond(
     uint64_t absolute_idle_wakeups) {
   TimeTicks time = TimeTicks::Now();

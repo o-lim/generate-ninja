@@ -50,8 +50,12 @@ Version MajorMinorBuildToVersion(int major, int minor, int build) {
   } else if (major == 10) {
     if (build < 10586) {
       return VERSION_WIN10;
-    } else {
+    } else if (build < 14393) {
       return VERSION_WIN10_TH2;
+    } else if (build < 15063) {
+      return VERSION_WIN10_RS1;
+    } else {
+      return VERSION_WIN10_RS2;
     }
   } else if (major > 6) {
     NOTREACHED();

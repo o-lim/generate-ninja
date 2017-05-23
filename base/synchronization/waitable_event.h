@@ -112,6 +112,9 @@ class BASE_EXPORT WaitableEvent {
   // You MUST NOT delete any of the WaitableEvent objects while this wait is
   // happening, however WaitMany's return "happens after" the |Signal| call
   // that caused it has completed, like |Wait|.
+  //
+  // If more than one WaitableEvent is signaled to unblock WaitMany, the lowest
+  // index among them is returned.
   static size_t WaitMany(WaitableEvent** waitables, size_t count);
 
   // For asynchronous waiting, see WaitableEventWatcher
@@ -152,9 +155,12 @@ class BASE_EXPORT WaitableEvent {
 #if defined(OS_WIN)
   win::ScopedHandle handle_;
 #else
-  // On Windows, one can close a HANDLE which is currently being waited on. The
-  // MSDN documentation says that the resulting behaviour is 'undefined', but
-  // it doesn't crash. However, if we were to include the following members
+  // On Windows, you must not close a HANDLE which is currently being waited on.
+  // The MSDN documentation says that the resulting behaviour is 'undefined'.
+  // To solve that issue each WaitableEventWatcher duplicates the given event
+  // handle.
+
+  // However, if we were to include the following members
   // directly then, on POSIX, one couldn't use WaitableEventWatcher to watch an
   // event which gets deleted. This mismatch has bitten us several times now,
   // so we have a kernel of the WaitableEvent, which is reference counted.

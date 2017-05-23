@@ -49,6 +49,8 @@ if (is_mac) {
 
 static_library("util") {
   sources = [
+    "file/delimited_file_reader.cc",
+    "file/delimited_file_reader.h",
     "file/file_io.cc",
     "file/file_io.h",
     "file/file_io_posix.cc",
@@ -76,12 +78,16 @@ static_library("util") {
     "misc/clock_mac.cc",
     "misc/clock_posix.cc",
     "misc/clock_win.cc",
+    "misc/from_pointer_cast.h",
     "misc/implicit_cast.h",
     "misc/initialization_state.h",
     "misc/initialization_state_dcheck.cc",
     "misc/initialization_state_dcheck.h",
     "misc/metrics.cc",
     "misc/metrics.h",
+    "misc/paths.h",
+    "misc/paths_mac.cc",
+    "misc/paths_win.cc",
     "misc/pdb_structures.cc",
     "misc/pdb_structures.h",
     "misc/random_string.cc",
@@ -120,6 +126,10 @@ static_library("util") {
     "posix/drop_privileges.h",
     "posix/process_info.h",
     "posix/process_info_mac.cc",
+    "posix/scoped_dir.cc",
+    "posix/scoped_dir.h",
+    "posix/scoped_mmap.cc",
+    "posix/scoped_mmap.h",
     "posix/signals.cc",
     "posix/signals.h",
     "posix/symbolic_constants_posix.cc",
@@ -136,6 +146,7 @@ static_library("util") {
     "stdlib/strlcpy.h",
     "stdlib/strnlen.cc",
     "stdlib/strnlen.h",
+    "stdlib/thread_safe_vector.h",
     "string/split_string.cc",
     "string/split_string.h",
     "synchronization/semaphore.h",
@@ -179,6 +190,8 @@ static_library("util") {
     "win/process_structs.h",
     "win/registration_protocol_win.cc",
     "win/registration_protocol_win.h",
+    "win/safe_terminate_process.asm",
+    "win/safe_terminate_process.h",
     "win/scoped_handle.cc",
     "win/scoped_handle.h",
     "win/scoped_local_alloc.cc",
@@ -242,8 +255,11 @@ static_library("util") {
 
   deps = [
     "//base",
-    "//third_party/crashpad/crashpad/compat",
     "//third_party/crashpad/crashpad/third_party/zlib",
+  ]
+
+  public_deps = [
+    "//third_party/crashpad/crashpad/compat",
   ]
 
   if (is_win) {

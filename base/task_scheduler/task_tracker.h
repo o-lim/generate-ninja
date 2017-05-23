@@ -10,6 +10,7 @@
 #include "base/atomicops.h"
 #include "base/base_export.h"
 #include "base/callback_forward.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_base.h"
 #include "base/synchronization/waitable_event.h"
@@ -80,6 +81,13 @@ class BASE_EXPORT TaskTracker {
   // but is free to perform extra work before and after doing so.
   virtual void PerformRunTask(std::unique_ptr<Task> task);
 
+#if DCHECK_IS_ON()
+  // Returns true if this context should be exempt from blocking shutdown
+  // DCHECKs.
+  // TODO(robliao): Remove when http://crbug.com/698140 is fixed.
+  virtual bool IsPostingBlockShutdownTaskAfterShutdownAllowed();
+#endif
+
  private:
   class State;
 
@@ -117,9 +125,9 @@ class BASE_EXPORT TaskTracker {
   const std::unique_ptr<State> state_;
 
   // Number of undelayed tasks that haven't completed their execution. Is
-  // incremented and decremented without a barrier. When it reaches zero,
-  // |flush_lock_| is acquired (forcing memory synchronization) and |flush_cv_|
-  // is signaled.
+  // decremented with a memory barrier after a task runs. Is accessed with an
+  // acquire memory barrier in Flush(). The memory barriers ensure that the
+  // memory written by flushed tasks is visible when Flush() returns.
   subtle::Atomic32 num_pending_undelayed_tasks_ = 0;
 
   // Lock associated with |flush_cv_|. Partially synchronizes access to

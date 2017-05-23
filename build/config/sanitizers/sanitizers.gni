@@ -62,6 +62,11 @@ declare_args() {
   # https://crbug.com/626794
   use_cfi_cast = false
 
+  # Enable checks for indirect function calls via a function pointer.
+  # TODO(pcc): remove this when we're ready to add these checks by default.
+  # https://crbug.com/701919
+  use_cfi_icall = false
+
   # By default, Control Flow Integrity will crash the program if it detects a
   # violation. Set this to true to print detailed diagnostics instead.
   use_cfi_diag = false
@@ -87,11 +92,17 @@ declare_args() {
 
   # Value for -fsanitize-coverage flag. Setting this causes
   # use_sanitizer_coverage to be enabled.
-  # Default value when unset and use_afl=true:
-  # trace-pc
+  # Default value when unset and use_afl=true or use_libfuzzer=true:
+  #     trace-pc-guard
   # Default value when unset and use_sanitizer_coverage=true:
-  #     edge,indirect-calls,8bit-counters
+  #     trace-pc-guard,indirect-calls
   sanitizer_coverage_flags = ""
+
+  # Keep symbol level when building with sanitizers. When sanitizers are
+  # enabled, the default is to compile with the minimum debug info level
+  # necessary, overriding any other symbol level arguments that may be set.
+  # Setting this to true prevents this.
+  sanitizer_keep_symbols = false
 }
 
 # Disable sanitizers for non-default toolchains.
@@ -143,7 +154,7 @@ declare_args() {
 if ((use_afl || use_libfuzzer) && sanitizer_coverage_flags == "") {
   sanitizer_coverage_flags = "trace-pc-guard"
 } else if (use_sanitizer_coverage && sanitizer_coverage_flags == "") {
-  sanitizer_coverage_flags = "edge,indirect-calls,8bit-counters"
+  sanitizer_coverage_flags = "trace-pc-guard,indirect-calls"
 }
 
 using_sanitizer =

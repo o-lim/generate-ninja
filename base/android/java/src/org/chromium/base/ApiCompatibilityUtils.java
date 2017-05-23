@@ -28,6 +28,8 @@ import android.os.Process;
 import android.os.StatFs;
 import android.os.UserManager;
 import android.provider.Settings;
+import android.text.Html;
+import android.text.Spanned;
 import android.view.View;
 import android.view.ViewGroup.MarginLayoutParams;
 import android.view.Window;
@@ -36,7 +38,6 @@ import android.view.inputmethod.InputMethodSubtype;
 import android.widget.TextView;
 
 import java.io.File;
-import java.lang.reflect.Method;
 
 /**
  * Utility class to use new APIs that were added after ICS (API level 14).
@@ -282,6 +283,19 @@ public class ApiCompatibilityUtils {
         }
     }
 
+    /**
+     * @see android.text.Html#toHtml(Spanned, int)
+     * @param option is ignored on below N
+     */
+    @SuppressWarnings("deprecation")
+    public static String toHtml(Spanned spanned, int option) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            return Html.toHtml(spanned, option);
+        } else {
+            return Html.toHtml(spanned);
+        }
+    }
+
     // These methods have a new name, and the old name is deprecated.
 
     /**
@@ -413,7 +427,13 @@ public class ApiCompatibilityUtils {
      */
     public static void setStatusBarColor(Window window, int statusBarColor) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+            // If both system bars are black, we can remove these from our layout,
+            // removing or shrinking the SurfaceFlinger overlay required for our views.
+            if (statusBarColor == Color.BLACK && window.getNavigationBarColor() == Color.BLACK) {
+                window.clearFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+            } else {
+                window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+            }
             window.setStatusBarColor(statusBarColor);
         }
     }
@@ -567,22 +587,13 @@ public class ApiCompatibilityUtils {
      * @param context The Android context, used to retrieve the UserManager system service.
      * @return Whether the device is running in demo mode.
      */
+    @SuppressWarnings("NewApi")
     public static boolean isDemoUser(Context context) {
-        // UserManager#isDemoUser() is only available in Android versions greater than N.
-        if (!BuildInfo.isGreaterThanN()) return false;
+        // UserManager#isDemoUser() is only available in Android NMR1+.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N_MR1) return false;
 
-        try {
-            UserManager userManager = (UserManager) context.getSystemService(Context.USER_SERVICE);
-            Method isDemoUserMethod = UserManager.class.getMethod("isDemoUser");
-            boolean isDemoUser = (boolean) isDemoUserMethod.invoke(userManager);
-            return isDemoUser;
-        } catch (RuntimeException e) {
-            // Ignore to avoid crashing on startup.
-        } catch (Exception e) {
-            // Ignore.
-        }
-
-        return false;
+        UserManager userManager = (UserManager) context.getSystemService(Context.USER_SERVICE);
+        return userManager.isDemoUser();
     }
 
     /**
@@ -615,13 +626,24 @@ public class ApiCompatibilityUtils {
      * Get a URI for |file| which has the image capture. This function assumes that path of |file|
      * is based on the result of UiUtils.getDirectoryForImageCapture().
      *
-     * @param context The application context.
      * @param file image capture file.
      * @return URI for |file|.
      */
-    public static Uri getUriForImageCaptureFile(Context context, File file) {
+    public static Uri getUriForImageCaptureFile(File file) {
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2
-                ? ContentUriUtils.getContentUriFromFile(context, file)
+                ? ContentUriUtils.getContentUriFromFile(file)
+                : Uri.fromFile(file);
+    }
+
+    /**
+     * Get the URI for a downloaded file.
+     *
+     * @param file A downloaded file.
+     * @return URI for |file|.
+     */
+    public static Uri getUriForDownloadedFile(File file) {
+        return Build.VERSION.SDK_INT > Build.VERSION_CODES.M
+                ? FileUtils.getUriForFile(file)
                 : Uri.fromFile(file);
     }
 

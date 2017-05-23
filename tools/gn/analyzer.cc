@@ -59,7 +59,9 @@ LabelSet LabelsFor(const TargetSet& targets) {
 bool AnyBuildFilesWereModified(const SourceFileSet& source_files) {
   for (auto* file : source_files) {
     if (base::EndsWith(file->value(), ".gn", base::CompareCase::SENSITIVE) ||
-        base::EndsWith(file->value(), ".gni", base::CompareCase::SENSITIVE))
+        base::EndsWith(file->value(), ".gni", base::CompareCase::SENSITIVE) ||
+        base::EndsWith(file->value(), "build/vs_toolchain.py",
+                       base::CompareCase::SENSITIVE))
       return true;
   }
   return false;
@@ -110,7 +112,7 @@ void WriteLabels(const Label& default_toolchain,
                  const std::string& key,
                  const LabelSet& labels) {
   std::vector<std::string> strings;
-  auto value = base::WrapUnique(new base::ListValue());
+  auto value = base::MakeUnique<base::ListValue>();
   for (const auto l : labels)
     strings.push_back(l.GetUserVisibleName(default_toolchain));
   std::sort(strings.begin(), strings.end());
@@ -205,7 +207,7 @@ std::string OutputsToJSON(const Outputs& outputs,
   } else {
     WriteString(*value, "status", outputs.status);
     if (outputs.compile_includes_all) {
-      auto compile_targets = base::WrapUnique(new base::ListValue());
+      auto compile_targets = base::MakeUnique<base::ListValue>();
       compile_targets->AppendString("all");
       value->SetWithoutPathExpansion("compile_targets",
                                      std::move(compile_targets));
@@ -262,7 +264,7 @@ std::string Analyzer::Analyze(const std::string& input, Err* err) const {
 
   // TODO(crbug.com/555273): We can do smarter things when we detect changes
   // to build files. For example, if all of the ninja files are unchanged,
-  // we know that we can ignore changes to these files. Also, for most .gn
+  // we know that we can ignore changes to .gn* files. Also, for most .gn
   // files, we can treat a change as simply affecting every target, config,
   // or toolchain defined in that file.
   if (AnyBuildFilesWereModified(inputs.source_files)) {

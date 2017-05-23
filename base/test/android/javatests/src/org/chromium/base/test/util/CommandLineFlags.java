@@ -6,7 +6,7 @@ package org.chromium.base.test.util;
 
 import android.content.Context;
 
-import junit.framework.Assert;
+import org.junit.Assert;
 
 import org.chromium.base.BaseChromiumApplication;
 import org.chromium.base.CommandLine;
@@ -72,7 +72,12 @@ public final class CommandLineFlags {
         BaseChromiumApplication.initCommandLine(targetContext);
         Set<String> flags = getFlags(element);
         for (String flag : flags) {
-            CommandLine.getInstance().appendSwitch(flag);
+            String[] parsedFlags = flag.split("=", 2);
+            if (parsedFlags.length == 1) {
+                CommandLine.getInstance().appendSwitch(flag);
+            } else {
+                CommandLine.getInstance().appendSwitchWithValue(parsedFlags[0], parsedFlags[1]);
+            }
         }
     }
 

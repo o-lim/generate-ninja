@@ -321,8 +321,8 @@ def _GetTestsFromPickle(pickle_path, jar_path):
     raise TestListPickleException(
         '%s newer than %s.' % (jar_path, pickle_path))
 
-  with open(pickle_path, 'r') as pickle_file:
-    pickle_data = pickle.loads(pickle_file.read())
+  with open(pickle_path, 'r') as f:
+    pickle_data = pickle.load(f)
   jar_md5 = md5sum.CalculateHostMd5Sums(jar_path)[jar_path]
 
   if pickle_data['VERSION'] != _PICKLE_FORMAT_VERSION:
@@ -489,6 +489,8 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     self._driver_name = None
     self._initializeDriverAttributes()
 
+    self._render_results_dir = None
+    self._screenshot_dir = None
     self._timeout_scale = None
     self._initializeTestControlAttributes(args)
 
@@ -498,6 +500,7 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     self._store_tombstones = False
     self._initializeTombstonesAttributes(args)
 
+    self._gs_results_bucket = None
     self._should_save_logcat = None
     self._initializeLogAttributes(args)
 
@@ -642,20 +645,15 @@ class InstrumentationTestInstance(test_instance.TestInstance):
 
   def _initializeFlagAttributes(self, args):
     self._flags = ['--enable-test-intents']
-    # TODO(jbudorick): Transition "--device-flags" to "--device-flags-file"
-    if hasattr(args, 'device_flags') and args.device_flags:
-      with open(args.device_flags) as device_flags_file:
-        stripped_lines = (l.strip() for l in device_flags_file)
-        self._flags.extend([flag for flag in stripped_lines if flag])
-    if hasattr(args, 'device_flags_file') and args.device_flags_file:
+    if args.command_line_flags:
+      self._flags.extend(args.command_line_flags)
+    if args.device_flags_file:
       with open(args.device_flags_file) as device_flags_file:
         stripped_lines = (l.strip() for l in device_flags_file)
-        self._flags.extend([flag for flag in stripped_lines if flag])
-    if (hasattr(args, 'strict_mode') and
-        args.strict_mode and
-        args.strict_mode != 'off'):
+        self._flags.extend(flag for flag in stripped_lines if flag)
+    if args.strict_mode and args.strict_mode != 'off':
       self._flags.append('--strict-mode=' + args.strict_mode)
-    if hasattr(args, 'regenerate_goldens') and args.regenerate_goldens:
+    if args.regenerate_goldens:
       self._flags.append('--regenerate-goldens')
 
   def _initializeDriverAttributes(self):
@@ -670,6 +668,7 @@ class InstrumentationTestInstance(test_instance.TestInstance):
       self._driver_apk = None
 
   def _initializeTestControlAttributes(self, args):
+    self._render_results_dir = args.render_results_dir
     self._screenshot_dir = args.screenshot_dir
     self._timeout_scale = args.timeout_scale or 1
 
@@ -680,10 +679,11 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     self._store_tombstones = args.store_tombstones
 
   def _initializeLogAttributes(self, args):
+    self._gs_results_bucket = args.gs_results_bucket
     self._should_save_logcat = bool(args.json_results_file)
 
   def _initializeEditPrefsAttributes(self, args):
-    if not hasattr(args, 'shared_prefs_file'):
+    if not hasattr(args, 'shared_prefs_file') or not args.shared_prefs_file:
       return
     if not isinstance(args.shared_prefs_file, str):
       logging.warning("Given non-string for a filepath")
@@ -745,12 +745,20 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     return self._flags
 
   @property
+  def gs_results_bucket(self):
+    return self._gs_results_bucket
+
+  @property
   def should_save_logcat(self):
     return self._should_save_logcat
 
   @property
   def package_info(self):
     return self._package_info
+
+  @property
+  def render_results_dir(self):
+    return self._render_results_dir
 
   @property
   def screenshot_dir(self):

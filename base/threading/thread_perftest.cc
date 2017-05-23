@@ -12,6 +12,7 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/condition_variable.h"
@@ -67,8 +68,8 @@ class ThreadPerfTest : public testing::Test {
                              WaitableEvent::InitialState::NOT_SIGNALED);
     base::ThreadTicks ticks;
     thread.task_runner()->PostTask(
-        FROM_HERE, base::Bind(&ThreadPerfTest::TimeOnThread,
-                              base::Unretained(this), &ticks, &done));
+        FROM_HERE, base::BindOnce(&ThreadPerfTest::TimeOnThread,
+                                  base::Unretained(this), &ticks, &done));
     done.Wait();
     return ticks;
   }
@@ -138,8 +139,8 @@ class TaskPerfTest : public ThreadPerfTest {
       return;
     }
     NextThread(hops)->task_runner()->PostTask(
-        FROM_HERE, base::Bind(&ThreadPerfTest::PingPong, base::Unretained(this),
-                              hops - 1));
+        FROM_HERE, base::BindOnce(&ThreadPerfTest::PingPong,
+                                  base::Unretained(this), hops - 1));
   }
 };
 
@@ -210,8 +211,8 @@ class EventPerfTest : public ThreadPerfTest {
     remaining_hops_ = hops;
     for (size_t i = 0; i < threads_.size(); i++) {
       threads_[i]->task_runner()->PostTask(
-          FROM_HERE, base::Bind(&EventPerfTest::WaitAndSignalOnThread,
-                                base::Unretained(this), i));
+          FROM_HERE, base::BindOnce(&EventPerfTest::WaitAndSignalOnThread,
+                                    base::Unretained(this), i));
     }
 
     // Kick off the Signal ping-ponging.

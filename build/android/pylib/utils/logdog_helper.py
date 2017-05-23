@@ -16,7 +16,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(
 from libs.logdog import bootstrap # pylint: disable=import-error
 
 
-@decorators.NoRaiseException(default_return_value='')
+@decorators.NoRaiseException(default_return_value='',
+                             exception_message=('Ignore this exception. '
+                                                'crbug.com/675666'))
 def text(name, data):
   """Uploads text to logdog.
 
@@ -27,13 +29,15 @@ def text(name, data):
   Returns:
     Link to view uploaded text in logdog viewer.
   """
-  logging.debug('Writing text to logdog stream, %s', name)
+  logging.info('Writing text to logdog stream, %s', name)
   with get_logdog_client().text(name) as stream:
     stream.write(data)
     return stream.get_viewer_url()
 
 
-@decorators.NoRaiseException(default_return_value=None)
+@decorators.NoRaiseException(default_return_value=None,
+                             exception_message=('Ignore this exception. '
+                                                'crbug.com/675666'))
 def open_text(name):
   """Returns a file like object which you can write to.
 
@@ -43,11 +47,13 @@ def open_text(name):
   Returns:
     A file like object. close() file when done.
   """
-  logging.debug('Opening text logdog stream, %s', name)
+  logging.info('Opening text logdog stream, %s', name)
   return get_logdog_client().open_text(name)
 
 
-@decorators.NoRaiseException(default_return_value='')
+@decorators.NoRaiseException(default_return_value='',
+                             exception_message=('Ignore this exception. '
+                                                'crbug.com/675666'))
 def binary(name, binary_path):
   """Uploads binary to logdog.
 
@@ -58,14 +64,16 @@ def binary(name, binary_path):
   Returns:
     Link to view uploaded binary in logdog viewer.
   """
-  logging.debug('Writing binary to logdog stream, %s', name)
+  logging.info('Writing binary to logdog stream, %s', name)
   with get_logdog_client().binary(name) as stream:
     with open(binary_path, 'r') as f:
       stream.write(f.read())
       return stream.get_viewer_url()
 
 
-@decorators.NoRaiseException(default_return_value='')
+@decorators.NoRaiseException(default_return_value='',
+                             exception_message=('Ignore this exception. '
+                                                'crbug.com/675666'))
 def get_viewer_url(name):
   """Get Logdog viewer URL.
 
@@ -80,6 +88,6 @@ def get_viewer_url(name):
 
 @decorators.Memoize
 def get_logdog_client():
-  logging.debug('Getting logdog client.')
+  logging.info('Getting logdog client.')
   return bootstrap.ButlerBootstrap.probe().stream_client()
 

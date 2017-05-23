@@ -97,16 +97,14 @@ class MRUCacheBase {
       ShrinkToSize(max_size_ - 1);
     }
 
-    ordering_.push_front(value_type(key, std::forward<Payload>(payload)));
-    index_.insert(std::make_pair(key, ordering_.begin()));
+    ordering_.emplace_front(key, std::forward<Payload>(payload));
+    index_.emplace(key, ordering_.begin());
     return ordering_.begin();
   }
 
   // Retrieves the contents of the given key, or end() if not found. This method
   // has the side effect of moving the requested item to the front of the
   // recency list.
-  //
-  // TODO(brettw) We may want a const version of this function in the future.
   iterator Get(const KeyType& key) {
     typename KeyIndex::iterator index_iter = index_.find(key);
     if (index_iter == index_.end())

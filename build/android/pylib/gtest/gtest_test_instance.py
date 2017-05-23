@@ -138,12 +138,11 @@ def ParseGTestOutput(output):
   def handle_possibly_unknown_test():
     if test_name is not None:
       results.append(base_test_result.BaseTestResult(
-          test_name,
+          TestNameWithoutDisabledPrefix(test_name),
           fallback_result_type or base_test_result.ResultType.UNKNOWN,
           duration, log=('\n'.join(log) if log else '')))
 
   for l in output:
-    logging.info(l)
     matcher = _RE_TEST_STATUS.match(l)
     if matcher:
       if matcher.group(1) == 'RUN':
@@ -175,7 +174,7 @@ def ParseGTestOutput(output):
 
     if result_type and test_name:
       results.append(base_test_result.BaseTestResult(
-          test_name, result_type, duration,
+          TestNameWithoutDisabledPrefix(test_name), result_type, duration,
           log=('\n'.join(log) if log else '')))
       test_name = None
 
@@ -203,7 +202,7 @@ def ParseGTestXML(xml_content):
         log.append(html.unescape(failure.attrib['message']))
 
       results.append(base_test_result.BaseTestResult(
-          '%s.%s' % (suite_name, case_name),
+          '%s.%s' % (suite_name, TestNameWithoutDisabledPrefix(case_name)),
           result_type,
           int(float(testcase.attrib['time']) * 1000),
           log=('\n'.join(log) if log else '')))
@@ -334,10 +333,22 @@ class GtestTestInstance(test_instance.TestInstance):
       self._app_data_files = None
       self._app_data_file_dir = None
 
-    self._test_arguments = args.test_arguments
+    self._flags = None
+    self._initializeCommandLineFlags(args)
 
     # TODO(jbudorick): Remove this once it's deployed.
     self._enable_xml_result_parsing = args.enable_xml_result_parsing
+
+  def _initializeCommandLineFlags(self, args):
+    self._flags = []
+    if args.command_line_flags:
+      self._flags.extend(args.command_line_flags)
+    if args.device_flags_file:
+      with open(args.device_flags_file) as f:
+        stripped_lines = (l.strip() for l in f)
+        self._flags.extend(flag for flag in stripped_lines if flag)
+    if args.run_disabled:
+      self._flags.append('--gtest_also_run_disabled_tests')
 
   @property
   def activity(self):
@@ -380,8 +391,8 @@ class GtestTestInstance(test_instance.TestInstance):
     return self._extras
 
   @property
-  def gtest_also_run_disabled_tests(self):
-    return self._run_disabled
+  def flags(self):
+    return self._flags
 
   @property
   def gtest_filter(self):
@@ -414,10 +425,6 @@ class GtestTestInstance(test_instance.TestInstance):
   @property
   def test_apk_incremental_install_script(self):
     return self._test_apk_incremental_install_script
-
-  @property
-  def test_arguments(self):
-    return self._test_arguments
 
   @property
   def total_external_shards(self):

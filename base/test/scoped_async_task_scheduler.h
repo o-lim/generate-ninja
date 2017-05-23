@@ -13,21 +13,23 @@ class TaskScheduler;
 
 namespace test {
 
+// DEPRECATED. Use ScopedTaskEnvironment instead.
+//
+// TODO(fdoray): Replace ScopedAsyncTaskScheduler instances by
+// ScopedTaskEnvironment. https://crbug.com/708584
+//
 // Allows usage of the base/task_scheduler/post_task.h API within its scope.
-// Tasks run asynchronously, one at a time.
 //
-// To wait until all posted tasks have run, use
+// To wait until all tasks posted without a delay have run, use
 // TaskScheduler::GetInstance()->FlushForTesting().
-//
-// When possible, use ScopedTaskScheduler instead of this. Tasks posted within
-// the scope of a ScopedTaskScheduler run synchronously, which makes tests
-// easier to understand.
 class ScopedAsyncTaskScheduler {
  public:
   // Registers a single-threaded TaskScheduler.
   ScopedAsyncTaskScheduler();
 
   // Shuts down and unregisters the TaskScheduler.
+  //
+  // It is guaranteed that all BLOCK_SHUTDOWN tasks have run when this returns.
   ~ScopedAsyncTaskScheduler();
 
  private:

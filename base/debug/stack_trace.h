@@ -11,6 +11,7 @@
 #include <string>
 
 #include "base/base_export.h"
+#include "base/debug/debugging_flags.h"
 #include "base/macros.h"
 #include "build/build_config.h"
 
@@ -22,24 +23,6 @@
 struct _EXCEPTION_POINTERS;
 struct _CONTEXT;
 #endif
-
-// TODO(699863): Clean up HAVE_TRACE_STACK_FRAME_POINTERS.
-#if defined(OS_POSIX)
-
-#if defined(__i386__) || defined(__x86_64__)
-#define HAVE_TRACE_STACK_FRAME_POINTERS 1
-#elif defined(__arm__) && !defined(__thumb__)
-#define HAVE_TRACE_STACK_FRAME_POINTERS 1
-#else  // defined(__arm__) && !defined(__thumb__)
-#define HAVE_TRACE_STACK_FRAME_POINTERS 0
-#endif  // defined(__arm__) && !defined(__thumb__)
-
-#elif defined(OS_WIN)
-#define HAVE_TRACE_STACK_FRAME_POINTERS 1
-
-#else  // defined(OS_WIN)
-#define HAVE_TRACE_STACK_FRAME_POINTERS 0
-#endif  // defined(OS_WIN)
 
 namespace base {
 namespace debug {
@@ -56,7 +39,7 @@ namespace debug {
 BASE_EXPORT bool EnableInProcessStackDumping();
 
 // Returns end of the stack, or 0 if we couldn't get it.
-#if HAVE_TRACE_STACK_FRAME_POINTERS
+#if BUILDFLAG(CAN_UNWIND_WITH_FRAME_POINTERS)
 BASE_EXPORT uintptr_t GetStackEnd();
 #endif
 
@@ -94,7 +77,7 @@ class BASE_EXPORT StackTrace {
   // Prints the stack trace to stderr.
   void Print() const;
 
-#if !defined(__UCLIBC__)
+#if !defined(__UCLIBC__) & !defined(_AIX)
   // Resolves backtrace to symbols and write to stream.
   void OutputToStream(std::ostream* os) const;
 #endif
@@ -119,7 +102,7 @@ class BASE_EXPORT StackTrace {
   size_t count_;
 };
 
-#if HAVE_TRACE_STACK_FRAME_POINTERS
+#if BUILDFLAG(CAN_UNWIND_WITH_FRAME_POINTERS)
 // Traces the stack by using frame pointers. This function is faster but less
 // reliable than StackTrace. It should work for debug and profiling builds,
 // but not for release builds (although there are some exceptions).
@@ -132,7 +115,6 @@ BASE_EXPORT size_t TraceStackFramePointers(const void** out_trace,
                                            size_t max_depth,
                                            size_t skip_initial);
 
-#if !defined(OS_WIN)
 // Links stack frame |fp| to |parent_fp|, so that during stack unwinding
 // TraceStackFramePointers() visits |parent_fp| after visiting |fp|.
 // Both frame pointers must come from __builtin_frame_address().
@@ -182,9 +164,8 @@ class BASE_EXPORT ScopedStackFrameLinker {
 
   DISALLOW_COPY_AND_ASSIGN(ScopedStackFrameLinker);
 };
-#endif  // !defined(OS_WIN)
 
-#endif  // HAVE_TRACE_STACK_FRAME_POINTERS
+#endif  // BUILDFLAG(CAN_UNWIND_WITH_FRAME_POINTERS)
 
 namespace internal {
 

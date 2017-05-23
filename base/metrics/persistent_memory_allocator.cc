@@ -18,6 +18,7 @@
 #include "base/memory/shared_memory.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
+#include "base/threading/thread_restrictions.h"
 
 namespace {
 
@@ -32,7 +33,7 @@ const uint32_t kGlobalCookie = 0x408305DC;
 // The current version of the metadata. If updates are made that change
 // the metadata, the version number can be queried to operate in a backward-
 // compatible manner until the memory segment is completely re-initalized.
-const uint32_t kGlobalVersion = 1;
+const uint32_t kGlobalVersion = 2;
 
 // Constant values placed in the block headers to indicate its state.
 const uint32_t kBlockCookieFree = 0;
@@ -43,7 +44,7 @@ const uint32_t kBlockCookieAllocated = 0xC8799269;
 // TODO(bcwhite): When acceptable, consider moving flags to std::atomic<char>
 // types rather than combined bitfield.
 
-// Flags stored in the flags_ field of the SharedMetaData structure below.
+// Flags stored in the flags_ field of the SharedMetadata structure below.
 enum : int {
   kFlagCorrupt = 1 << 0,
   kFlagFull    = 1 << 1
@@ -100,7 +101,9 @@ struct PersistentMemoryAllocator::BlockHeader {
 };
 
 // The shared metadata exists once at the top of the memory segment to
-// describe the state of the allocator to all processes.
+// describe the state of the allocator to all processes. The size of this
+// structure must be a multiple of 64-bits to ensure compatibility between
+// architectures.
 struct PersistentMemoryAllocator::SharedMetadata {
   uint32_t cookie;     // Some value that indicates complete initialization.
   uint32_t size;       // Total size of memory segment.
@@ -108,9 +111,14 @@ struct PersistentMemoryAllocator::SharedMetadata {
   uint32_t version;    // Version code so upgrades don't break.
   uint64_t id;         // Arbitrary ID number given by creator.
   uint32_t name;       // Reference to stored name string.
+  uint32_t padding1;   // Pad-out read-only data to 64-bit alignment.
 
   // Above is read-only after first construction. Below may be changed and
   // so must be marked "volatile" to provide correct inter-process behavior.
+
+  // State of the memory, plus some padding to keep alignment.
+  volatile std::atomic<uint8_t> memory_state;  // MemoryState enum values.
+  uint8_t padding2[3];
 
   // Bitfield of information flags. Access to this should be done through
   // the CheckFlag() and SetFlag() methods defined above.
@@ -121,6 +129,7 @@ struct PersistentMemoryAllocator::SharedMetadata {
 
   // The "iterable" queue is an M&S Queue as described here, append-only:
   // https://www.research.ibm.com/people/m/michael/podc-1996.pdf
+  // |queue| needs to be 64-bit aligned and is itself a multiple of 64 bits.
   volatile std::atomic<uint32_t> tailptr;  // Last block of iteration queue.
   volatile BlockHeader queue;   // Empty block for linked-list head/tail.
 };
@@ -312,7 +321,7 @@ PersistentMemoryAllocator::PersistentMemoryAllocator(Memory memory,
   // definitions and so cannot be moved to the global scope.
   static_assert(sizeof(PersistentMemoryAllocator::BlockHeader) == 16,
                 "struct is not portable across different natural word widths");
-  static_assert(sizeof(PersistentMemoryAllocator::SharedMetadata) == 56,
+  static_assert(sizeof(PersistentMemoryAllocator::SharedMetadata) == 64,
                 "struct is not portable across different natural word widths");
 
   static_assert(sizeof(BlockHeader) % kAllocAlignment == 0,
@@ -384,12 +393,13 @@ PersistentMemoryAllocator::PersistentMemoryAllocator(Memory memory,
       if (name_cstr)
         memcpy(name_cstr, name.data(), name.length());
     }
+
+    shared_meta()->memory_state.store(MEMORY_INITIALIZED,
+                                      std::memory_order_release);
   } else {
-    if (shared_meta()->size == 0 ||
-        shared_meta()->version == 0 ||
+    if (shared_meta()->size == 0 || shared_meta()->version != kGlobalVersion ||
         shared_meta()->freeptr.load(std::memory_order_relaxed) == 0 ||
-        shared_meta()->tailptr == 0 ||
-        shared_meta()->queue.cookie == 0 ||
+        shared_meta()->tailptr == 0 || shared_meta()->queue.cookie == 0 ||
         shared_meta()->queue.next.load(std::memory_order_relaxed) == 0) {
       SetCorrupt();
     }
@@ -468,6 +478,19 @@ void PersistentMemoryAllocator::CreateTrackingHistograms(
   errors_histogram_ = SparseHistogram::FactoryGet(
       "UMA.PersistentAllocator." + name_string + ".Errors",
       HistogramBase::kUmaTargetedHistogramFlag);
+}
+
+void PersistentMemoryAllocator::Flush(bool sync) {
+  FlushPartial(used(), sync);
+}
+
+void PersistentMemoryAllocator::SetMemoryState(uint8_t memory_state) {
+  shared_meta()->memory_state.store(memory_state, std::memory_order_relaxed);
+  FlushPartial(sizeof(SharedMetadata), false);
+}
+
+uint8_t PersistentMemoryAllocator::GetMemoryState() const {
+  return shared_meta()->memory_state.load(std::memory_order_relaxed);
 }
 
 size_t PersistentMemoryAllocator::used() const {
@@ -816,8 +839,12 @@ const volatile PersistentMemoryAllocator::BlockHeader*
 PersistentMemoryAllocator::GetBlock(Reference ref, uint32_t type_id,
                                     uint32_t size, bool queue_ok,
                                     bool free_ok) const {
+  // Handle special cases.
+  if (ref == kReferenceQueue && queue_ok)
+    return reinterpret_cast<const volatile BlockHeader*>(mem_base_ + ref);
+
   // Validation of parameters.
-  if (ref < (queue_ok ? kReferenceQueue : sizeof(SharedMetadata)))
+  if (ref < sizeof(SharedMetadata))
     return nullptr;
   if (ref % kAllocAlignment != 0)
     return nullptr;
@@ -827,17 +854,13 @@ PersistentMemoryAllocator::GetBlock(Reference ref, uint32_t type_id,
 
   // Validation of referenced block-header.
   if (!free_ok) {
-    uint32_t freeptr = std::min(
-        shared_meta()->freeptr.load(std::memory_order_relaxed), mem_size_);
-    if (ref + size > freeptr)
-      return nullptr;
     const volatile BlockHeader* const block =
         reinterpret_cast<volatile BlockHeader*>(mem_base_ + ref);
+    if (block->cookie != kBlockCookieAllocated)
+      return nullptr;
     if (block->size < size)
       return nullptr;
-    if (ref + block->size > freeptr)
-      return nullptr;
-    if (ref != kReferenceQueue && block->cookie != kBlockCookieAllocated)
+    if (ref + block->size > mem_size_)
       return nullptr;
     if (type_id != 0 &&
         block->type_id.load(std::memory_order_relaxed) != type_id) {
@@ -847,6 +870,13 @@ PersistentMemoryAllocator::GetBlock(Reference ref, uint32_t type_id,
 
   // Return pointer to block data.
   return reinterpret_cast<const volatile BlockHeader*>(mem_base_ + ref);
+}
+
+void PersistentMemoryAllocator::FlushPartial(size_t length, bool sync) {
+  // Generally there is nothing to do as every write is done through volatile
+  // memory with atomic instructions to guarantee consistency. This (virtual)
+  // method exists so that derivced classes can do special things, such as
+  // tell the OS to write changes to disk now rather than when convenient.
 }
 
 void PersistentMemoryAllocator::RecordError(int error) const {
@@ -989,7 +1019,12 @@ FilePersistentMemoryAllocator::FilePersistentMemoryAllocator(
           id,
           name,
           read_only),
-      mapped_file_(std::move(file)) {}
+      mapped_file_(std::move(file)) {
+  // Ensure the disk-copy of the data reflects the fully-initialized memory as
+  // there is no guarantee as to what order the pages might be auto-flushed by
+  // the OS in the future.
+  Flush(true);
+}
 
 FilePersistentMemoryAllocator::~FilePersistentMemoryAllocator() {}
 
@@ -999,6 +1034,139 @@ bool FilePersistentMemoryAllocator::IsFileAcceptable(
     bool read_only) {
   return IsMemoryAcceptable(file.data(), file.length(), 0, read_only);
 }
+
+void FilePersistentMemoryAllocator::FlushPartial(size_t length, bool sync) {
+  if (sync)
+    ThreadRestrictions::AssertIOAllowed();
+  if (IsReadonly())
+    return;
+
+#if defined(OS_WIN)
+  // Windows doesn't support a synchronous flush.
+  BOOL success = ::FlushViewOfFile(data(), length);
+  DPCHECK(success);
+#elif defined(OS_MACOSX)
+  // On OSX, "invalidate" removes all cached pages, forcing a re-read from
+  // disk. That's not applicable to "flush" so omit it.
+  int result =
+      ::msync(const_cast<void*>(data()), length, sync ? MS_SYNC : MS_ASYNC);
+  DCHECK_NE(EINVAL, result);
+#elif defined(OS_POSIX)
+  // On POSIX, "invalidate" forces _other_ processes to recognize what has
+  // been written to disk and so is applicable to "flush".
+  int result = ::msync(const_cast<void*>(data()), length,
+                       MS_INVALIDATE | (sync ? MS_SYNC : MS_ASYNC));
+  DCHECK_NE(EINVAL, result);
+#else
+#error Unsupported OS.
+#endif
+}
 #endif  // !defined(OS_NACL)
+
+//----- DelayedPersistentAllocation --------------------------------------------
+
+// Forwarding constructors.
+DelayedPersistentAllocation::DelayedPersistentAllocation(
+    PersistentMemoryAllocator* allocator,
+    subtle::Atomic32* ref,
+    uint32_t type,
+    size_t size,
+    bool make_iterable)
+    : DelayedPersistentAllocation(
+          allocator,
+          reinterpret_cast<std::atomic<Reference>*>(ref),
+          type,
+          size,
+          0,
+          make_iterable) {}
+
+DelayedPersistentAllocation::DelayedPersistentAllocation(
+    PersistentMemoryAllocator* allocator,
+    subtle::Atomic32* ref,
+    uint32_t type,
+    size_t size,
+    size_t offset,
+    bool make_iterable)
+    : DelayedPersistentAllocation(
+          allocator,
+          reinterpret_cast<std::atomic<Reference>*>(ref),
+          type,
+          size,
+          offset,
+          make_iterable) {}
+
+DelayedPersistentAllocation::DelayedPersistentAllocation(
+    PersistentMemoryAllocator* allocator,
+    std::atomic<Reference>* ref,
+    uint32_t type,
+    size_t size,
+    bool make_iterable)
+    : DelayedPersistentAllocation(allocator,
+                                  ref,
+                                  type,
+                                  size,
+                                  0,
+                                  make_iterable) {}
+
+// Real constructor.
+DelayedPersistentAllocation::DelayedPersistentAllocation(
+    PersistentMemoryAllocator* allocator,
+    std::atomic<Reference>* ref,
+    uint32_t type,
+    size_t size,
+    size_t offset,
+    bool make_iterable)
+    : allocator_(allocator),
+      type_(type),
+      size_(size),
+      offset_(offset),
+      make_iterable_(make_iterable),
+      reference_(ref) {
+  DCHECK(allocator_);
+  DCHECK_NE(0U, type_);
+  DCHECK_LT(0U, size_);
+  DCHECK(reference_);
+}
+
+DelayedPersistentAllocation::~DelayedPersistentAllocation() {}
+
+void* DelayedPersistentAllocation::Get() const {
+  // Relaxed operations are acceptable here because it's not protecting the
+  // contents of the allocation in any way.
+  Reference ref = reference_->load(std::memory_order_acquire);
+  if (!ref) {
+    ref = allocator_->Allocate(size_, type_);
+    if (!ref)
+      return nullptr;
+
+    // Store the new reference in its proper location using compare-and-swap.
+    // Use a "strong" exchange to ensure no false-negatives since the operation
+    // cannot be retried.
+    Reference existing = 0;  // Must be mutable; receives actual value.
+    if (reference_->compare_exchange_strong(existing, ref,
+                                            std::memory_order_release,
+                                            std::memory_order_relaxed)) {
+      if (make_iterable_)
+        allocator_->MakeIterable(ref);
+    } else {
+      // Failure indicates that something else has raced ahead, performed the
+      // allocation, and stored its reference. Purge the allocation that was
+      // just done and use the other one instead.
+      DCHECK_EQ(type_, allocator_->GetType(existing));
+      DCHECK_LE(size_, allocator_->GetAllocSize(existing));
+      allocator_->ChangeType(ref, 0, type_, /*clear=*/false);
+      ref = existing;
+    }
+  }
+
+  char* mem = allocator_->GetAsArray<char>(ref, type_, size_);
+  if (!mem) {
+    // This should never happen but be tolerant if it does as corruption from
+    // the outside is something to guard against.
+    NOTREACHED();
+    return nullptr;
+  }
+  return mem + offset_;
+}
 
 }  // namespace base

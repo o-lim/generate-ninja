@@ -96,6 +96,29 @@ class BASE_EXPORT PersistentMemoryAllocator {
  public:
   typedef uint32_t Reference;
 
+  // These states are used to indicate the overall condition of the memory
+  // segment irrespective of what is stored within it. Because the data is
+  // often persistent and thus needs to be readable by different versions of
+  // a program, these values are fixed and can never change.
+  enum MemoryState : uint8_t {
+    // Persistent memory starts all zeros and so shows "uninitialized".
+    MEMORY_UNINITIALIZED = 0,
+
+    // The header has been written and the memory is ready for use.
+    MEMORY_INITIALIZED = 1,
+
+    // The data should be considered deleted. This would be set when the
+    // allocator is being cleaned up. If file-backed, the file is likely
+    // to be deleted but since deletion can fail for a variety of reasons,
+    // having this extra status means a future reader can realize what
+    // should have happened.
+    MEMORY_DELETED = 2,
+
+    // Outside code can create states starting with this number; these too
+    // must also never change between code versions.
+    MEMORY_USER_DEFINED = 100,
+  };
+
   // Iterator for going through all iterable memory records in an allocator.
   // Like the allocator itself, iterators are lock-free and thread-secure.
   // That means that multiple threads can share an iterator and the same
@@ -280,7 +303,11 @@ class BASE_EXPORT PersistentMemoryAllocator {
   const char* Name() const;
 
   // Is this segment open only for read?
-  bool IsReadonly() { return readonly_; }
+  bool IsReadonly() const { return readonly_; }
+
+  // Manage the saved state of the memory.
+  void SetMemoryState(uint8_t memory_state);
+  uint8_t GetMemoryState() const;
 
   // Create internal histograms for tracking memory use and allocation sizes
   // for allocator of |name| (which can simply be the result of Name()). This
@@ -292,6 +319,17 @@ class BASE_EXPORT PersistentMemoryAllocator {
   //    UMA.PersistentAllocator.name.Errors
   //    UMA.PersistentAllocator.name.UsedPct
   void CreateTrackingHistograms(base::StringPiece name);
+
+  // Flushes the persistent memory to any backing store. This typically does
+  // nothing but is used by the FilePersistentMemoryAllocator to inform the
+  // OS that all the data should be sent to the disk immediately. This is
+  // useful in the rare case where something has just been stored that needs
+  // to survive a hard shutdown of the machine like from a power failure.
+  // The |sync| parameter indicates if this call should block until the flush
+  // is complete but is only advisory and may or may not have an effect
+  // depending on the capabilities of the OS. Synchronous flushes are allowed
+  // only from theads that are allowed to do I/O.
+  void Flush(bool sync);
 
   // Direct access to underlying memory segment. If the segment is shared
   // across threads or processes, reading data through these values does
@@ -580,6 +618,9 @@ class BASE_EXPORT PersistentMemoryAllocator {
                             uint64_t id, base::StringPiece name,
                             bool readonly);
 
+  // Implementation of Flush that accepts how much to flush.
+  virtual void FlushPartial(size_t length, bool sync);
+
   volatile char* const mem_base_;  // Memory base. (char so sizeof guaranteed 1)
   const MemoryType mem_type_;      // Type of memory allocation.
   const uint32_t mem_size_;        // Size of entire memory segment.
@@ -715,12 +756,113 @@ class BASE_EXPORT FilePersistentMemoryAllocator
   // the rest.
   static bool IsFileAcceptable(const MemoryMappedFile& file, bool read_only);
 
+ protected:
+  // PersistentMemoryAllocator:
+  void FlushPartial(size_t length, bool sync) override;
+
  private:
   std::unique_ptr<MemoryMappedFile> mapped_file_;
 
   DISALLOW_COPY_AND_ASSIGN(FilePersistentMemoryAllocator);
 };
 #endif  // !defined(OS_NACL)
+
+// An allocation that is defined but not executed until required at a later
+// time. This allows for potential users of an allocation to be decoupled
+// from the logic that defines it. In addition, there can be multiple users
+// of the same allocation or any region thereof that are guaranteed to always
+// use the same space. It's okay to copy/move these objects.
+//
+// This is a top-level class instead of an inner class of the PMA so that it
+// can be forward-declared in other header files without the need to include
+// the full contents of this file.
+class BASE_EXPORT DelayedPersistentAllocation {
+ public:
+  using Reference = PersistentMemoryAllocator::Reference;
+
+  // Creates a delayed allocation using the specified |allocator|. When
+  // needed, the memory will be allocated using the specified |type| and
+  // |size|. If |offset| is given, the returned pointer will be at that
+  // offset into the segment; this allows combining allocations into a
+  // single persistent segment to reduce overhead and means an "all or
+  // nothing" request. Note that |size| is always the total memory size
+  // and |offset| is just indicating the start of a block within it.  If
+  // |make_iterable| was true, the allocation will made iterable when it
+  // is created; already existing allocations are not changed.
+  //
+  // Once allocated, a reference to the segment will be stored at |ref|.
+  // This shared location must be initialized to zero (0); it is checked
+  // with every Get() request to see if the allocation has already been
+  // done. If reading |ref| outside of this object, be sure to do an
+  // "acquire" load. Don't write to it -- leave that to this object.
+  //
+  // For convenience, methods taking both Atomic32 and std::atomic<Reference>
+  // are defined.
+  DelayedPersistentAllocation(PersistentMemoryAllocator* allocator,
+                              subtle::Atomic32* ref,
+                              uint32_t type,
+                              size_t size,
+                              bool make_iterable);
+  DelayedPersistentAllocation(PersistentMemoryAllocator* allocator,
+                              subtle::Atomic32* ref,
+                              uint32_t type,
+                              size_t size,
+                              size_t offset,
+                              bool make_iterable);
+  DelayedPersistentAllocation(PersistentMemoryAllocator* allocator,
+                              std::atomic<Reference>* ref,
+                              uint32_t type,
+                              size_t size,
+                              bool make_iterable);
+  DelayedPersistentAllocation(PersistentMemoryAllocator* allocator,
+                              std::atomic<Reference>* ref,
+                              uint32_t type,
+                              size_t size,
+                              size_t offset,
+                              bool make_iterable);
+  ~DelayedPersistentAllocation();
+
+  // Gets a pointer to the defined allocation. This will realize the request
+  // and update the reference provided during construction. The memory will
+  // be zeroed the first time it is returned, after that it is shared with
+  // all other Get() requests and so shows any changes made to it elsewhere.
+  //
+  // If the allocation fails for any reason, null will be returned. This works
+  // even on "const" objects because the allocation is already defined, just
+  // delayed.
+  void* Get() const;
+
+  // Gets the internal reference value. If this returns a non-zero value then
+  // a subsequent call to Get() will do nothing but convert that reference into
+  // a memory location -- useful for accessing an existing allocation without
+  // creating one unnecessarily.
+  Reference reference() const {
+    return reference_->load(std::memory_order_relaxed);
+  }
+
+ private:
+  // The underlying object that does the actual allocation of memory. Its
+  // lifetime must exceed that of all DelayedPersistentAllocation objects
+  // that use it.
+  PersistentMemoryAllocator* const allocator_;
+
+  // The desired type and size of the allocated segment plus the offset
+  // within it for the defined request.
+  const uint32_t type_;
+  const size_t size_;
+  const size_t offset_;
+
+  // Flag indicating if allocation should be made iterable when done.
+  const bool make_iterable_;
+
+  // The location at which a reference to the allocated segment is to be
+  // stored once the allocation is complete. If multiple delayed allocations
+  // share the same pointer then an allocation on one will amount to an
+  // allocation for all.
+  volatile std::atomic<Reference>* const reference_;
+
+  // No DISALLOW_COPY_AND_ASSIGN as it's okay to copy/move these objects.
+};
 
 }  // namespace base
 
