@@ -2389,7 +2389,7 @@ action("build_date") {
   version = getenv("GN_VERSION")
   if (version == "") {
     head = exec_script("//build/util/githead.py",
-                       [ rebase_path("//.git/HEAD") ],
+                       [ rebase_path("//.git/HEAD", root_build_dir) ],
                        "trim string",
                        ["//.git/HEAD"])
     inputs = [

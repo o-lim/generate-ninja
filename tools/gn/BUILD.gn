@@ -243,7 +243,7 @@ action("last_commit_position") {
   version = getenv("GN_VERSION")
   if (version == "") {
     head = exec_script("//build/util/githead.py",
-                       [ rebase_path("//.git/HEAD") ],
+                       [ rebase_path("//.git/HEAD", root_build_dir) ],
                        "trim string",
                        ["//.git/HEAD"])
     # This dependency forces a re-run when the code is synced.
