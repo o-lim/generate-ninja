@@ -16,6 +16,7 @@ class JSONProjectWriter {
   static bool RunAndWriteFiles(const BuildSettings* build_setting,
                                const Builder& builder,
                                const std::string& file_name,
+                               const base::FilePath& exec_script_interpreter,
                                const std::string& exec_script,
                                const std::string& exec_script_extra_args,
                                const std::string& dir_filter_string,

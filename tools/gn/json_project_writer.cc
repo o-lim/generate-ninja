@@ -124,19 +124,19 @@ std::string RenderJSON(const BuildSettings* build_settings,
   return s;
 }
 
-bool InvokePython(const BuildSettings* build_settings,
-                  const base::FilePath& python_script_path,
-                  const std::string& python_script_extra_args,
+bool InvokeScript(const BuildSettings* build_settings,
+                  const base::FilePath& interpreter_path,
+                  const base::FilePath& script_path,
+                  const std::string& script_extra_args,
                   const base::FilePath& output_path,
                   bool quiet,
                   Err* err) {
-  const base::FilePath& python_path = build_settings->python_path();
-  base::CommandLine cmdline(python_path);
+  base::CommandLine cmdline(interpreter_path);
   cmdline.AppendArg("--");
-  cmdline.AppendArgPath(python_script_path);
+  cmdline.AppendArgPath(script_path);
   cmdline.AppendArgPath(output_path);
-  if (!python_script_extra_args.empty()) {
-    cmdline.AppendArg(python_script_extra_args);
+  if (!script_extra_args.empty()) {
+    cmdline.AppendArg(script_extra_args);
   }
   base::FilePath startup_dir =
       build_settings->GetFullPath(build_settings->build_dir());
@@ -148,8 +148,8 @@ bool InvokePython(const BuildSettings* build_settings,
   if (!internal::ExecProcess(cmdline, startup_dir, &output, &stderr_output,
                              &exit_code)) {
     *err =
-        Err(Location(), "Could not execute python.",
-            "I was trying to execute \"" + FilePathToUTF8(python_path) + "\".");
+        Err(Location(), "Could not execute interpreter.",
+            "I was trying to execute \"" + FilePathToUTF8(interpreter_path) + "\".");
     return false;
   }
 
@@ -173,6 +173,7 @@ bool JSONProjectWriter::RunAndWriteFiles(
     const BuildSettings* build_settings,
     const Builder& builder,
     const std::string& file_name,
+    const base::FilePath& exec_script_interpreter,
     const std::string& exec_script,
     const std::string& exec_script_extra_args,
     const std::string& dir_filter_string,
@@ -211,9 +212,11 @@ bool JSONProjectWriter::RunAndWriteFiles(
       } else {
         script_file = SourceFile(exec_script);
       }
+      base::FilePath interpreter_path = exec_script_interpreter.empty() ?
+          build_settings->python_path() : exec_script_interpreter;
       base::FilePath script_path = build_settings->GetFullPath(script_file);
-      return InvokePython(build_settings, script_path, exec_script_extra_args,
-                          output_path, quiet, err);
+      return InvokeScript(build_settings, interpreter_path, script_path,
+                          exec_script_extra_args, output_path, quiet, err);
     }
   }
 

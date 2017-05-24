@@ -47,6 +47,7 @@ const char kSwitchWorkspace[] = "workspace";
 const char kSwitchJsonFileName[] = "json-file-name";
 const char kSwitchJsonIdeScript[] = "json-ide-script";
 const char kSwitchJsonIdeScriptArgs[] = "json-ide-script-args";
+const char kSwitchJsonIdeScriptInterpreter[] = "json-ide-script-interpreter";
 
 // Collects Ninja rules for each toolchain. The lock protectes the rules.
 struct TargetWriteInfo {
@@ -251,10 +252,12 @@ bool RunIdeWriter(const std::string& ide,
         command_line->GetSwitchValueASCII(kSwitchJsonIdeScript);
     std::string exec_script_extra_args =
         command_line->GetSwitchValueASCII(kSwitchJsonIdeScriptArgs);
+    base::FilePath exec_script_interpreter =
+        command_line->GetSwitchValuePath(kSwitchJsonIdeScriptInterpreter);
     std::string filters = command_line->GetSwitchValueASCII(kSwitchFilters);
 
     bool res = JSONProjectWriter::RunAndWriteFiles(
-        build_settings, builder, file_name, exec_script, exec_script_extra_args,
+        build_settings, builder, file_name, exec_script_interpreter, exec_script, exec_script_extra_args,
         filters, quiet, err);
     if (res && !quiet) {
       OutputString("Generating JSON projects took " +
@@ -362,22 +365,25 @@ Eclipse IDE Support
 
 Generic JSON Output
 
-  Dumps target information to a JSON file and optionally invokes a
-  python script on the generated file. See the comments at the beginning
-  of json_project_writer.cc and desc_builder.cc for an overview of the JSON
-  file format.
+  Dumps target information to a JSON file and optionally invokes a script on
+  the generated file. See comments at the beginning of json_project_writer.cc
+  and desc_builder.cc for an overview of the JSON file format.
 
   --json-file-name=<json_file_name>
       Overrides default file name (project.json) of generated JSON file.
 
-  --json-ide-script=<path_to_python_script>
-      Executes python script after the JSON file is generated. Path can be
+  --json-ide-script=<path_to_script>
+      Executes this script after the JSON file is generated. Path can be
       project absolute (//), system absolute (/) or relative, in which case the
       output directory will be base. Path to generated JSON file will be first
       argument when invoking script.
 
   --json-ide-script-args=<argument>
       Optional second argument that will passed to executed script.
+
+  --json-ide-script-interpreter=<interpreter>
+      Interpreter to use to execute the script. If unspecified, the default
+      Python interpreter is used.
 )";
 
 int RunGen(const std::vector<std::string>& args) {
