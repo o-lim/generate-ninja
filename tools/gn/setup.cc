@@ -399,8 +399,13 @@ bool Setup::RunPostMessageLoop() {
     PrintLongHelp(SummarizeTraces());
   if (cmdline->HasSwitch(switches::kTracelog))
     SaveTraces(cmdline->GetSwitchValuePath(switches::kTracelog));
-  if (cmdline->HasSwitch(switches::kEnvlog))
-    scheduler_.SaveEnvLog(cmdline->GetSwitchValuePath(switches::kEnvlog));
+  if (cmdline->HasSwitch(switches::kEnvlog)) {
+    std::string file_name = cmdline->GetSwitchValueASCII(switches::kEnvlog);
+    SourceFile logfile = build_settings_.build_dir().ResolveRelativeFile(
+        Value(nullptr, file_name), &err);
+    base::FilePath logfile_path = build_settings_.GetFullPath(logfile);
+    scheduler_.SaveEnvLog(logfile_path);
+  }
 
   return true;
 }
