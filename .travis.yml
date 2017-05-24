@@ -7,13 +7,21 @@ matrix:
     - os: linux
       env:
         - system="i686-linux"
+        - DEPLOY=1
     - os: linux
       env:
         - system="x86_64-linux"
+        - DEPLOY=1
     - os: osx
       osx_image: xcode8
       env:
         - system="x86_64-darwin"
+        - DEPLOY=1
+    - os: osx
+      osx_image: xcode8.3
+      env:
+        - system="x86_64-darwin"
+        - DEPLOY=0
 
 before_install:
   - source .travis/setenv.sh
@@ -41,3 +49,4 @@ deploy:
   on:
     repo: o-lim/generate-ninja
     tags: true
+    condition: $DEPLOY = 1
