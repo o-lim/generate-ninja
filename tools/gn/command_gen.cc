@@ -29,6 +29,7 @@ namespace commands {
 namespace {
 
 const char kSwitchCheck[] = "check";
+const char kSwitchEnvlog[] = "envlog";
 const char kSwitchFilters[] = "filters";
 const char kSwitchIde[] = "ide";
 const char kSwitchIdeValueEclipse[] = "eclipse";
@@ -278,7 +279,7 @@ const char kGen_HelpShort[] = "gen: Generate ninja files.";
 const char kGen_Help[] =
     R"(gn gen: Generate ninja files.
 
-  gn gen [--check] [<ide options>] <out_dir>
+  gn gen [--check] [--envlog=<file_name>] [<ide options>] <out_dir>
 
   Generates ninja files from the current tree and puts them in the given output
   directory.
@@ -292,6 +293,13 @@ const char kGen_Help[] =
   for documentation on that mode.
 
   See "gn help switches" for the common command-line switches.
+
+Options
+
+  --envlog=<file_name>
+      Writes a list of environment variables to the given file. The env log
+      will show a list of environment variables referenced in gn files as
+      well as their values.
 
 IDE options
 
@@ -396,13 +404,16 @@ int RunGen(const std::vector<std::string>& args) {
     return 1;
   }
 
+  const base::CommandLine* command_line =
+      base::CommandLine::ForCurrentProcess();
+  bool env_logging = command_line->HasSwitch(kSwitchEnvlog);
+
   // Deliberately leaked to avoid expensive process teardown.
   Setup* setup = new Setup();
+  setup->scheduler().set_env_logging(env_logging);
   if (!setup->DoSetup(args[0], true))
     return 1;
 
-  const base::CommandLine* command_line =
-      base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(kSwitchCheck))
     setup->set_check_public_headers(true);
 
@@ -433,6 +444,14 @@ int RunGen(const std::vector<std::string>& args) {
                                      &err)) {
     err.PrintToStdout();
     return 1;
+  }
+
+  if (env_logging) {
+    std::string file_name = command_line->GetSwitchValueASCII(kSwitchEnvlog);
+    SourceFile envlog = setup->build_settings().build_dir().ResolveRelativeFile(
+        Value(nullptr, file_name), &err);
+    base::FilePath envlog_path = setup->build_settings().GetFullPath(envlog);
+    setup->scheduler().SaveEnvLog(envlog_path);
   }
 
   if (!WriteRuntimeDepsFilesIfNecessary(setup->builder(), &err)) {

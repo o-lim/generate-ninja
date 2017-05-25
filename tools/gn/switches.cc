@@ -70,20 +70,6 @@ const char kDotfile_Help[] =
   It would be nice to test the edge cases and document or fix.
 )";
 
-const char kEnvlog[] = "envlog";
-const char kEnvlog_HelpShort[] =
-    "--envlog: Writes a list of environment variables to the given file.";
-const char kEnvlog_Help[] =
-    R"(--envlog: Writes a list of environment variables to the given file.
-
-  The env log will show a list of environment variables used referenced
-  in gn files as well their values.
-
-Examples
-
-  gn gen out/Default --envlog=myenv.log
-)";
-
 const char kFailOnUnusedArgs[] = "fail-on-unused-args";
 const char kFailOnUnusedArgs_HelpShort[] =
     "--fail-on-unused-args: Treat unused build args as fatal errors.";
@@ -289,7 +275,6 @@ const SwitchInfoMap& GetSwitches() {
     INSERT_VARIABLE(Args)
     INSERT_VARIABLE(Color)
     INSERT_VARIABLE(Dotfile)
-    INSERT_VARIABLE(Envlog)
     INSERT_VARIABLE(FailOnUnusedArgs)
     INSERT_VARIABLE(Markdown)
     INSERT_VARIABLE(NoColor)

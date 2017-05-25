@@ -631,7 +631,7 @@
 ### <a name="gen:"></a>**gn gen**: Generate ninja files.
 
 ```
-  gn gen [--check] [<ide options>] <out_dir>
+  gn gen [--check] [--envlog=<file_name>] [<ide options>] <out_dir>
 
   Generates ninja files from the current tree and puts them in the given output
   directory.
@@ -645,6 +645,15 @@
   for documentation on that mode.
 
   See "gn help switches" for the common command-line switches.
+```
+
+#### **Options**
+
+```
+  --envlog=<file_name>
+      Writes a list of environment variables to the given file. The env log
+      will show a list of environment variables referenced in gn files as
+      well as their values.
 ```
 
 #### **IDE options**
@@ -7028,7 +7037,6 @@
     *   [--args: Specifies build arguments overrides.](#--args)
     *   [--color: Force colored output.](#--color)
     *   [--dotfile: Override the name of the ".gn" file.](#--dotfile)
-    *   [--envlog: Writes a list of environment variables to the given file.](#--envlog)
     *   [--fail-on-unused-args: Treat unused build args as fatal errors.](#--fail-on-unused-args)
     *   [--markdown: Write help output in the Markdown format.](#--markdown)
     *   [--nocolor: Force non-colored output.](#--nocolor)
