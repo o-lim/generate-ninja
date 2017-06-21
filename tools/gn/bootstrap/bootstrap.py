@@ -348,7 +348,7 @@ def write_gn_ninja(path, root_gen_dir, options):
     cflags.extend([
         '/FS',
         '/Gy',
-        '/W3', '/wd4244', '/wd4267', '/wd4312', '/wd4838', '/wd4996',
+        '/W3', '/wd4244', '/wd4267', '/wd4312', '/wd4577', '/wd4838', '/wd4996',
         '/Zi',
         '/DWIN32_LEAN_AND_MEAN', '/DNOMINMAX',
         '/D_CRT_SECURE_NO_DEPRECATE', '/D_SCL_SECURE_NO_DEPRECATE',
@@ -754,7 +754,6 @@ def write_gn_ninja(path, root_gen_dir, options):
         'base/time/time_win.cc',
         'base/timer/hi_res_timer_manager_win.cc',
         'base/trace_event/heap_profiler_allocation_register_win.cc',
-        'base/trace_event/malloc_dump_provider.cc',
         'base/trace_event/trace_event_etw_export_win.cc',
         'base/win/enum_variant.cc',
         'base/win/event_trace_controller.cc',
