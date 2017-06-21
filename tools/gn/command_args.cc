@@ -255,66 +255,90 @@ bool RunEditor(const base::FilePath& file_to_edit) {
 #endif
 
 int EditArgsFile(const std::string& build_dir) {
-  {
-    // Scope the setup. We only use it for some basic state. We'll do the
-    // "real" build below in the gen command.
-    Setup setup;
-    // Don't fill build arguments. We're about to edit the file which supplies
-    // these in the first place.
-    setup.set_fill_arguments(false);
-    if (!setup.DoSetup(build_dir, true))
-      return 1;
+  Setup setup;
+  // Don't fill build arguments. We're about to edit the file which supplies
+  // these in the first place.
+  setup.set_fill_arguments(false);
+  if (!setup.DoSetup(build_dir, true))
+    return 1;
 
-    // Ensure the file exists. Need to normalize path separators since on
-    // Windows they can come out as forward slashes here, and that confuses some
-    // of the commands.
-    BuildSettings build_settings = setup.build_settings();
-    base::FilePath arg_file =
-        build_settings.GetFullPath(setup.GetBuildArgFile())
-            .NormalizePathSeparators();
-    if (!base::PathExists(arg_file)) {
-      std::string argfile_default_contents =
-          "# Build arguments go here.\n"
-          "# See \"gn args <out_dir> --list\" for available build "
-          "arguments.\n";
+  // Ensure the file exists. Need to normalize path separators since on
+  // Windows they can come out as forward slashes here, and that confuses some
+  // of the commands.
+  BuildSettings build_settings = setup.build_settings();
+  base::FilePath arg_file =
+      build_settings.GetFullPath(setup.GetBuildArgFile())
+          .NormalizePathSeparators();
+  if (!base::PathExists(arg_file)) {
+    std::string argfile_default_contents =
+        "# Build arguments go here.\n"
+        "# See \"gn args <out_dir> --list\" for available build "
+        "arguments.\n";
 
-      SourceFile template_path = build_settings.arg_file_template_path();
-      if (!template_path.is_null()) {
-        base::FilePath full_path =
-            build_settings.GetFullPath(template_path).NormalizePathSeparators();
-        if (!base::PathExists(full_path)) {
-          Err err =
-              Err(Location(), std::string("Can't load arg_file_template:\n  ") +
-                                  template_path.value());
-          err.PrintToStdout();
-          return 1;
-        }
-
-        // Ignore the return code; if the read fails (unlikely), we'll just
-        // use the default contents.
-        base::ReadFileToString(full_path, &argfile_default_contents);
+    SourceFile template_path = build_settings.arg_file_template_path();
+    if (!template_path.is_null()) {
+      base::FilePath full_path =
+          build_settings.GetFullPath(template_path).NormalizePathSeparators();
+      if (!base::PathExists(full_path)) {
+        Err err =
+            Err(Location(), std::string("Can't load arg_file_template:\n  ") +
+                                template_path.value());
+        err.PrintToStdout();
+        return 1;
       }
-#if defined(OS_WIN)
-      // Use Windows lineendings for this file since it will often open in
-      // Notepad which can't handle Unix ones.
-      base::ReplaceSubstringsAfterOffset(
-          &argfile_default_contents, 0, "\n", "\r\n");
-#endif
-      base::CreateDirectory(arg_file.DirName());
-      base::WriteFile(arg_file, argfile_default_contents.c_str(),
-                      static_cast<int>(argfile_default_contents.size()));
-    }
 
-    ScopedTrace editor_trace(TraceItem::TRACE_SETUP, "Waiting for editor");
-    if (!RunEditor(arg_file))
-      return 1;
+      // Ignore the return code; if the read fails (unlikely), we'll just
+      // use the default contents.
+      base::ReadFileToString(full_path, &argfile_default_contents);
+    }
+#if defined(OS_WIN)
+    // Use Windows lineendings for this file since it will often open in
+    // Notepad which can't handle Unix ones.
+    base::ReplaceSubstringsAfterOffset(
+        &argfile_default_contents, 0, "\n", "\r\n");
+#endif
+    base::CreateDirectory(arg_file.DirName());
+    base::WriteFile(arg_file, argfile_default_contents.c_str(),
+                    static_cast<int>(argfile_default_contents.size()));
   }
 
-  // Now do a normal "gen" command.
-  OutputString("Generating files...\n");
-  std::vector<std::string> gen_commands;
-  gen_commands.push_back(build_dir);
-  return RunGen(gen_commands);
+  ScopedTrace editor_trace(TraceItem::TRACE_SETUP, "Waiting for editor");
+  if (!RunEditor(arg_file))
+    return 1;
+
+  // NOTE: Not all GN builds have args.gn file, hence we check here if a
+  // build.ninja.d files exists and if it references the arg file.
+  base::FilePath build_dir_path =
+      build_settings.GetFullPath(build_settings.build_dir());
+  base::FilePath build_ninja_d_file =
+      build_dir_path.AppendASCII("build.ninja.d");
+  if (base::PathExists(build_ninja_d_file)) {
+    std::string depfile_contents;
+    std::string argfile = " " +
+        FilePathToUTF8(arg_file.NormalizePathSeparatorsTo('/'));
+
+    // Update dependency list in .d file if arg file is not already in the
+    // list. This ensures that Ninja marks the build as dirty if the arg
+    // file was just created.
+    if (!base::ReadFileToString(build_ninja_d_file, &depfile_contents)) {
+      // Read failed, so replace .d file contents the with default contents
+      // which only references the arg file. This will make Ninja mark the
+      // build as dirty.
+      depfile_contents = "build.ninja:" + argfile + "\n";
+      base::WriteFile(build_ninja_d_file, depfile_contents.data(),
+                      static_cast<int>(depfile_contents.size()));
+    } else if (depfile_contents.find(argfile + " ") == std::string::npos &&
+               depfile_contents.find(argfile + "\n") == std::string::npos) {
+      // The arg file is not referenced in the .d file, so add it to the file.
+      // NOTE: The .d file always ends with a new-line character, hence we
+      // insert the arg file just before the new-line.
+      depfile_contents.insert(depfile_contents.size()-1, argfile);
+      base::WriteFile(build_ninja_d_file, depfile_contents.data(),
+                      static_cast<int>(depfile_contents.size()));
+    }
+  }
+
+  return 0;
 }
 
 }  // namespace

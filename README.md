@@ -56,6 +56,7 @@ Furthermore, this fork adds some minor features as well as some bug fixes:
  - Fix errors when root build dir equals source root
  - Fix static library link order to fix unresolved symbol link errors
  - Fix `--all-toolchains` flag for `gn ls` and `gn refs`
+ - Fix `gn args` regenerating ninja files with different command-line switches
  - Support source substitutions for binary targets
  - Support for `command` in action targets
  - Support for `description` in action targets
