@@ -144,20 +144,29 @@ TEST_F(LoaderTest, Foo) {
   loader->Load(root_build, LocationRange(), Label());
   EXPECT_TRUE(mock_ifm_.HasOnePending(build_config));
 
-  // Completing the build config load should kick off the root build file load.
+  // Completing the build config load should kick off the toolchain load.
   mock_ifm_.IssueAllPending();
   base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(mock_ifm_.HasOnePending(root_build));
+  EXPECT_TRUE(mock_ifm_.HasOnePending(SourceFile("//tc/BUILD.gn")));
 
-  // Load the root build file.
+  // Load the toolchain file.
   mock_ifm_.IssueAllPending();
   base::RunLoop().RunUntilIdle();
+
+  // We have to tell it we have a toolchain definition now (normally the
+  // builder would do this).
+  Label default_tc(SourceDir("//tc/"), "tc");
+  const Settings* default_settings = loader->GetToolchainSettings(Label());
+  Toolchain default_tc_object(default_settings, default_tc);
+  loader->ToolchainLoaded(&default_tc_object);
+  EXPECT_TRUE(mock_ifm_.HasOnePending(root_build));
 
   // Schedule some other file to load in another toolchain.
   Label second_tc(SourceDir("//tc2/"), "tc2");
   SourceFile second_file("//foo/BUILD.gn");
   loader->Load(second_file, LocationRange(), second_tc);
-  EXPECT_TRUE(mock_ifm_.HasOnePending(SourceFile("//tc2/BUILD.gn")));
+  EXPECT_TRUE(mock_ifm_.HasTwoPending(root_build,
+                                      SourceFile("//tc2/BUILD.gn")));
 
   // Running the toolchain file should schedule the build config file to load
   // for that toolchain.
@@ -166,20 +175,21 @@ TEST_F(LoaderTest, Foo) {
 
   // We have to tell it we have a toolchain definition now (normally the
   // builder would do this).
-  const Settings* default_settings = loader->GetToolchainSettings(Label());
-  Toolchain second_tc_object(default_settings, second_tc);
+  const Settings* tc2_settings = loader->GetToolchainSettings(second_tc);
+  Toolchain second_tc_object(tc2_settings, second_tc);
   loader->ToolchainLoaded(&second_tc_object);
   EXPECT_TRUE(mock_ifm_.HasOnePending(build_config));
 
-  // Scheduling a second file to load in that toolchain should not make it
-  // pending yet (it's waiting for the build config).
-  SourceFile third_file("//bar/BUILD.gn");
-  loader->Load(third_file, LocationRange(), second_tc);
-  EXPECT_TRUE(mock_ifm_.HasOnePending(build_config));
-
-  // Running the build config file should make our third file pending.
+  // Running the build config file should schedule the build file for the
+  // other toolchain.
   mock_ifm_.IssueAllPending();
   base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(mock_ifm_.HasOnePending(second_file));
+
+  // Scheduling a second file to load in that toolchain should make it
+  // pending.
+  SourceFile third_file("//bar/BUILD.gn");
+  loader->Load(third_file, LocationRange(), second_tc);
   EXPECT_TRUE(mock_ifm_.HasTwoPending(second_file, third_file));
 
   EXPECT_FALSE(scheduler_.is_failed());

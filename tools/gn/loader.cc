@@ -128,11 +128,6 @@ void LoaderImpl::Load(const SourceFile& file,
     ToolchainRecord* record = new_record.get();
     toolchain_records_[Label()] = std::move(new_record);
 
-    // The default build config is no dependent on the toolchain definition,
-    // since we need to load the build config before we know what the default
-    // toolchain name is.
-    record->is_toolchain_loaded = true;
-
     record->waiting_on_me.push_back(SourceFileAndOrigin(file, origin));
     ScheduleLoadBuildConfig(&record->settings, Scope::KeyValueMap());
 
@@ -181,9 +176,12 @@ void LoaderImpl::ToolchainLoaded(const Toolchain* toolchain) {
   if (!record->is_config_loaded) {
     ScheduleLoadBuildConfig(&record->settings, toolchain->args());
   } else {
-    // There should be nobody waiting on this if the build config is already
-    // loaded.
-    DCHECK(record->waiting_on_me.empty());
+    // This should only occur for the default toolchain, and there should only
+    // be the root build file waiting on this.
+    DCHECK(record->waiting_on_me.size() == 1U && record->settings.is_default());
+    for (const auto& waiting : record->waiting_on_me)
+      ScheduleLoadFile(&record->settings, waiting.origin, waiting.file);
+    record->waiting_on_me.clear();
   }
 }
 
@@ -397,13 +395,19 @@ void LoaderImpl::DidLoadBuildConfig(const Label& label) {
   }
 
   DCHECK(!record->is_config_loaded);
-  DCHECK(record->is_toolchain_loaded);
+  DCHECK(record->is_toolchain_loaded || record->settings.is_default());
   record->is_config_loaded = true;
 
-  // Schedule all waiting file loads.
-  for (const auto& waiting : record->waiting_on_me)
-    ScheduleLoadFile(&record->settings, waiting.origin, waiting.file);
-  record->waiting_on_me.clear();
+  if (!record->is_toolchain_loaded) {
+    // Load the toolchain if it is not already loaded. This should only be the
+    // case for the default toolchain.
+    Load(BuildFileForLabel(default_toolchain_label_), LocationRange(), Label());
+  } else {
+    // Schedule all waiting file loads.
+    for (const auto& waiting : record->waiting_on_me)
+      ScheduleLoadFile(&record->settings, waiting.origin, waiting.file);
+    record->waiting_on_me.clear();
+  }
 
   DecrementPendingLoads();
 }
