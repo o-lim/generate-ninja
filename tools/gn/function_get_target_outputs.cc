@@ -26,10 +26,9 @@ const char kGetTargetOutputs_Help[] =
   defined execution order, and it obviously can't reference targets that are
   defined after the function call).
 
-  Only copy and action targets are supported. The outputs from binary targets
-  will depend on the toolchain definition which won't necessarily have been
-  loaded by the time a given line of code has run, and source sets and groups
-  have no useful output file.
+  Copy and action targets are supported, as well as binary targets, which will
+  depend on the toolchain definition. Groups have no useful output file and
+  are not supported.
 
 Return value
 
@@ -45,15 +44,14 @@ Return value
   process_file_template will return for those inputs (see "gn help
   process_file_template").
 
-  binary targets (executables, libraries): this will return a list of the
-  resulting binary file(s). The "main output" (the actual binary or library)
-  will always be the 0th element in the result. Depending on the platform and
-  output type, there may be other output files as well (like import libraries)
-  which will follow.
+  executables and libraries: this will return a list of the resulting binary
+  file(s). The "main output" (the actual binary or library) will always be the
+  0th element in the result. Depending on the platform and output type, there
+  may be other output files as well (like import libraries) which will follow.
 
-  source sets and groups: this will return a list containing the path of the
-  "stamp" file that Ninja will produce once all outputs are generated. This
-  probably isn't very useful.
+  source sets: this will return a list of the resulting object file(s) for each
+  source file after it has been compiled. Depending on the platform and output
+  type, there may be more than one output file for each source file.
 
 Example
 
@@ -118,15 +116,39 @@ Value RunGetTargetOutputs(Scope* scope,
 
   // Compute the output list.
   std::vector<SourceFile> files;
+  std::vector<OutputFile> source_outputs;
   if (target->output_type() == Target::ACTION ||
       target->output_type() == Target::COPY_FILES ||
       target->output_type() == Target::ACTION_FOREACH) {
     target->action_values().GetOutputsAsSourceFiles(target, &files);
+  } else if (target->output_type() == Target::SOURCE_SET) {
+    for (const SourceFile& source : target->sources()) {
+      Toolchain::ToolType tool_type;
+      std::vector<OutputFile> outputs;
+      target->GetOutputFilesForSource(source, &tool_type, &outputs);
+      for (const auto & out : outputs)
+        source_outputs.push_back(out);
+    }
+  } else if (target->output_type() == Target::EXECUTABLE ||
+             target->output_type() == Target::LOADABLE_MODULE ||
+             target->output_type() == Target::SHARED_LIBRARY ||
+             target->output_type() == Target::STATIC_LIBRARY) {
+    const Toolchain* toolchain = target->toolchain();
+    const Tool* tool = toolchain->GetToolForTargetFinalOutput(target);
+    SubstitutionWriter::ApplyListToLinkerAsOutputFile(
+        target, tool, tool->outputs(), &source_outputs);
   } else {
     // Other types of targets are not supported.
-    *err = Err(args[0], "Target is not an action, action_foreach, or copy.",
-               "Only these target types are supported by get_target_outputs.");
+    *err = Err(args[0], "Target not supported.",
+               "Only action, action_foreach, copy, executable, loadable_module,"
+               "\nshared_library, source_set, and static_library targets are\n"
+               "supported by get_target_outputs.");
     return Value();
+  }
+
+  // Convert to source files.
+  for (const OutputFile& output : source_outputs) {
+    files.push_back(output.AsSourceFile(target->settings()->build_settings()));
   }
 
   // Convert to Values.

@@ -2139,10 +2139,9 @@
   defined execution order, and it obviously can't reference targets that are
   defined after the function call).
 
-  Only copy and action targets are supported. The outputs from binary targets
-  will depend on the toolchain definition which won't necessarily have been
-  loaded by the time a given line of code has run, and source sets and groups
-  have no useful output file.
+  Copy and action targets are supported, as well as binary targets, which will
+  depend on the toolchain definition. Groups have no useful output file and
+  are not supported.
 ```
 
 #### **Return value**
@@ -2160,15 +2159,14 @@
   process_file_template will return for those inputs (see "gn help
   process_file_template").
 
-  binary targets (executables, libraries): this will return a list of the
-  resulting binary file(s). The "main output" (the actual binary or library)
-  will always be the 0th element in the result. Depending on the platform and
-  output type, there may be other output files as well (like import libraries)
-  which will follow.
+  executables and libraries: this will return a list of the resulting binary
+  file(s). The "main output" (the actual binary or library) will always be the
+  0th element in the result. Depending on the platform and output type, there
+  may be other output files as well (like import libraries) which will follow.
 
-  source sets and groups: this will return a list containing the path of the
-  "stamp" file that Ninja will produce once all outputs are generated. This
-  probably isn't very useful.
+  source sets: this will return a list of the resulting object file(s) for each
+  source file after it has been compiled. Depending on the platform and output
+  type, there may be more than one output file for each source file.
 ```
 
 #### **Example**

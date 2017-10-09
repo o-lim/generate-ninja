@@ -57,13 +57,13 @@ class GetTargetOutputsTest : public testing::Test {
 }  // namespace
 
 TEST_F(GetTargetOutputsTest, Copy) {
-  Target* action = new Target(setup_.settings(), GetLabel("//foo/", "bar"));
-  action->set_output_type(Target::COPY_FILES);
-  action->sources().push_back(SourceFile("//file.txt"));
-  action->action_values().outputs() =
+  Target* copy = new Target(setup_.settings(), GetLabel("//foo/", "bar"));
+  copy->set_output_type(Target::COPY_FILES);
+  copy->sources().push_back(SourceFile("//file.txt"));
+  copy->action_values().outputs() =
       SubstitutionList::MakeForTest("//out/Debug/{{source_file_part}}.one");
 
-  items_.push_back(action);
+  items_.push_back(copy);
 
   Err err;
   Value result = GetTargetOutputs("//foo:bar", &err);
@@ -101,4 +101,71 @@ TEST_F(GetTargetOutputsTest, ActionForeach) {
   ASSERT_FALSE(err.has_error());
   AssertTwoStringsEqual(result, "//out/Debug/file.txt.one",
                         "//out/Debug/file.txt.two");
+}
+
+TEST_F(GetTargetOutputsTest, SourceSet) {
+  Target* source_set = new Target(setup_.settings(), GetLabel("//foo/", "bar"));
+  source_set->set_output_type(Target::SOURCE_SET);
+  source_set->sources().push_back(SourceFile("//foo/file1.cc"));
+  source_set->sources().push_back(SourceFile("//foo/file2.cc"));
+
+  items_.push_back(source_set);
+
+  Err err;
+  Value result = GetTargetOutputs("//foo:bar", &err);
+  ASSERT_FALSE(err.has_error());
+  AssertTwoStringsEqual(result, "//out/Debug/obj/foo/bar.file1.o",
+                        "//out/Debug/obj/foo/bar.file2.o");
+}
+
+TEST_F(GetTargetOutputsTest, Executable) {
+  Target* executable = new Target(setup_.settings(), GetLabel("//foo/", "bar"));
+  executable->set_output_type(Target::EXECUTABLE);
+  executable->sources().push_back(SourceFile("//file.cc"));
+
+  items_.push_back(executable);
+
+  Err err;
+  Value result = GetTargetOutputs("//foo:bar", &err);
+  ASSERT_FALSE(err.has_error());
+  AssertSingleStringEquals(result, "//out/Debug/bar");
+}
+
+TEST_F(GetTargetOutputsTest, LoadableModule) {
+  Target* loadable_module = new Target(setup_.settings(), GetLabel("//foo/", "bar"));
+  loadable_module->set_output_type(Target::LOADABLE_MODULE);
+  loadable_module->sources().push_back(SourceFile("//file.cc"));
+
+  items_.push_back(loadable_module);
+
+  Err err;
+  Value result = GetTargetOutputs("//foo:bar", &err);
+  ASSERT_FALSE(err.has_error());
+  AssertSingleStringEquals(result, "//out/Debug/libbar.so");
+}
+
+TEST_F(GetTargetOutputsTest, SharedLibrary) {
+  Target* shared_library = new Target(setup_.settings(), GetLabel("//foo/", "bar"));
+  shared_library->set_output_type(Target::SHARED_LIBRARY);
+  shared_library->sources().push_back(SourceFile("//file.cc"));
+
+  items_.push_back(shared_library);
+
+  Err err;
+  Value result = GetTargetOutputs("//foo:bar", &err);
+  ASSERT_FALSE(err.has_error());
+  AssertSingleStringEquals(result, "//out/Debug/libbar.so");
+}
+
+TEST_F(GetTargetOutputsTest, StaticLibrary) {
+  Target* static_library = new Target(setup_.settings(), GetLabel("//foo/", "bar"));
+  static_library->set_output_type(Target::STATIC_LIBRARY);
+  static_library->sources().push_back(SourceFile("//file.cc"));
+
+  items_.push_back(static_library);
+
+  Err err;
+  Value result = GetTargetOutputs("//foo:bar", &err);
+  ASSERT_FALSE(err.has_error());
+  AssertSingleStringEquals(result, "//out/Debug/obj/foo/libbar.a");
 }

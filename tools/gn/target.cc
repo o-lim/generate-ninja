@@ -529,6 +529,8 @@ bool Target::CheckToolchain(Err* err) {
 bool Target::GetOutputFilesForSource(const SourceFile& source,
                                      Toolchain::ToolType* computed_tool_type,
                                      std::vector<OutputFile>* outputs) const {
+  DCHECK(toolchain_) << "Toolchain should have been set.";
+
   outputs->clear();
   *computed_tool_type = Toolchain::TYPE_NONE;
 
