@@ -64,7 +64,7 @@ hi def link     gnVariable          Keyword
 
 " Strings
 syn region      gnString start=+L\="+ skip=+\\\\\|\\"+ end=+"+ contains=@Spell,gnTargetName
-syn match       gnTargetName '\v:[^"]+' contained
+syn match       gnTargetName '\v:\w+' contained
 hi def link     gnString            String
 hi def link     gnTargetName        Special
 
