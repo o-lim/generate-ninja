@@ -221,6 +221,21 @@ bool Builder::CheckForBadItems(Err* err) const {
 bool Builder::TargetDefined(BuilderRecord* record, Err* err) {
   Target* target = record->item()->AsTarget();
 
+  // The toolchain should be loaded before the target is loaded. Therefore,
+  // it is an error if the toolchain does not exist.
+  const Toolchain* toolchain = GetToolchain(target->settings()->toolchain_label());
+  if (!toolchain) {
+    *err = Err(target->defined_from(),
+        "Toolchain for target not defined.",
+        "I was hoping to find a toolchain " +
+        target->settings()->toolchain_label().GetUserVisibleName(false));
+    return false;
+  }
+
+  if (!target->SetToolchain(toolchain, err)) {
+    return false;
+  }
+
   if (!AddDeps(record, target->public_deps(), err) ||
       !AddDeps(record, target->private_deps(), err) ||
       !AddDeps(record, target->data_deps(), err) ||
@@ -515,8 +530,10 @@ bool Builder::ResolveToolchain(Target* target, Err* err) {
     return false;
   }
 
-  if (!target->SetToolchain(record->item()->AsToolchain(), err))
-    return false;
+  if (!target->toolchain()) {
+    if (!target->SetToolchain(record->item()->AsToolchain(), err))
+      return false;
+  }
 
   return true;
 }

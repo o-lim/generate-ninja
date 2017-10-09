@@ -9,6 +9,8 @@
 #include "tools/gn/loader.h"
 #include "tools/gn/settings.h"
 #include "tools/gn/source_file.h"
+#include "tools/gn/test_with_scope.h"
+#include "tools/gn/toolchain.h"
 
 
 namespace {
@@ -45,6 +47,13 @@ class AnalyzerTest : public testing::Test {
     tc_name_ = settings_.toolchain_label().name();
   }
 
+  Toolchain* DefineToolchain() {
+    Toolchain* tc = new Toolchain(&settings_, settings_.toolchain_label());
+    TestWithScope::SetupToolchain(tc);
+    builder_.ItemDefined(std::unique_ptr<Item>(tc));
+    return tc;
+  }
+
   Target* MakeTarget(const std::string dir,
                      const std::string name,
                      Target::OutputType type,
@@ -77,18 +86,23 @@ class AnalyzerTest : public testing::Test {
 
     Target* b =
         MakeTarget("//d", "b", Target::SOURCE_SET, {"//d/b.cc"}, no_deps);
+    b->visibility().SetPublic();
 
     Target* b_unittests = MakeTarget("//d", "b_unittests", Target::EXECUTABLE,
                                      {"//d/b_unittest.cc"}, {b});
+    b_unittests->visibility().SetPublic();
 
     Target* c = MakeTarget("//d", "c", Target::EXECUTABLE, {"//d/c.cc"}, {b});
+    c->visibility().SetPublic();
 
     Target* b_unittests_and_c =
         MakeTarget("//d", "b_unittests_and_c", Target::GROUP, no_sources,
                    {b_unittests, c});
+    b_unittests_and_c->visibility().SetPublic();
 
     Target* e =
         MakeTarget("//d", "e", Target::EXECUTABLE, {"//d/e.cc"}, no_deps);
+    e->visibility().SetPublic();
 
     // Also ignore this returned target since nothing depends on it.
     MakeTarget("//d", "d", Target::GROUP, no_sources, {b_unittests_and_c, e});
@@ -96,6 +110,7 @@ class AnalyzerTest : public testing::Test {
 
   void RunBasicTest(const std::string& input,
                     const std::string& expected_output) {
+    DefineToolchain();
     SetUpABasicBuildGraph();
     Err err;
     std::string actual_output = Analyzer(builder_).Analyze(input, &err);
