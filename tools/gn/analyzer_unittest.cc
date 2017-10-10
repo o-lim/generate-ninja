@@ -66,7 +66,7 @@ class AnalyzerTest : public testing::Test {
     for (const auto& s : sources)
       target->sources().push_back(SourceFile(s));
     for (const auto* d : deps)
-      target->public_deps().push_back(LabelTargetPair(d));
+      target->public_deps().push_back(LabelTargetPair(d->label()));
     builder_.ItemDefined(std::unique_ptr<Item>(target));
     return target;
   }
