@@ -621,6 +621,7 @@ std::string SubstitutionWriter::GetLinkerSubstitution(
 
     default:
       NOTREACHED();
-      return std::string();
+      break;
   }
+  return std::string();
 }
