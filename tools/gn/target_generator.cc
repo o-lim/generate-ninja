@@ -148,6 +148,15 @@ void TargetGenerator::GenerateTarget(Scope* scope,
     *err = Err(function_call, "Can't define a target in this context.");
     return;
   }
+
+  // The toolchain should already be defined
+  if (!target->toolchain()) {
+    *err = Err(target->defined_from(),
+        "Toolchain for target not defined.",
+        "I was hoping to find a toolchain " +
+        target->settings()->toolchain_label().GetUserVisibleName(false));
+  }
+
   collector->push_back(target.release());
 }
 

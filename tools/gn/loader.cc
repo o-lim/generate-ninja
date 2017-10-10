@@ -169,6 +169,7 @@ void LoaderImpl::ToolchainLoaded(const Toolchain* toolchain) {
     toolchain_records_[toolchain->label()] = std::move(new_record);
   }
   record->is_toolchain_loaded = true;
+  record->settings.set_toolchain(toolchain);
 
   // The default build config is loaded first, then its toolchain. Secondary
   // ones are loaded in the opposite order so we can pass toolchain parameters

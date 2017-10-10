@@ -140,20 +140,24 @@ TEST(Target, DependentConfigs) {
 // Tests that dependent configs don't propagate between toolchains.
 TEST(Target, NoDependentConfigsBetweenToolchains) {
   TestWithScope setup;
+  TestWithScope other_setup;
   Err err;
 
   // Create another toolchain.
-  Toolchain other_toolchain(setup.settings(),
-                            Label(SourceDir("//other/"), "toolchain"));
+  Label other_toolchain_label(SourceDir("//other/"), "toolchain");
+  other_setup.settings()->set_toolchain_label(other_toolchain_label);
+  other_setup.settings()->set_default_toolchain_label(other_toolchain_label);
+  Toolchain other_toolchain(other_setup.settings(), other_toolchain_label);
   TestWithScope::SetupToolchain(&other_toolchain);
+  other_setup.settings()->set_toolchain(&other_toolchain);
 
   // Set up a dependency chain of |a| -> |b| -> |c| where |a| has a different
   // toolchain.
-  Target a(setup.settings(),
+  Target a(other_setup.settings(),
            Label(SourceDir("//foo/"), "a", other_toolchain.label().dir(),
                  other_toolchain.label().name()));
   a.set_output_type(Target::EXECUTABLE);
-  EXPECT_TRUE(a.SetToolchain(&other_toolchain, &err));
+  EXPECT_TRUE(a.CheckToolchain(&err));
   TestTarget b(setup, "//foo:b", Target::EXECUTABLE);
   TestTarget c(setup, "//foo:c", Target::SOURCE_SET);
   a.private_deps().push_back(LabelTargetPair(&b));
@@ -609,10 +613,10 @@ TEST(Target, LinkAndDepOutputs) {
       kLinkPattern, kDependPattern));
 
   toolchain.SetTool(Toolchain::TYPE_SOLINK, std::move(solink_tool));
+  setup.settings()->set_toolchain(&toolchain);
 
   Target target(setup.settings(), Label(SourceDir("//a/"), "a"));
   target.set_output_type(Target::SHARED_LIBRARY);
-  target.SetToolchain(&toolchain);
   ASSERT_TRUE(target.OnResolved(&err));
 
   EXPECT_EQ("./liba.so", target.link_output_file().value());
@@ -653,10 +657,10 @@ TEST(Target, RuntimeOuputs) {
       kDllPattern, kPdbPattern));
 
   toolchain.SetTool(Toolchain::TYPE_SOLINK, std::move(solink_tool));
+  setup.settings()->set_toolchain(&toolchain);
 
   Target target(setup.settings(), Label(SourceDir("//a/"), "a"));
   target.set_output_type(Target::SHARED_LIBRARY);
-  target.SetToolchain(&toolchain);
   ASSERT_TRUE(target.OnResolved(&err));
 
   EXPECT_EQ("./a.dll.lib", target.link_output_file().value());

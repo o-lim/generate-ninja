@@ -31,7 +31,6 @@ TEST(NinjaBundleDataTargetWriter, Run) {
       SourceFile("//foo/Foo.xcassets/foo.imageset/FooIcon-29@3x.png"));
   bundle_data.action_values().outputs() = SubstitutionList::MakeForTest(
       "{{bundle_resources_dir}}/{{source_file_part}}");
-  bundle_data.SetToolchain(setup.toolchain());
   bundle_data.visibility().SetPublic();
   ASSERT_TRUE(bundle_data.OnResolved(&err));
 

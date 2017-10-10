@@ -78,6 +78,7 @@ class BuilderTest : public testing::Test {
   Toolchain* DefineToolchain() {
     Toolchain* tc = new Toolchain(&settings_, settings_.toolchain_label());
     TestWithScope::SetupToolchain(tc);
+    settings_.set_toolchain(tc);
     builder_.ItemDefined(std::unique_ptr<Item>(tc));
     return tc;
   }
@@ -193,6 +194,7 @@ TEST_F(BuilderTest, ShouldGenerate) {
   settings2.set_toolchain_label(toolchain_label2);
   Toolchain* tc2 = new Toolchain(&settings2, toolchain_label2);
   TestWithScope::SetupToolchain(tc2);
+  settings2.set_toolchain(tc2);
   builder_.ItemDefined(std::unique_ptr<Item>(tc2));
 
   // Construct a dependency chain: A -> B. A is in the default toolchain, B

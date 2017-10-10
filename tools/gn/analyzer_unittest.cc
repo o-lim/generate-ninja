@@ -50,6 +50,7 @@ class AnalyzerTest : public testing::Test {
   Toolchain* DefineToolchain() {
     Toolchain* tc = new Toolchain(&settings_, settings_.toolchain_label());
     TestWithScope::SetupToolchain(tc);
+    settings_.set_toolchain(tc);
     builder_.ItemDefined(std::unique_ptr<Item>(tc));
     return tc;
   }

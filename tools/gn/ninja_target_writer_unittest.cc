@@ -38,7 +38,6 @@ TEST(NinjaTargetWriter, WriteInputDepsStampAndGetDep) {
   Target base_target(setup.settings(), Label(SourceDir("//foo/"), "base"));
   base_target.set_output_type(Target::ACTION);
   base_target.visibility().SetPublic();
-  base_target.SetToolchain(setup.toolchain());
   base_target.action_values().set_script(SourceFile("//foo/script.py"));
 
   // Dependent target that also includes a source prerequisite (should get
@@ -46,7 +45,6 @@ TEST(NinjaTargetWriter, WriteInputDepsStampAndGetDep) {
   Target target(setup.settings(), Label(SourceDir("//foo/"), "target"));
   target.set_output_type(Target::EXECUTABLE);
   target.visibility().SetPublic();
-  target.SetToolchain(setup.toolchain());
   target.inputs().push_back(SourceFile("//foo/input.txt"));
   target.sources().push_back(SourceFile("//foo/source.txt"));
   target.public_deps().push_back(LabelTargetPair(&base_target));
@@ -56,7 +54,6 @@ TEST(NinjaTargetWriter, WriteInputDepsStampAndGetDep) {
   Target action(setup.settings(), Label(SourceDir("//foo/"), "action"));
   action.set_output_type(Target::ACTION);
   action.visibility().SetPublic();
-  action.SetToolchain(setup.toolchain());
   action.action_values().set_script(SourceFile("//foo/script.py"));
   action.sources().push_back(SourceFile("//foo/action_source.txt"));
   action.public_deps().push_back(LabelTargetPair(&target));
@@ -117,14 +114,12 @@ TEST(NinjaTargetWriter, WriteInputDepsStampAndGetDepWithToolchainDeps) {
   Target toolchain_dep_target(setup.settings(),
                               Label(SourceDir("//foo/"), "setup"));
   toolchain_dep_target.set_output_type(Target::ACTION);
-  toolchain_dep_target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(toolchain_dep_target.OnResolved(&err));
   setup.toolchain()->deps().push_back(LabelTargetPair(&toolchain_dep_target));
 
   // Make a binary target
   Target target(setup.settings(), Label(SourceDir("//foo/"), "target"));
   target.set_output_type(Target::EXECUTABLE);
-  target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
   std::ostringstream stream;

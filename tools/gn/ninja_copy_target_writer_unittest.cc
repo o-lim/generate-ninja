@@ -24,7 +24,6 @@ TEST(NinjaCopyTargetWriter, Run) {
   target.action_values().outputs() =
       SubstitutionList::MakeForTest("//out/Debug/{{source_name_part}}.out");
 
-  target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
   std::ostringstream out;
@@ -53,7 +52,6 @@ TEST(NinjaCopyTargetWriter, ToolchainDeps) {
   target.action_values().outputs() =
       SubstitutionList::MakeForTest("//out/Debug/output.out");
 
-  target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
   std::ostringstream out;
@@ -78,7 +76,6 @@ TEST(NinjaCopyTargetWriter, OrderOnlyDeps) {
   target.action_values().outputs() =
       SubstitutionList::MakeForTest("//out/Debug/{{source_name_part}}.out");
   target.inputs().push_back(SourceFile("//foo/script.py"));
-  target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
   std::ostringstream out;

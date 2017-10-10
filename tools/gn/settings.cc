@@ -11,6 +11,7 @@
 Settings::Settings(const BuildSettings* build_settings,
                    const std::string& output_subdir_name)
     : build_settings_(build_settings),
+      toolchain_(nullptr),
       import_manager_(),
       base_config_(this),
       greedy_target_generation_(false) {

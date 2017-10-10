@@ -29,10 +29,10 @@ TestWithScope::TestWithScope()
   build_settings_.set_print_callback(
       base::Bind(&TestWithScope::AppendPrintOutput, base::Unretained(this)));
 
+  SetupToolchain(&toolchain_);
   settings_.set_toolchain_label(toolchain_.label());
   settings_.set_default_toolchain_label(toolchain_.label());
-
-  SetupToolchain(&toolchain_);
+  settings_.set_toolchain(&toolchain_);
   scope_.set_item_collector(&items_);
 }
 
@@ -62,7 +62,6 @@ bool TestWithScope::ExecuteSnippet(const std::string& str, Err* err) {
   for (size_t i = first_item; i < items_.size(); ++i) {
     CHECK(items_[i]->AsTarget() != nullptr)
         << "Only targets are supported in ExecuteSnippet()";
-    items_[i]->AsTarget()->SetToolchain(&toolchain_);
     if (!items_[i]->OnResolved(err))
       return false;
   }
@@ -228,7 +227,6 @@ TestTarget::TestTarget(const TestWithScope& setup,
     : Target(setup.settings(), setup.ParseLabel(label_string)) {
   visibility().SetPublic();
   set_output_type(type);
-  SetToolchain(setup.toolchain());
 }
 
 TestTarget::~TestTarget() {

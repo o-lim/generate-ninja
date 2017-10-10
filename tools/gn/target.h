@@ -280,6 +280,12 @@ class Target : public Item {
   // frequently by unit tests which become needlessly verbose.
   bool SetToolchain(const Toolchain* toolchain, Err* err = nullptr);
 
+  // Check the toolchain for errors. The toolchain must include a tool for
+  // this target or the error will be set and the function will return false.
+  // Unusually, this function's "err" output is optional since this is commonly
+  // used frequently by unit tests which become needlessly verbose.
+  bool CheckToolchain(Err* err = nullptr);
+
   // Once this target has been resolved, all outputs from the target will be
   // listed here. This will include things listed in the "outputs" for an
   // action or a copy step, and the output library or executable file(s) from

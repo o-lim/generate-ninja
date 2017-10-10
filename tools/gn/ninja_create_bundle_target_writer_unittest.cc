@@ -34,7 +34,6 @@ TEST(NinjaCreateBundleTargetWriter, Run) {
   bundle_data.sources().push_back(SourceFile("//foo/input2.txt"));
   bundle_data.action_values().outputs() = SubstitutionList::MakeForTest(
       "{{bundle_resources_dir}}/{{source_file_part}}");
-  bundle_data.SetToolchain(setup.toolchain());
   bundle_data.visibility().SetPublic();
   ASSERT_TRUE(bundle_data.OnResolved(&err));
 
@@ -45,7 +44,6 @@ TEST(NinjaCreateBundleTargetWriter, Run) {
   SetupBundleDataDir(&create_bundle.bundle_data(), "//out/Debug");
   create_bundle.set_output_type(Target::CREATE_BUNDLE);
   create_bundle.private_deps().push_back(LabelTargetPair(&bundle_data));
-  create_bundle.SetToolchain(setup.toolchain());
   ASSERT_TRUE(create_bundle.OnResolved(&err));
 
   std::ostringstream out;
@@ -84,7 +82,6 @@ TEST(NinjaCreateBundleTargetWriter, AssetCatalog) {
       SourceFile("//foo/Foo.xcassets/foo.imageset/FooIcon-29@3x.png"));
   bundle_data.action_values().outputs() = SubstitutionList::MakeForTest(
       "{{bundle_resources_dir}}/{{source_file_part}}");
-  bundle_data.SetToolchain(setup.toolchain());
   bundle_data.visibility().SetPublic();
   ASSERT_TRUE(bundle_data.OnResolved(&err));
 
@@ -96,7 +93,6 @@ TEST(NinjaCreateBundleTargetWriter, AssetCatalog) {
   create_bundle.set_output_type(Target::CREATE_BUNDLE);
   create_bundle.private_deps().push_back(LabelTargetPair(&bundle_data));
   create_bundle.bundle_data().product_type().assign("com.apple.product-type");
-  create_bundle.SetToolchain(setup.toolchain());
   ASSERT_TRUE(create_bundle.OnResolved(&err));
 
   std::ostringstream out;
@@ -126,7 +122,6 @@ TEST(NinjaCreateBundleTargetWriter, PhonyTarget) {
             setup.toolchain()->label().name()));
   SetupBundleDataDir(&create_bundle.bundle_data(), "//out/Debug");
   create_bundle.set_output_type(Target::CREATE_BUNDLE);
-  create_bundle.SetToolchain(setup.toolchain());
   ASSERT_TRUE(create_bundle.OnResolved(&err));
 
   std::ostringstream out;
@@ -152,7 +147,6 @@ TEST(NinjaCreateBundleTargetWriter, Complex) {
   bundle_data0.sources().push_back(SourceFile("//qux/qux-Info.plist"));
   bundle_data0.action_values().outputs() =
       SubstitutionList::MakeForTest("{{bundle_root_dir}}/Info.plist");
-  bundle_data0.SetToolchain(setup.toolchain());
   bundle_data0.visibility().SetPublic();
   ASSERT_TRUE(bundle_data0.OnResolved(&err));
 
@@ -162,7 +156,6 @@ TEST(NinjaCreateBundleTargetWriter, Complex) {
   bundle_data1.sources().push_back(SourceFile("//foo/input2.txt"));
   bundle_data1.action_values().outputs() = SubstitutionList::MakeForTest(
       "{{bundle_resources_dir}}/{{source_file_part}}");
-  bundle_data1.SetToolchain(setup.toolchain());
   bundle_data1.visibility().SetPublic();
   ASSERT_TRUE(bundle_data1.OnResolved(&err));
 
@@ -180,7 +173,6 @@ TEST(NinjaCreateBundleTargetWriter, Complex) {
       SourceFile("//foo/Foo.xcassets/foo.imageset/FooIcon-29@3x.png"));
   bundle_data2.action_values().outputs() = SubstitutionList::MakeForTest(
       "{{bundle_resources_dir}}/{{source_file_part}}");
-  bundle_data2.SetToolchain(setup.toolchain());
   bundle_data2.visibility().SetPublic();
   ASSERT_TRUE(bundle_data2.OnResolved(&err));
 
@@ -198,7 +190,6 @@ TEST(NinjaCreateBundleTargetWriter, Complex) {
       SourceFile("//quz/Quz.xcassets/quz.imageset/QuzIcon-29@3x.png"));
   bundle_data3.action_values().outputs() = SubstitutionList::MakeForTest(
       "{{bundle_resources_dir}}/{{source_file_part}}");
-  bundle_data3.SetToolchain(setup.toolchain());
   bundle_data3.visibility().SetPublic();
   ASSERT_TRUE(bundle_data3.OnResolved(&err));
 
@@ -213,7 +204,6 @@ TEST(NinjaCreateBundleTargetWriter, Complex) {
   create_bundle.private_deps().push_back(LabelTargetPair(&bundle_data2));
   create_bundle.private_deps().push_back(LabelTargetPair(&bundle_data3));
   create_bundle.bundle_data().product_type().assign("com.apple.product-type");
-  create_bundle.SetToolchain(setup.toolchain());
   ASSERT_TRUE(create_bundle.OnResolved(&err));
 
   std::ostringstream out;
@@ -252,7 +242,6 @@ TEST(NinjaCreateBundleTargetWriter, CodeSigning) {
   Target executable(setup.settings(), Label(SourceDir("//baz/"), "quz"));
   executable.set_output_type(Target::EXECUTABLE);
   executable.sources().push_back(SourceFile("//baz/quz.c"));
-  executable.SetToolchain(setup.toolchain());
   executable.visibility().SetPublic();
   ASSERT_TRUE(executable.OnResolved(&err));
 
@@ -262,7 +251,6 @@ TEST(NinjaCreateBundleTargetWriter, CodeSigning) {
   bundle_data.sources().push_back(SourceFile("//foo/input2.txt"));
   bundle_data.action_values().outputs() = SubstitutionList::MakeForTest(
       "{{bundle_resources_dir}}/{{source_file_part}}");
-  bundle_data.SetToolchain(setup.toolchain());
   bundle_data.visibility().SetPublic();
   ASSERT_TRUE(bundle_data.OnResolved(&err));
 
@@ -284,7 +272,6 @@ TEST(NinjaCreateBundleTargetWriter, CodeSigning) {
       SubstitutionList::MakeForTest("-b=quz", "bar.bundle");
   create_bundle.public_deps().push_back(LabelTargetPair(&executable));
   create_bundle.private_deps().push_back(LabelTargetPair(&bundle_data));
-  create_bundle.SetToolchain(setup.toolchain());
   ASSERT_TRUE(create_bundle.OnResolved(&err));
 
   std::ostringstream out;

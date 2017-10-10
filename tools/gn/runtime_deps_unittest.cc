@@ -19,7 +19,6 @@ void InitTargetWithType(TestWithScope& setup,
                         Target::OutputType type) {
   target->set_output_type(type);
   target->visibility().SetPublic();
-  target->SetToolchain(setup.toolchain());
 }
 
 // Convenience function to make the correct kind of pair.

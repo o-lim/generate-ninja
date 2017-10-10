@@ -108,7 +108,6 @@ TEST(SubstitutionWriter, SourceSubstitutions) {
 
   Target target(setup.settings(), Label(SourceDir("//foo/bar/"), "baz"));
   target.set_output_type(Target::STATIC_LIBRARY);
-  target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
   // Call to get substitutions relative to the build dir.
@@ -204,7 +203,6 @@ TEST(SubstitutionWriter, TargetSubstitutions) {
 
   Target target(setup.settings(), Label(SourceDir("//foo/bar/"), "baz"));
   target.set_output_type(Target::STATIC_LIBRARY);
-  target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
   std::string result;
@@ -243,7 +241,6 @@ TEST(SubstitutionWriter, CompilerSubstitutions) {
 
   Target target(setup.settings(), Label(SourceDir("//foo/bar/"), "baz"));
   target.set_output_type(Target::STATIC_LIBRARY);
-  target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
   // The compiler substitution is just source + target combined. So test one
@@ -264,7 +261,6 @@ TEST(SubstitutionWriter, LinkerSubstitutions) {
 
   Target target(setup.settings(), Label(SourceDir("//foo/bar/"), "baz"));
   target.set_output_type(Target::SHARED_LIBRARY);
-  target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
   const Tool* tool = setup.toolchain()->GetToolForTargetFinalOutput(&target);
@@ -317,7 +313,6 @@ TEST(SubstitutionWriter, OutputDir) {
   // Default target with no output dir overrides.
   Target target(setup.settings(), Label(SourceDir("//foo/"), "baz"));
   target.set_output_type(Target::EXECUTABLE);
-  target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
   // The output should expand the default from the patterns in the tool.

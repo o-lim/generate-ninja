@@ -21,7 +21,6 @@ TEST(NinjaBuildWriter, TwoTargets) {
   target_foo.action_values().set_script(SourceFile("//foo/script.py"));
   target_foo.action_values().outputs() = SubstitutionList::MakeForTest(
       "//out/Debug/out1.out", "//out/Debug/out2.out");
-  target_foo.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target_foo.OnResolved(&err));
 
   Target target_bar(setup.settings(), Label(SourceDir("//bar/"), "bar"));
@@ -29,7 +28,6 @@ TEST(NinjaBuildWriter, TwoTargets) {
   target_bar.action_values().set_script(SourceFile("//bar/script.py"));
   target_bar.action_values().outputs() = SubstitutionList::MakeForTest(
       "//out/Debug/out3.out", "//out/Debug/out4.out");
-  target_bar.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target_bar.OnResolved(&err));
 
   // Make a secondary toolchain that references a pool.
@@ -107,7 +105,6 @@ TEST(NinjaBuildWriter, DuplicateOutputs) {
   target_foo.action_values().set_script(SourceFile("//foo/script.py"));
   target_foo.action_values().outputs() = SubstitutionList::MakeForTest(
       "//out/Debug/out1.out", "//out/Debug/out2.out");
-  target_foo.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target_foo.OnResolved(&err));
 
   Target target_bar(setup.settings(), Label(SourceDir("//bar/"), "bar"));
@@ -115,7 +112,6 @@ TEST(NinjaBuildWriter, DuplicateOutputs) {
   target_bar.action_values().set_script(SourceFile("//bar/script.py"));
   target_bar.action_values().outputs() = SubstitutionList::MakeForTest(
       "//out/Debug/out3.out", "//out/Debug/out2.out");
-  target_bar.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target_bar.OnResolved(&err));
 
   std::unordered_map<const Settings*, const Toolchain*> used_toolchains;

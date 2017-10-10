@@ -281,7 +281,7 @@ Target::Target(const Settings* settings, const Label& label)
       check_includes_(true),
       complete_static_lib_(false),
       testonly_(false),
-      toolchain_(nullptr) {
+      toolchain_(settings->toolchain()) {
 }
 
 Target::~Target() {
@@ -487,8 +487,24 @@ bool Target::SetToolchain(const Toolchain* toolchain, Err* err) {
   DCHECK(!toolchain_);
   DCHECK_NE(UNKNOWN, output_type_);
   toolchain_ = toolchain;
+  return CheckToolchain(err);
+}
 
-  const Tool* tool = toolchain->GetToolForTargetFinalOutput(this);
+bool Target::CheckToolchain(Err* err) {
+  DCHECK(toolchain_) << "Toolchain should have already been set.";
+  DCHECK_NE(UNKNOWN, output_type_);
+
+  if (!toolchain_) {
+    if (err) {
+      *err = Err(defined_from(),
+          "Toolchain for target not defined.",
+          "I was hoping to find a toolchain " +
+          settings()->toolchain_label().GetUserVisibleName(false));
+    }
+    return false;
+  }
+
+  const Tool* tool = toolchain_->GetToolForTargetFinalOutput(this);
   if (tool)
     return true;
 
@@ -505,7 +521,7 @@ bool Target::SetToolchain(const Toolchain* toolchain, Err* err) {
             GetStringForOutputType(output_type_),
             label().GetToolchainLabel().GetUserVisibleName(false).c_str(),
             Toolchain::ToolTypeToName(
-                toolchain->GetToolTypeForTargetFinalOutput(this)).c_str()));
+                toolchain_->GetToolTypeForTargetFinalOutput(this)).c_str()));
   }
   return false;
 }

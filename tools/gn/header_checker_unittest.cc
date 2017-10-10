@@ -26,10 +26,10 @@ class HeaderCheckerTest : public testing::Test {
     d_.set_output_type(Target::SOURCE_SET);
 
     Err err;
-    a_.SetToolchain(setup_.toolchain(), &err);
-    b_.SetToolchain(setup_.toolchain(), &err);
-    c_.SetToolchain(setup_.toolchain(), &err);
-    d_.SetToolchain(setup_.toolchain(), &err);
+    a_.CheckToolchain(&err);
+    b_.CheckToolchain(&err);
+    c_.CheckToolchain(&err);
+    d_.CheckToolchain(&err);
 
     a_.public_deps().push_back(LabelTargetPair(&b_));
     b_.public_deps().push_back(LabelTargetPair(&c_));
@@ -77,7 +77,7 @@ TEST_F(HeaderCheckerTest, IsDependencyOf) {
   Err err;
   Target p(setup_.settings(), Label(SourceDir("//p/"), "p"));
   p.set_output_type(Target::SOURCE_SET);
-  p.SetToolchain(setup_.toolchain(), &err);
+  p.CheckToolchain(&err);
   EXPECT_FALSE(err.has_error());
   p.private_deps().push_back(LabelTargetPair(&c_));
   p.visibility().SetPublic();
@@ -169,6 +169,7 @@ TEST_F(HeaderCheckerTest, CheckInclude) {
   TestWithScope::SetupToolchain(&other_toolchain);
   other_settings.set_toolchain_label(other_toolchain.label());
   other_settings.set_default_toolchain_label(setup_.toolchain()->label());
+  other_settings.set_toolchain(&other_toolchain);
 
   // Add a target in the other toolchain with a header in it that is not
   // connected to any targets in the main toolchain.
@@ -176,7 +177,7 @@ TEST_F(HeaderCheckerTest, CheckInclude) {
              other_toolchain.label().dir(), other_toolchain.label().name()));
   otc.set_output_type(Target::SOURCE_SET);
   Err err;
-  EXPECT_TRUE(otc.SetToolchain(&other_toolchain, &err));
+  EXPECT_TRUE(otc.CheckToolchain(&err));
   otc.visibility().SetPublic();
   targets_.push_back(&otc);
 
@@ -225,7 +226,7 @@ TEST_F(HeaderCheckerTest, PublicFirst) {
   Target z(setup_.settings(), Label(SourceDir("//a/"), "a"));
   z.set_output_type(Target::SOURCE_SET);
   Err err;
-  EXPECT_TRUE(z.SetToolchain(setup_.toolchain(), &err));
+  EXPECT_TRUE(z.CheckToolchain(&err));
   z.private_deps().push_back(LabelTargetPair(&d_));
   EXPECT_TRUE(z.OnResolved(&err));
   targets_.push_back(&z);

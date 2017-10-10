@@ -46,6 +46,9 @@ class Settings {
   const Label& toolchain_label() const { return toolchain_label_; }
   void set_toolchain_label(const Label& l) { toolchain_label_ = l; }
 
+  const Toolchain* toolchain() const { return toolchain_; }
+  void set_toolchain(const Toolchain* tc) { toolchain_ = tc; }
+
   const Label& default_toolchain_label() const {
     return default_toolchain_label_;
   }
@@ -96,6 +99,7 @@ class Settings {
 
   Label toolchain_label_;
   Label default_toolchain_label_;
+  const Toolchain * toolchain_;
 
   mutable ImportManager import_manager_;
 

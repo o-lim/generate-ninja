@@ -31,7 +31,6 @@ TEST(NinjaBinaryTargetWriter, SourceSet) {
   target.sources().push_back(SourceFile("//foo/input7.arm"));
   // Also test unspecified asm file extension, which should be ignored.
   target.sources().push_back(SourceFile("//foo/input8.S"));
-  target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
   // Source set itself.
@@ -79,7 +78,6 @@ TEST(NinjaBinaryTargetWriter, SourceSet) {
   Target shlib_target(setup.settings(), Label(SourceDir("//foo/"), "shlib"));
   shlib_target.set_output_type(Target::SHARED_LIBRARY);
   shlib_target.public_deps().push_back(LabelTargetPair(&target));
-  shlib_target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(shlib_target.OnResolved(&err));
 
   {
@@ -114,7 +112,6 @@ TEST(NinjaBinaryTargetWriter, SourceSet) {
   Target stlib_target(setup.settings(), Label(SourceDir("//foo/"), "stlib"));
   stlib_target.set_output_type(Target::STATIC_LIBRARY);
   stlib_target.public_deps().push_back(LabelTargetPair(&target));
-  stlib_target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(stlib_target.OnResolved(&err));
 
   {
@@ -299,7 +296,6 @@ TEST(NinjaBinaryTargetWriter, OutputExtensionAndInputDeps) {
   Target action(setup.settings(), Label(SourceDir("//foo/"), "action"));
   action.set_output_type(Target::ACTION_FOREACH);
   action.visibility().SetPublic();
-  action.SetToolchain(setup.toolchain());
   ASSERT_TRUE(action.OnResolved(&err));
 
   // A shared library w/ the output_extension set to a custom value.
@@ -310,7 +306,6 @@ TEST(NinjaBinaryTargetWriter, OutputExtensionAndInputDeps) {
   target.sources().push_back(SourceFile("//foo/input1.cc"));
   target.sources().push_back(SourceFile("//foo/input2.cc"));
   target.public_deps().push_back(LabelTargetPair(&action));
-  target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
   std::ostringstream out;
@@ -362,7 +357,6 @@ TEST(NinjaBinaryTargetWriter, LibsAndLibDirs) {
   target.config_values().libs().push_back(LibFile(SourceFile("//foo/lib1.a")));
   target.config_values().libs().push_back(LibFile("foo"));
   target.config_values().lib_dirs().push_back(SourceDir("//foo/bar/"));
-  target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
   std::ostringstream out;
@@ -401,7 +395,6 @@ TEST(NinjaBinaryTargetWriter, EmptyOutputExtension) {
   target.sources().push_back(SourceFile("//foo/input1.cc"));
   target.sources().push_back(SourceFile("//foo/input2.cc"));
 
-  target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
   std::ostringstream out;
@@ -445,7 +438,6 @@ TEST(NinjaBinaryTargetWriter, SourceSetDataDeps) {
   Target data(setup.settings(), Label(SourceDir("//foo/"), "data_target"));
   data.set_output_type(Target::EXECUTABLE);
   data.visibility().SetPublic();
-  data.SetToolchain(setup.toolchain());
   ASSERT_TRUE(data.OnResolved(&err));
 
   // Intermediate source set target.
@@ -453,7 +445,6 @@ TEST(NinjaBinaryTargetWriter, SourceSetDataDeps) {
   inter.set_output_type(Target::SOURCE_SET);
   inter.visibility().SetPublic();
   inter.data_deps().push_back(LabelTargetPair(&data));
-  inter.SetToolchain(setup.toolchain());
   inter.sources().push_back(SourceFile("//foo/inter.cc"));
   ASSERT_TRUE(inter.OnResolved(&err)) << err.message();
 
@@ -488,7 +479,6 @@ TEST(NinjaBinaryTargetWriter, SourceSetDataDeps) {
   Target exe(setup.settings(), Label(SourceDir("//foo/"), "exe"));
   exe.set_output_type(Target::EXECUTABLE);
   exe.public_deps().push_back(LabelTargetPair(&inter));
-  exe.SetToolchain(setup.toolchain());
   exe.sources().push_back(SourceFile("//foo/final.cc"));
   ASSERT_TRUE(exe.OnResolved(&err));
 
@@ -531,7 +521,6 @@ TEST(NinjaBinaryTargetWriter, SharedLibraryModuleDefinitionFile) {
 
   Target shared_lib(setup.settings(), Label(SourceDir("//foo/"), "bar"));
   shared_lib.set_output_type(Target::SHARED_LIBRARY);
-  shared_lib.SetToolchain(setup.toolchain());
   shared_lib.sources().push_back(SourceFile("//foo/sources.cc"));
   shared_lib.sources().push_back(SourceFile("//foo/bar.def"));
   ASSERT_TRUE(shared_lib.OnResolved(&err));
@@ -570,7 +559,6 @@ TEST(NinjaBinaryTargetWriter, LoadableModule) {
   Target loadable_module(setup.settings(), Label(SourceDir("//foo/"), "bar"));
   loadable_module.set_output_type(Target::LOADABLE_MODULE);
   loadable_module.visibility().SetPublic();
-  loadable_module.SetToolchain(setup.toolchain());
   loadable_module.sources().push_back(SourceFile("//foo/sources.cc"));
   ASSERT_TRUE(loadable_module.OnResolved(&err)) << err.message();
 
@@ -604,7 +592,6 @@ TEST(NinjaBinaryTargetWriter, LoadableModule) {
   Target exe(setup.settings(), Label(SourceDir("//foo/"), "exe"));
   exe.set_output_type(Target::EXECUTABLE);
   exe.public_deps().push_back(LabelTargetPair(&loadable_module));
-  exe.SetToolchain(setup.toolchain());
   exe.sources().push_back(SourceFile("//foo/final.cc"));
   ASSERT_TRUE(exe.OnResolved(&err)) << err.message();
 
@@ -672,6 +659,7 @@ TEST(NinjaBinaryTargetWriter, WinPrecompiledHeaders) {
   cc_tool->set_precompiled_header_type(Tool::PCH_MSVC);
   pch_toolchain.SetTool(Toolchain::TYPE_CC, std::move(cc_tool));
   pch_toolchain.ToolchainSetupComplete();
+  pch_settings.set_toolchain(&pch_toolchain);
 
   // This target doesn't specify precompiled headers.
   {
@@ -682,7 +670,6 @@ TEST(NinjaBinaryTargetWriter, WinPrecompiledHeaders) {
     no_pch_target.sources().push_back(SourceFile("//foo/input1.cc"));
     no_pch_target.sources().push_back(SourceFile("//foo/input2.c"));
     no_pch_target.config_values().cflags_c().push_back("-std=c99");
-    no_pch_target.SetToolchain(&pch_toolchain);
     ASSERT_TRUE(no_pch_target.OnResolved(&err));
 
     std::ostringstream out;
@@ -723,7 +710,6 @@ TEST(NinjaBinaryTargetWriter, WinPrecompiledHeaders) {
     pch_target.visibility().SetPublic();
     pch_target.sources().push_back(SourceFile("//foo/input1.cc"));
     pch_target.sources().push_back(SourceFile("//foo/input2.c"));
-    pch_target.SetToolchain(&pch_toolchain);
     ASSERT_TRUE(pch_target.OnResolved(&err));
 
     std::ostringstream out;
@@ -801,6 +787,7 @@ TEST(NinjaBinaryTargetWriter, GCCPrecompiledHeaders) {
   cxx_tool->set_precompiled_header_type(Tool::PCH_GCC);
   pch_toolchain.SetTool(Toolchain::TYPE_CXX, std::move(cxx_tool));
   pch_toolchain.ToolchainSetupComplete();
+  pch_settings.set_toolchain(&pch_toolchain);
 
   // Add a C compiler as well.
   std::unique_ptr<Tool> cc_tool(new Tool);
@@ -813,6 +800,7 @@ TEST(NinjaBinaryTargetWriter, GCCPrecompiledHeaders) {
   cc_tool->set_precompiled_header_type(Tool::PCH_GCC);
   pch_toolchain.SetTool(Toolchain::TYPE_CC, std::move(cc_tool));
   pch_toolchain.ToolchainSetupComplete();
+  pch_settings.set_toolchain(&pch_toolchain);
 
   // This target doesn't specify precompiled headers.
   {
@@ -823,7 +811,6 @@ TEST(NinjaBinaryTargetWriter, GCCPrecompiledHeaders) {
     no_pch_target.sources().push_back(SourceFile("//foo/input1.cc"));
     no_pch_target.sources().push_back(SourceFile("//foo/input2.c"));
     no_pch_target.config_values().cflags_c().push_back("-std=c99");
-    no_pch_target.SetToolchain(&pch_toolchain);
     ASSERT_TRUE(no_pch_target.OnResolved(&err));
 
     std::ostringstream out;
@@ -864,7 +851,6 @@ TEST(NinjaBinaryTargetWriter, GCCPrecompiledHeaders) {
     pch_target.visibility().SetPublic();
     pch_target.sources().push_back(SourceFile("//foo/input1.cc"));
     pch_target.sources().push_back(SourceFile("//foo/input2.c"));
-    pch_target.SetToolchain(&pch_toolchain);
     ASSERT_TRUE(pch_target.OnResolved(&err));
 
     std::ostringstream out;
@@ -947,7 +933,6 @@ TEST(NinjaBinaryTargetWriter, InputFiles) {
     target.sources().push_back(SourceFile("//foo/input1.cc"));
     target.sources().push_back(SourceFile("//foo/input2.cc"));
     target.inputs().push_back(SourceFile("//foo/input.data"));
-    target.SetToolchain(setup.toolchain());
     ASSERT_TRUE(target.OnResolved(&err));
 
     std::ostringstream out;
@@ -989,7 +974,6 @@ TEST(NinjaBinaryTargetWriter, InputFiles) {
     target.sources().push_back(SourceFile("//foo/input2.cc"));
     target.inputs().push_back(SourceFile("//foo/input1.data"));
     target.inputs().push_back(SourceFile("//foo/input2.data"));
-    target.SetToolchain(setup.toolchain());
     ASSERT_TRUE(target.OnResolved(&err));
 
     std::ostringstream out;

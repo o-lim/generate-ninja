@@ -22,7 +22,6 @@ TEST(NinjaActionTargetWriter, WriteOutputFilesForBuildLine) {
       "//out/Debug/gen/a b{{source_name_part}}.h",
       "//out/Debug/gen/{{source_name_part}}.cc");
 
-  target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
   std::ostringstream out;
@@ -49,7 +48,6 @@ TEST(NinjaActionTargetWriter, ActionNoSources) {
   target.action_values().outputs() =
       SubstitutionList::MakeForTest("//out/Debug/foo.out");
 
-  target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
   setup.build_settings()->set_python_path(base::FilePath(FILE_PATH_LITERAL(
@@ -89,7 +87,6 @@ TEST(NinjaActionTargetWriter, ActionNoSourcesConsole) {
       SubstitutionList::MakeForTest("//out/Debug/foo.out");
   target.action_values().set_console(true);
 
-  target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
   setup.build_settings()->set_python_path(base::FilePath(FILE_PATH_LITERAL(
@@ -131,7 +128,6 @@ TEST(NinjaActionTargetWriter, ActionWithSources) {
   target.action_values().outputs() =
       SubstitutionList::MakeForTest("//out/Debug/foo.out");
 
-  target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
   setup.build_settings()->set_python_path(base::FilePath(FILE_PATH_LITERAL(
@@ -177,7 +173,6 @@ TEST(NinjaActionTargetWriter, ActionWithCommandAndDescription) {
   target.action_values().outputs() =
       SubstitutionList::MakeForTest("//out/Debug/foo.out");
 
-  target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
   setup.build_settings()->set_python_path(base::FilePath(FILE_PATH_LITERAL(
@@ -219,7 +214,6 @@ TEST(NinjaActionTargetWriter, ActionWithInterpreter) {
   target.action_values().outputs() =
       SubstitutionList::MakeForTest("//out/Debug/foo.out");
 
-  target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
   setup.build_settings()->set_python_path(base::FilePath(FILE_PATH_LITERAL(
@@ -254,13 +248,11 @@ TEST(NinjaActionTargetWriter, ForEach) {
   Target dep(setup.settings(), Label(SourceDir("//foo/"), "dep"));
   dep.set_output_type(Target::ACTION);
   dep.visibility().SetPublic();
-  dep.SetToolchain(setup.toolchain());
   ASSERT_TRUE(dep.OnResolved(&err));
 
   Target datadep(setup.settings(), Label(SourceDir("//foo/"), "datadep"));
   datadep.set_output_type(Target::ACTION);
   datadep.visibility().SetPublic();
-  datadep.SetToolchain(setup.toolchain());
   ASSERT_TRUE(datadep.OnResolved(&err));
 
   Target target(setup.settings(), Label(SourceDir("//foo/"), "bar"));
@@ -282,7 +274,6 @@ TEST(NinjaActionTargetWriter, ForEach) {
 
   target.inputs().push_back(SourceFile("//foo/included.txt"));
 
-  target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
   setup.build_settings()->set_python_path(base::FilePath(FILE_PATH_LITERAL(
@@ -335,7 +326,6 @@ TEST(NinjaActionTargetWriter, ForEachWithDepfile) {
 
   target.action_values().set_script(SourceFile("//foo/script.py"));
 
-  target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
   SubstitutionPattern depfile;
@@ -395,7 +385,6 @@ TEST(NinjaActionTargetWriter, ForEachWithResponseFile) {
   target.sources().push_back(SourceFile("//foo/input1.txt"));
   target.action_values().set_script(SourceFile("//foo/script.py"));
 
-  target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
   // Make sure we get interesting substitutions for both the args and the
