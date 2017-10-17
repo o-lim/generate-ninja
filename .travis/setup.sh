@@ -6,7 +6,7 @@ NINJA_VERSION="1.7.2"
 
 source .travis/platform.sh
 
-mkdir $HOME/bin
+mkdir -p $HOME/bin
 
 if [ "$PLATFORM" == "macosx" ]; then
   NINJA_ZIP=ninja-mac.zip
@@ -23,13 +23,13 @@ elif [ "$PLATFORM" == "linux" ]; then
 
   sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y
   sudo apt-get update -qq
-  sudo apt-get install -qq gcc-4.9 g++-4.9 gcc-4.9-multilib g++-4.9-multilib
-  sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-4.9 60 --slave /usr/bin/g++ g++ /usr/bin/g++-4.9
+  sudo apt-get install -qq gcc-5 g++-5 gcc-5-multilib g++-5-multilib
+  sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-5 70 --slave /usr/bin/g++ g++ /usr/bin/g++-5
   sudo update-alternatives --install /usr/bin/cc cc /usr/bin/gcc 30
   sudo update-alternatives --install /usr/bin/c++ c++ /usr/bin/g++ 30
   sudo update-alternatives --set cc /usr/bin/gcc
   sudo update-alternatives --set c++ /usr/bin/g++
-  sudo update-alternatives --set gcc /usr/bin/gcc-4.9
+  sudo update-alternatives --set gcc /usr/bin/gcc-5
 fi
 
 if [ -n "$NINJA_ZIP" ]; then
