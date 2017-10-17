@@ -38,6 +38,7 @@
 #include "base/debug/proc_maps_linux.h"
 #endif
 
+#include "base/cfi_flags.h"
 #include "base/debug/debugger.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -58,6 +59,8 @@ namespace debug {
 namespace {
 
 volatile sig_atomic_t in_signal_handler = 0;
+
+bool (*try_handle_signal)(int, void*, void*) = nullptr;
 
 #if !defined(USE_SYMBOLIZE)
 // The prefix used for mangled symbols, per the Itanium C++ ABI:
@@ -216,6 +219,27 @@ void StackDumpSignalHandler(int signal, siginfo_t* info, void* void_context) {
   // NOTE: This code MUST be async-signal safe.
   // NO malloc or stdio is allowed here.
 
+  // Give a registered callback a chance to recover from this signal
+  //
+  // V8 uses guard regions to guarantee memory safety in WebAssembly. This means
+  // some signals might be expected if they originate from Wasm code while
+  // accessing the guard region. We give V8 the chance to handle and recover
+  // from these signals first.
+  if (try_handle_signal != nullptr &&
+      try_handle_signal(signal, info, void_context)) {
+    // The first chance handler took care of this. The SA_RESETHAND flag
+    // replaced this signal handler upon entry, but we want to stay
+    // installed. Thus, we reinstall ourselves before returning.
+    struct sigaction action;
+    memset(&action, 0, sizeof(action));
+    action.sa_flags = SA_RESETHAND | SA_SIGINFO;
+    action.sa_sigaction = &StackDumpSignalHandler;
+    sigemptyset(&action.sa_mask);
+
+    sigaction(signal, &action, NULL);
+    return;
+  }
+
   // Record the fact that we are in the signal handler now, so that the rest
   // of StackTrace can behave in an async-signal-safe manner.
   in_signal_handler = 1;
@@ -288,7 +312,7 @@ void StackDumpSignalHandler(int signal, siginfo_t* info, void* void_context) {
   }
   PrintToStderr("\n");
 
-#if defined(CFI_ENFORCEMENT)
+#if BUILDFLAG(CFI_ENFORCEMENT_TRAP)
   if (signal == SIGILL && info->si_code == ILL_ILLOPN) {
     PrintToStderr(
         "CFI: Most likely a control flow integrity violation; for more "
@@ -296,7 +320,7 @@ void StackDumpSignalHandler(int signal, siginfo_t* info, void* void_context) {
     PrintToStderr(
         "https://www.chromium.org/developers/testing/control-flow-integrity\n");
   }
-#endif
+#endif  // BUILDFLAG(CFI_ENFORCEMENT_TRAP)
 
   debug::StackTrace().Print();
 
@@ -497,7 +521,7 @@ class SandboxSymbolizeHelper {
         if (strcmp((it->first).c_str(), file_path) == 0) {
           // POSIX.1-2004 requires an implementation to guarantee that dup()
           // is async-signal-safe.
-          fd = dup(it->second);
+          fd = HANDLE_EINTR(dup(it->second));
           break;
         }
       }
@@ -715,6 +739,11 @@ bool EnableInProcessStackDumping() {
 #endif  // !defined(OS_LINUX)
 
   return success;
+}
+
+void SetStackDumpFirstChanceCallback(bool (*handler)(int, void*, void*)) {
+  DCHECK(try_handle_signal == nullptr || handler == nullptr);
+  try_handle_signal = handler;
 }
 
 StackTrace::StackTrace(size_t count) {

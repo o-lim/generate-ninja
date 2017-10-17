@@ -17,10 +17,13 @@
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_samples.h"
+#include "base/metrics/metrics_hashes.h"
 #include "base/metrics/persistent_sample_map.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/metrics/statistics_recorder.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/pickle.h"
+#include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
 
 namespace base {
@@ -119,7 +122,7 @@ PersistentSparseHistogramDataManager::GetSampleMapRecordsWhileLocked(
     return found->second.get();
 
   std::unique_ptr<PersistentSampleMapRecords>& samples = sample_records_[id];
-  samples = MakeUnique<PersistentSampleMapRecords>(this, id);
+  samples = std::make_unique<PersistentSampleMapRecords>(this, id);
   return samples.get();
 }
 
@@ -279,23 +282,29 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::GetHistogram(
   // count data (while these must reference the persistent counts) and always
   // add it to the local list of known histograms (while these may be simple
   // references to histograms in other processes).
-  PersistentHistogramData* histogram_data =
+  PersistentHistogramData* data =
       memory_allocator_->GetAsObject<PersistentHistogramData>(ref);
-  size_t length = memory_allocator_->GetAllocSize(ref);
+  const size_t length = memory_allocator_->GetAllocSize(ref);
 
-  // Check that metadata is reasonable: name is NUL terminated and non-empty,
+  // Check that metadata is reasonable: name is null-terminated and non-empty,
   // ID fields have been loaded with a hash of the name (0 is considered
   // unset/invalid).
-  if (!histogram_data ||
-      reinterpret_cast<char*>(histogram_data)[length - 1] != '\0' ||
-      histogram_data->name[0] == '\0' ||
-      histogram_data->samples_metadata.id == 0 ||
-      histogram_data->logged_metadata.id == 0) {
+  if (!data || data->name[0] == '\0' ||
+      reinterpret_cast<char*>(data)[length - 1] != '\0' ||
+      data->samples_metadata.id == 0 || data->logged_metadata.id == 0 ||
+      // Note: Sparse histograms use |id + 1| in |logged_metadata|.
+      (data->logged_metadata.id != data->samples_metadata.id &&
+       data->logged_metadata.id != data->samples_metadata.id + 1) ||
+      // Most non-matching values happen due to truncated names. Ideally, we
+      // could just verify the name length based on the overall alloc length,
+      // but that doesn't work because the allocated block may have been
+      // aligned to the next boundary value.
+      HashMetricName(data->name) != data->samples_metadata.id) {
     RecordCreateHistogramResult(CREATE_HISTOGRAM_INVALID_METADATA);
     NOTREACHED();
     return nullptr;
   }
-  return CreateHistogram(histogram_data);
+  return CreateHistogram(data);
 }
 
 std::unique_ptr<HistogramBase> PersistentHistogramAllocator::AllocateHistogram(
@@ -511,37 +520,48 @@ void PersistentHistogramAllocator::ClearLastCreatedReferenceForTesting() {
 // static
 HistogramBase*
 PersistentHistogramAllocator::GetCreateHistogramResultHistogram() {
-  // Get the histogram in which create-results are stored. This is copied
-  // almost exactly from the STATIC_HISTOGRAM_POINTER_BLOCK macro but with
-  // added code to prevent recursion (a likely occurance because the creation
-  // of a new a histogram can end up calling this.)
-  static base::subtle::AtomicWord atomic_histogram_pointer = 0;
-  HistogramBase* histogram_pointer =
-      reinterpret_cast<HistogramBase*>(
-          base::subtle::Acquire_Load(&atomic_histogram_pointer));
-  if (!histogram_pointer) {
-    // It's possible for multiple threads to make it here in parallel but
-    // they'll always return the same result as there is a mutex in the Get.
-    // The purpose of the "initialized" variable is just to ensure that
-    // the same thread doesn't recurse which is also why it doesn't have
-    // to be atomic.
-    static bool initialized = false;
-    if (!initialized) {
-      initialized = true;
-      if (GlobalHistogramAllocator::Get()) {
-        DVLOG(1) << "Creating the results-histogram inside persistent"
-                 << " memory can cause future allocations to crash if"
-                 << " that memory is ever released (for testing).";
-      }
+  // A value that can be stored in an AtomicWord as a flag. It must not be zero
+  // or a valid address.
+  constexpr subtle::AtomicWord kHistogramUnderConstruction = 1;
 
-      histogram_pointer = LinearHistogram::FactoryGet(
-          kResultHistogram, 1, CREATE_HISTOGRAM_MAX, CREATE_HISTOGRAM_MAX + 1,
-          HistogramBase::kUmaTargetedHistogramFlag);
-      base::subtle::Release_Store(
-          &atomic_histogram_pointer,
-          reinterpret_cast<base::subtle::AtomicWord>(histogram_pointer));
-    }
+  // This is a similar to LazyInstance but with return-if-under-construction
+  // rather than yielding the CPU until construction completes. This is
+  // necessary because the FactoryGet() below creates a histogram and thus
+  // recursively calls this method to try to store the result.
+
+  // Get the existing pointer. If the "under construction" flag is present,
+  // abort now. It's okay to return null from this method.
+  static subtle::AtomicWord atomic_histogram_pointer = 0;
+  subtle::AtomicWord histogram_value =
+      subtle::Acquire_Load(&atomic_histogram_pointer);
+  if (histogram_value == kHistogramUnderConstruction)
+    return nullptr;
+
+  // If a valid histogram pointer already exists, return it.
+  if (histogram_value)
+    return reinterpret_cast<HistogramBase*>(histogram_value);
+
+  // Set the "under construction" flag; abort if something has changed.
+  if (subtle::NoBarrier_CompareAndSwap(&atomic_histogram_pointer, 0,
+                                       kHistogramUnderConstruction) != 0) {
+    return nullptr;
   }
+
+  // Only one thread can be here. Even recursion will be thwarted above.
+
+  if (GlobalHistogramAllocator::Get()) {
+    DVLOG(1) << "Creating the results-histogram inside persistent"
+             << " memory can cause future allocations to crash if"
+             << " that memory is ever released (for testing).";
+  }
+
+  HistogramBase* histogram_pointer = LinearHistogram::FactoryGet(
+      kResultHistogram, 1, CREATE_HISTOGRAM_MAX, CREATE_HISTOGRAM_MAX + 1,
+      HistogramBase::kUmaTargetedHistogramFlag);
+  subtle::Release_Store(
+      &atomic_histogram_pointer,
+      reinterpret_cast<subtle::AtomicWord>(histogram_pointer));
+
   return histogram_pointer;
 }
 
@@ -704,8 +724,7 @@ PersistentHistogramAllocator::GetOrCreateStatisticsRecorderHistogram(
   // FactoryGet() which will create the histogram in the global persistent-
   // histogram allocator if such is set.
   base::Pickle pickle;
-  if (!histogram->SerializeInfo(&pickle))
-    return nullptr;
+  histogram->SerializeInfo(&pickle);
   PickleIterator iter(pickle);
   existing = DeserializeHistogramInfo(&iter);
   if (!existing)
@@ -735,7 +754,7 @@ void GlobalHistogramAllocator::CreateWithPersistentMemory(
     uint64_t id,
     StringPiece name) {
   Set(WrapUnique(
-      new GlobalHistogramAllocator(MakeUnique<PersistentMemoryAllocator>(
+      new GlobalHistogramAllocator(std::make_unique<PersistentMemoryAllocator>(
           base, size, page_size, id, name, false))));
 }
 
@@ -745,7 +764,7 @@ void GlobalHistogramAllocator::CreateWithLocalMemory(
     uint64_t id,
     StringPiece name) {
   Set(WrapUnique(new GlobalHistogramAllocator(
-      MakeUnique<LocalPersistentMemoryAllocator>(size, id, name))));
+      std::make_unique<LocalPersistentMemoryAllocator>(size, id, name))));
 }
 
 #if !defined(OS_NACL)
@@ -762,6 +781,7 @@ bool GlobalHistogramAllocator::CreateWithFile(
 
   std::unique_ptr<MemoryMappedFile> mmfile(new MemoryMappedFile());
   if (exists) {
+    size = saturated_cast<size_t>(file.GetLength());
     mmfile->Initialize(std::move(file), MemoryMappedFile::READ_WRITE);
   } else {
     mmfile->Initialize(std::move(file), {0, static_cast<int64_t>(size)},
@@ -769,13 +789,13 @@ bool GlobalHistogramAllocator::CreateWithFile(
   }
   if (!mmfile->IsValid() ||
       !FilePersistentMemoryAllocator::IsFileAcceptable(*mmfile, true)) {
-    NOTREACHED();
+    NOTREACHED() << file_path;
     return false;
   }
 
-  Set(WrapUnique(
-      new GlobalHistogramAllocator(MakeUnique<FilePersistentMemoryAllocator>(
-          std::move(mmfile), size, id, name, false))));
+  Set(WrapUnique(new GlobalHistogramAllocator(
+      std::make_unique<FilePersistentMemoryAllocator>(std::move(mmfile), size,
+                                                      id, name, false))));
   Get()->SetPersistentLocation(file_path);
   return true;
 }
@@ -783,11 +803,20 @@ bool GlobalHistogramAllocator::CreateWithFile(
 // static
 bool GlobalHistogramAllocator::CreateWithActiveFile(const FilePath& base_path,
                                                     const FilePath& active_path,
+                                                    const FilePath& spare_path,
                                                     size_t size,
                                                     uint64_t id,
                                                     StringPiece name) {
+  // Old "active" becomes "base".
   if (!base::ReplaceFile(active_path, base_path, nullptr))
     base::DeleteFile(base_path, /*recursive=*/false);
+  DCHECK(!base::PathExists(active_path));
+
+  // Move any "spare" into "active". Okay to continue if file doesn't exist.
+  if (!spare_path.empty()) {
+    base::ReplaceFile(spare_path, active_path, nullptr);
+    DCHECK(!base::PathExists(spare_path));
+  }
 
   return base::GlobalHistogramAllocator::CreateWithFile(active_path, size, id,
                                                         name);
@@ -798,25 +827,91 @@ bool GlobalHistogramAllocator::CreateWithActiveFileInDir(const FilePath& dir,
                                                          size_t size,
                                                          uint64_t id,
                                                          StringPiece name) {
-  FilePath base_path, active_path;
-  ConstructFilePaths(dir, name, &base_path, &active_path);
-  return CreateWithActiveFile(base_path, active_path, size, id, name);
+  FilePath base_path, active_path, spare_path;
+  ConstructFilePaths(dir, name, &base_path, &active_path, &spare_path);
+  return CreateWithActiveFile(base_path, active_path, spare_path, size, id,
+                              name);
 }
 
 // static
 void GlobalHistogramAllocator::ConstructFilePaths(const FilePath& dir,
                                                   StringPiece name,
                                                   FilePath* out_base_path,
-                                                  FilePath* out_active_path) {
-  if (out_base_path) {
-    *out_base_path = dir.AppendASCII(name).AddExtension(
-        PersistentMemoryAllocator::kFileExtension);
-  }
+                                                  FilePath* out_active_path,
+                                                  FilePath* out_spare_path) {
+  if (out_base_path)
+    *out_base_path = MakeMetricsFilePath(dir, name);
+
   if (out_active_path) {
     *out_active_path =
-        dir.AppendASCII(name.as_string() + std::string("-active"))
-            .AddExtension(PersistentMemoryAllocator::kFileExtension);
+        MakeMetricsFilePath(dir, name.as_string().append("-active"));
   }
+
+  if (out_spare_path) {
+    *out_spare_path =
+        MakeMetricsFilePath(dir, name.as_string().append("-spare"));
+  }
+}
+
+// static
+void GlobalHistogramAllocator::ConstructFilePathsForUploadDir(
+    const FilePath& active_dir,
+    const FilePath& upload_dir,
+    const std::string& name,
+    FilePath* out_upload_path,
+    FilePath* out_active_path,
+    FilePath* out_spare_path) {
+  if (out_upload_path) {
+    std::string name_stamp =
+        StringPrintf("%s-%X", name.c_str(),
+                     static_cast<unsigned int>(Time::Now().ToTimeT()));
+    *out_upload_path = MakeMetricsFilePath(upload_dir, name_stamp);
+  }
+
+  if (out_active_path) {
+    *out_active_path =
+        MakeMetricsFilePath(active_dir, name + std::string("-active"));
+  }
+
+  if (out_spare_path) {
+    *out_spare_path =
+        MakeMetricsFilePath(active_dir, name + std::string("-spare"));
+  }
+}
+
+// static
+bool GlobalHistogramAllocator::CreateSpareFile(const FilePath& spare_path,
+                                               size_t size) {
+  FilePath temp_spare_path = spare_path.AddExtension(FILE_PATH_LITERAL(".tmp"));
+  bool success = true;
+  {
+    File spare_file(temp_spare_path, File::FLAG_CREATE_ALWAYS |
+                                         File::FLAG_READ | File::FLAG_WRITE);
+    if (!spare_file.IsValid())
+      return false;
+
+    MemoryMappedFile mmfile;
+    mmfile.Initialize(std::move(spare_file), {0, static_cast<int64_t>(size)},
+                      MemoryMappedFile::READ_WRITE_EXTEND);
+    success = mmfile.IsValid();
+  }
+
+  if (success)
+    success = ReplaceFile(temp_spare_path, spare_path, nullptr);
+
+  if (!success)
+    DeleteFile(temp_spare_path, /*recursive=*/false);
+
+  return success;
+}
+
+// static
+bool GlobalHistogramAllocator::CreateSpareFileInDir(const FilePath& dir,
+                                                    size_t size,
+                                                    StringPiece name) {
+  FilePath spare_path;
+  ConstructFilePaths(dir, name, nullptr, nullptr, &spare_path);
+  return CreateSpareFile(spare_path, size);
 }
 #endif  // !defined(OS_NACL)
 
@@ -832,8 +927,8 @@ void GlobalHistogramAllocator::CreateWithSharedMemoryHandle(
     return;
   }
 
-  Set(WrapUnique(
-      new GlobalHistogramAllocator(MakeUnique<SharedPersistentMemoryAllocator>(
+  Set(WrapUnique(new GlobalHistogramAllocator(
+      std::make_unique<SharedPersistentMemoryAllocator>(
           std::move(shm), 0, StringPiece(), /*readonly=*/false))));
 }
 
@@ -968,6 +1063,13 @@ void GlobalHistogramAllocator::ImportHistogramsToStatisticsRecorder() {
       break;
     StatisticsRecorder::RegisterOrDeleteDuplicate(histogram.release());
   }
+}
+
+// static
+FilePath GlobalHistogramAllocator::MakeMetricsFilePath(const FilePath& dir,
+                                                       StringPiece name) {
+  return dir.AppendASCII(name).AddExtension(
+      PersistentMemoryAllocator::kFileExtension);
 }
 
 }  // namespace base

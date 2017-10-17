@@ -12,26 +12,31 @@
 
 #include <stddef.h>  // For size_t.
 
+// Distinguish mips32.
+#if defined(__mips__) && (_MIPS_SIM == _ABIO32) && !defined(__mips32__)
+#define __mips32__
+#endif
+
+// Distinguish mips64.
+#if defined(__mips__) && (_MIPS_SIM == _ABI64) && !defined(__mips64__)
+#define __mips64__
+#endif
+
 // Put this in the declarations for a class to be uncopyable.
 #define DISALLOW_COPY(TypeName) \
   TypeName(const TypeName&) = delete
 
 // Put this in the declarations for a class to be unassignable.
-#define DISALLOW_ASSIGN(TypeName) \
-  void operator=(const TypeName&) = delete
+#define DISALLOW_ASSIGN(TypeName) TypeName& operator=(const TypeName&) = delete
 
-// A macro to disallow the copy constructor and operator= functions.
-// This should be used in the private: declarations for a class.
+// Put this in the declarations for a class to be uncopyable and unassignable.
 #define DISALLOW_COPY_AND_ASSIGN(TypeName) \
-  TypeName(const TypeName&) = delete;      \
-  void operator=(const TypeName&) = delete
+  DISALLOW_COPY(TypeName);                 \
+  DISALLOW_ASSIGN(TypeName)
 
 // A macro to disallow all the implicit constructors, namely the
 // default constructor, copy constructor and operator= functions.
-//
-// This should be used in the private: declarations for a class
-// that wants to prevent anyone from instantiating it. This is
-// especially useful for classes containing only static methods.
+// This is especially useful for classes containing only static methods.
 #define DISALLOW_IMPLICIT_CONSTRUCTORS(TypeName) \
   TypeName() = delete;                           \
   DISALLOW_COPY_AND_ASSIGN(TypeName)
@@ -60,25 +65,11 @@ template<typename T>
 inline void ignore_result(const T&) {
 }
 
-// The following enum should be used only as a constructor argument to indicate
-// that the variable has static storage class, and that the constructor should
-// do nothing to its state.  It indicates to the reader that it is legal to
-// declare a static instance of the class, provided the constructor is given
-// the base::LINKER_INITIALIZED argument.  Normally, it is unsafe to declare a
-// static variable that has a constructor or a destructor because invocation
-// order is undefined.  However, IF the type can be initialized by filling with
-// zeroes (which the loader does for static variables), AND the destructor also
-// does nothing to the storage, AND there are no virtual methods, then a
-// constructor declared as
-//       explicit MyClass(base::LinkerInitialized x) {}
-// and invoked as
-//       static MyClass my_variable_name(base::LINKER_INITIALIZED);
 namespace base {
-enum LinkerInitialized { LINKER_INITIALIZED };
 
 // Use these to declare and define a static local variable (static T;) so that
-// it is leaked so that its destructors are not called at exit. If you need
-// thread-safe initialization, use base/lazy_instance.h instead.
+// it is leaked so that its destructors are not called at exit.  This is
+// thread-safe.
 #define CR_DEFINE_STATIC_LOCAL(type, name, arguments) \
   static type& name = *new type arguments
 

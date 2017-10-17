@@ -15,7 +15,14 @@
 #include "base/trace_event/trace_event_argument.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+using testing::ElementsAre;
+using testing::Eq;
+using testing::ByRef;
+using testing::IsEmpty;
+using testing::Contains;
 
 namespace base {
 namespace trace_event {
@@ -35,7 +42,6 @@ class FakeMemoryAllocatorDumpProvider : public MemoryDumpProvider {
                          MemoryAllocatorDump::kUnitsObjects, 42);
     root_heap->AddScalar("attr1", "units1", 1234);
     root_heap->AddString("attr2", "units2", "string_value");
-    root_heap->AddScalarF("attr3", "units3", 42.5f);
 
     MemoryAllocatorDump* sub_heap =
         pmd->CreateAllocatorDump("foobar_allocator/sub_heap");
@@ -52,77 +58,44 @@ class FakeMemoryAllocatorDumpProvider : public MemoryDumpProvider {
   }
 };
 
-std::unique_ptr<Value> CheckAttribute(const MemoryAllocatorDump* dump,
-                                      const std::string& name,
-                                      const char* expected_type,
-                                      const char* expected_units) {
-  std::unique_ptr<Value> raw_attrs =
-      dump->attributes_for_testing()->ToBaseValue();
-  DictionaryValue* args = nullptr;
-  DictionaryValue* arg = nullptr;
-  std::string arg_value;
-  const Value* out_value = nullptr;
-  EXPECT_TRUE(raw_attrs->GetAsDictionary(&args));
-  EXPECT_TRUE(args->GetDictionary(name, &arg));
-  EXPECT_TRUE(arg->GetString("type", &arg_value));
-  EXPECT_EQ(expected_type, arg_value);
-  EXPECT_TRUE(arg->GetString("units", &arg_value));
-  EXPECT_EQ(expected_units, arg_value);
-  EXPECT_TRUE(arg->Get("value", &out_value));
-  return out_value ? out_value->CreateDeepCopy() : std::unique_ptr<Value>();
-}
-
 void CheckString(const MemoryAllocatorDump* dump,
                  const std::string& name,
-                 const char* expected_type,
                  const char* expected_units,
                  const std::string& expected_value) {
-  std::string attr_str_value;
-  auto attr_value = CheckAttribute(dump, name, expected_type, expected_units);
-  EXPECT_TRUE(attr_value->GetAsString(&attr_str_value));
-  EXPECT_EQ(expected_value, attr_str_value);
+  MemoryAllocatorDump::Entry expected(name, expected_units, expected_value);
+  EXPECT_THAT(dump->entries(), Contains(Eq(ByRef(expected))));
 }
 
 void CheckScalar(const MemoryAllocatorDump* dump,
                  const std::string& name,
                  const char* expected_units,
                  uint64_t expected_value) {
-  CheckString(dump, name, MemoryAllocatorDump::kTypeScalar, expected_units,
-              StringPrintf("%" PRIx64, expected_value));
-}
-
-void CheckScalarF(const MemoryAllocatorDump* dump,
-                  const std::string& name,
-                  const char* expected_units,
-                  double expected_value) {
-  auto attr_value = CheckAttribute(dump, name, MemoryAllocatorDump::kTypeScalar,
-                                   expected_units);
-  double attr_double_value;
-  EXPECT_TRUE(attr_value->GetAsDouble(&attr_double_value));
-  EXPECT_EQ(expected_value, attr_double_value);
+  MemoryAllocatorDump::Entry expected(name, expected_units, expected_value);
+  EXPECT_THAT(dump->entries(), Contains(Eq(ByRef(expected))));
 }
 
 }  // namespace
 
 TEST(MemoryAllocatorDumpTest, GuidGeneration) {
-  std::unique_ptr<MemoryAllocatorDump> mad(
-      new MemoryAllocatorDump("foo", nullptr, MemoryAllocatorDumpGuid(0x42u)));
+  std::unique_ptr<MemoryAllocatorDump> mad(new MemoryAllocatorDump(
+      "foo", MemoryDumpLevelOfDetail::FIRST, MemoryAllocatorDumpGuid(0x42u)));
   ASSERT_EQ("42", mad->guid().ToString());
 
   // If the dumper does not provide a Guid, the MAD will make one up on the
   // flight. Furthermore that Guid will stay stable across across multiple
   // snapshots if the |absolute_name| of the dump doesn't change
-  mad.reset(new MemoryAllocatorDump("bar", nullptr));
+  mad.reset(new MemoryAllocatorDump("bar", MemoryDumpLevelOfDetail::FIRST));
   const MemoryAllocatorDumpGuid guid_bar = mad->guid();
   ASSERT_FALSE(guid_bar.empty());
   ASSERT_FALSE(guid_bar.ToString().empty());
   ASSERT_EQ(guid_bar, mad->guid());
+  ASSERT_EQ(guid_bar, MemoryAllocatorDump::GetDumpIdFromName("bar"));
 
-  mad.reset(new MemoryAllocatorDump("bar", nullptr));
+  mad.reset(new MemoryAllocatorDump("bar", MemoryDumpLevelOfDetail::FIRST));
   const MemoryAllocatorDumpGuid guid_bar_2 = mad->guid();
   ASSERT_EQ(guid_bar, guid_bar_2);
 
-  mad.reset(new MemoryAllocatorDump("baz", nullptr));
+  mad.reset(new MemoryAllocatorDump("baz", MemoryDumpLevelOfDetail::FIRST));
   const MemoryAllocatorDumpGuid guid_baz = mad->guid();
   ASSERT_NE(guid_bar, guid_baz);
 }
@@ -145,9 +118,7 @@ TEST(MemoryAllocatorDumpTest, DumpIntoProcessMemoryDump) {
   CheckScalar(root_heap, MemoryAllocatorDump::kNameObjectCount,
               MemoryAllocatorDump::kUnitsObjects, 42);
   CheckScalar(root_heap, "attr1", "units1", 1234);
-  CheckString(root_heap, "attr2", MemoryAllocatorDump::kTypeString, "units2",
-              "string_value");
-  CheckScalarF(root_heap, "attr3", "units3", 42.5f);
+  CheckString(root_heap, "attr2", "units2", "string_value");
 
   const MemoryAllocatorDump* sub_heap =
       pmd.GetAllocatorDump("foobar_allocator/sub_heap");
@@ -161,15 +132,13 @@ TEST(MemoryAllocatorDumpTest, DumpIntoProcessMemoryDump) {
       pmd.GetAllocatorDump("foobar_allocator/sub_heap/empty");
   ASSERT_NE(nullptr, empty_sub_heap);
   EXPECT_EQ("foobar_allocator/sub_heap/empty", empty_sub_heap->absolute_name());
-  auto raw_attrs = empty_sub_heap->attributes_for_testing()->ToBaseValue();
-  DictionaryValue* attrs = nullptr;
-  ASSERT_TRUE(raw_attrs->GetAsDictionary(&attrs));
-  ASSERT_FALSE(attrs->HasKey(MemoryAllocatorDump::kNameSize));
-  ASSERT_FALSE(attrs->HasKey(MemoryAllocatorDump::kNameObjectCount));
 
-  // Check that the AsValueInfo doesn't hit any DCHECK.
+  EXPECT_THAT(empty_sub_heap->entries(), IsEmpty());
+
+  // Check that calling serialization routines doesn't cause a crash.
   std::unique_ptr<TracedValue> traced_value(new TracedValue);
-  pmd.AsValueInto(traced_value.get());
+  pmd.SerializeAllocatorDumpsInto(traced_value.get());
+  pmd.SerializeHeapProfilerDumpsInto(traced_value.get());
 }
 
 TEST(MemoryAllocatorDumpTest, GetSize) {
@@ -179,11 +148,32 @@ TEST(MemoryAllocatorDumpTest, GetSize) {
   dump->AddScalar(MemoryAllocatorDump::kNameSize,
                   MemoryAllocatorDump::kUnitsBytes, 1);
   dump->AddScalar("foo", MemoryAllocatorDump::kUnitsBytes, 2);
-  EXPECT_EQ(1u, dump->GetSize());
+  EXPECT_EQ(1u, dump->GetSizeInternal());
 }
 
-// DEATH tests are not supported in Android / iOS.
-#if !defined(NDEBUG) && !defined(OS_ANDROID) && !defined(OS_IOS)
+TEST(MemoryAllocatorDumpTest, ReadValues) {
+  MemoryDumpArgs dump_args = {MemoryDumpLevelOfDetail::DETAILED};
+  ProcessMemoryDump pmd(new HeapProfilerSerializationState, dump_args);
+  MemoryAllocatorDump* dump = pmd.CreateAllocatorDump("allocator_for_size");
+  dump->AddScalar("one", "byte", 1);
+  dump->AddString("one", "object", "one");
+
+  MemoryAllocatorDump::Entry expected_scalar("one", "byte", 1);
+  MemoryAllocatorDump::Entry expected_string("one", "object", "one");
+  EXPECT_THAT(dump->entries(), ElementsAre(Eq(ByRef(expected_scalar)),
+                                           Eq(ByRef(expected_string))));
+}
+
+TEST(MemoryAllocatorDumpTest, MovingAnEntry) {
+  MemoryAllocatorDump::Entry expected_entry("one", "byte", 1);
+  MemoryAllocatorDump::Entry from_entry("one", "byte", 1);
+  MemoryAllocatorDump::Entry to_entry = std::move(from_entry);
+  EXPECT_EQ(expected_entry, to_entry);
+}
+
+// DEATH tests are not supported in Android/iOS/Fuchsia.
+#if !defined(NDEBUG) && !defined(OS_ANDROID) && !defined(OS_IOS) && \
+    !defined(OS_FUCHSIA)
 TEST(MemoryAllocatorDumpTest, ForbidDuplicatesDeathTest) {
   FakeMemoryAllocatorDumpProvider fmadp;
   MemoryDumpArgs dump_args = {MemoryDumpLevelOfDetail::DETAILED};
@@ -193,6 +183,13 @@ TEST(MemoryAllocatorDumpTest, ForbidDuplicatesDeathTest) {
   ASSERT_DEATH(pmd.CreateAllocatorDump("foo_allocator"), "");
   ASSERT_DEATH(pmd.CreateAllocatorDump("bar_allocator/heap"), "");
   ASSERT_DEATH(pmd.CreateAllocatorDump(""), "");
+}
+
+TEST(MemoryAllocatorDumpTest, ForbidStringsInBackgroundModeDeathTest) {
+  MemoryDumpArgs dump_args = {MemoryDumpLevelOfDetail::BACKGROUND};
+  ProcessMemoryDump pmd(new HeapProfilerSerializationState, dump_args);
+  MemoryAllocatorDump* dump = pmd.CreateAllocatorDump("malloc");
+  ASSERT_DEATH(dump->AddString("foo", "bar", "baz"), "");
 }
 #endif
 

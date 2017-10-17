@@ -10,6 +10,11 @@
  *
  */
 
+/* To avoid EBCDIC trouble when parsing on zOS */
+#if defined(__MVS__)
+#pragma convert("ISO8859-1")
+#endif
+
 #define IN_LIBXML
 #include "libxml.h"
 
@@ -254,10 +259,10 @@ xmlBuildQName(const xmlChar *ncname, const xmlChar *prefix,
  *
  * [NS 7] LocalPart ::= NCName
  *
- * Returns NULL if not a QName, otherwise the local part, and prefix
- *   is updated to get the Prefix if any.
+ * Returns NULL if the name doesn't have a prefix. Otherwise, returns the
+ * local part, and prefix is updated to get the Prefix. Both the return value
+ * and the prefix must be freed by the caller.
  */
-
 xmlChar *
 xmlSplitQName2(const xmlChar *name, xmlChar **prefix) {
     int len = 0;
@@ -1401,6 +1406,8 @@ xmlStringLenGetNodeList(const xmlDoc *doc, const xmlChar *value, int len) {
 			else if ((ent != NULL) && (ent->children == NULL)) {
 			    xmlNodePtr temp;
 
+                            /* Set to non-NULL value to avoid recursion. */
+			    ent->children = (xmlNodePtr) -1;
 			    ent->children = xmlStringGetNodeList(doc,
 				    (const xmlChar*)node->content);
 			    ent->owner = 1;
@@ -1593,6 +1600,7 @@ xmlStringGetNodeList(const xmlDoc *doc, const xmlChar *value) {
 			else if ((ent != NULL) && (ent->children == NULL)) {
 			    xmlNodePtr temp;
 
+                            /* Set to non-NULL value to avoid recursion. */
 			    ent->children = (xmlNodePtr) -1;
 			    ent->children = xmlStringGetNodeList(doc,
 				    (const xmlChar*)node->content);
@@ -1600,6 +1608,7 @@ xmlStringGetNodeList(const xmlDoc *doc, const xmlChar *value) {
 			    temp = ent->children;
 			    while (temp) {
 				temp->parent = (xmlNodePtr)ent;
+				ent->last = temp;
 				temp = temp->next;
 			    }
 			}
@@ -4755,8 +4764,8 @@ xmlGetNodePath(const xmlNode *node)
             if (occur == 0) {
                 tmp = cur->next;
                 while (tmp != NULL && occur == 0) {
-		  if (tmp->type == XML_COMMENT_NODE)
-		    occur++;
+		    if (tmp->type == XML_COMMENT_NODE)
+		        occur++;
                     tmp = tmp->next;
                 }
                 if (occur != 0)

@@ -8,10 +8,10 @@
 #include <shellapi.h>
 #include <shlobj.h>
 #include <propkey.h>
+#include <wrl/client.h>
 
 #include "base/files/file_util.h"
 #include "base/threading/thread_restrictions.h"
-#include "base/win/scoped_comptr.h"
 #include "base/win/scoped_propvariant.h"
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
@@ -21,15 +21,16 @@ namespace win {
 
 namespace {
 
+using Microsoft::WRL::ComPtr;
+
 // Initializes |i_shell_link| and |i_persist_file| (releasing them first if they
 // are already initialized).
 // If |shortcut| is not NULL, loads |shortcut| into |i_persist_file|.
 // If any of the above steps fail, both |i_shell_link| and |i_persist_file| will
 // be released.
-void InitializeShortcutInterfaces(
-    const wchar_t* shortcut,
-    ScopedComPtr<IShellLink>* i_shell_link,
-    ScopedComPtr<IPersistFile>* i_persist_file) {
+void InitializeShortcutInterfaces(const wchar_t* shortcut,
+                                  ComPtr<IShellLink>* i_shell_link,
+                                  ComPtr<IPersistFile>* i_persist_file) {
   i_shell_link->Reset();
   i_persist_file->Reset();
   if (FAILED(::CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER,
@@ -68,12 +69,12 @@ bool CreateOrUpdateShortcutLink(const FilePath& shortcut_path,
   bool shortcut_existed = PathExists(shortcut_path);
 
   // Interfaces to the old shortcut when replacing an existing shortcut.
-  ScopedComPtr<IShellLink> old_i_shell_link;
-  ScopedComPtr<IPersistFile> old_i_persist_file;
+  ComPtr<IShellLink> old_i_shell_link;
+  ComPtr<IPersistFile> old_i_persist_file;
 
   // Interfaces to the shortcut being created/updated.
-  ScopedComPtr<IShellLink> i_shell_link;
-  ScopedComPtr<IPersistFile> i_persist_file;
+  ComPtr<IShellLink> i_shell_link;
+  ComPtr<IPersistFile> i_persist_file;
   switch (operation) {
     case SHORTCUT_CREATE_ALWAYS:
       InitializeShortcutInterfaces(NULL, &i_shell_link, &i_persist_file);
@@ -137,9 +138,8 @@ bool CreateOrUpdateShortcutLink(const FilePath& shortcut_path,
       (properties.options & ShortcutProperties::PROPERTIES_APP_ID) != 0;
   bool has_dual_mode =
       (properties.options & ShortcutProperties::PROPERTIES_DUAL_MODE) != 0;
-  if ((has_app_id || has_dual_mode) &&
-      GetVersion() >= VERSION_WIN7) {
-    ScopedComPtr<IPropertyStore> property_store;
+  if (has_app_id || has_dual_mode) {
+    ComPtr<IPropertyStore> property_store;
     if (FAILED(i_shell_link.CopyTo(property_store.GetAddressOf())) ||
         !property_store.Get())
       return false;
@@ -195,7 +195,7 @@ bool ResolveShortcutProperties(const FilePath& shortcut_path,
   if (options & ~ShortcutProperties::PROPERTIES_ALL)
     NOTREACHED() << "Unhandled property is used.";
 
-  ScopedComPtr<IShellLink> i_shell_link;
+  ComPtr<IShellLink> i_shell_link;
 
   // Get pointer to the IShellLink interface.
   if (FAILED(::CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER,
@@ -203,7 +203,7 @@ bool ResolveShortcutProperties(const FilePath& shortcut_path,
     return false;
   }
 
-  ScopedComPtr<IPersistFile> persist;
+  ComPtr<IPersistFile> persist;
   // Query IShellLink for the IPersistFile interface.
   if (FAILED(i_shell_link.CopyTo(persist.GetAddressOf())))
     return false;
@@ -248,10 +248,8 @@ bool ResolveShortcutProperties(const FilePath& shortcut_path,
     properties->set_icon(FilePath(temp), temp_index);
   }
 
-  // Windows 7+ options, avoiding unnecessary work.
-  if ((options & ShortcutProperties::PROPERTIES_WIN7) &&
-      GetVersion() >= VERSION_WIN7) {
-    ScopedComPtr<IPropertyStore> property_store;
+  if (options & ShortcutProperties::PROPERTIES_WIN7) {
+    ComPtr<IPropertyStore> property_store;
     if (FAILED(i_shell_link.CopyTo(property_store.GetAddressOf())))
       return false;
 
@@ -319,9 +317,8 @@ bool ResolveShortcut(const FilePath& shortcut_path,
 }
 
 bool CanPinShortcutToTaskbar() {
-  // "Pin to taskbar" appeared in Windows 7 and stopped being supported in
-  // Windows 10.
-  return GetVersion() >= VERSION_WIN7 && GetVersion() < VERSION_WIN10;
+  // "Pin to taskbar" stopped being supported in Windows 10.
+  return GetVersion() < VERSION_WIN10;
 }
 
 bool PinShortcutToTaskbar(const FilePath& shortcut) {
@@ -335,11 +332,6 @@ bool PinShortcutToTaskbar(const FilePath& shortcut) {
 
 bool UnpinShortcutFromTaskbar(const FilePath& shortcut) {
   base::ThreadRestrictions::AssertIOAllowed();
-
-  // "Unpin from taskbar" is only supported after Win7. It is possible to remove
-  // a shortcut pinned by a user on Windows 10+.
-  if (GetVersion() < VERSION_WIN7)
-    return false;
 
   intptr_t result = reinterpret_cast<intptr_t>(ShellExecute(
       NULL, L"taskbarunpin", shortcut.value().c_str(), NULL, NULL, 0));

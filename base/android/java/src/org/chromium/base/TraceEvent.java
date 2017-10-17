@@ -14,19 +14,27 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.MainDex;
 /**
- * Java mirror of Chrome trace event API. See base/trace_event/trace_event.h. Unlike the native
- * version, Java does not have stack objects, so a TRACE_EVENT() which does both TRACE_EVENT_BEGIN()
- * and TRACE_EVENT_END() in ctor/dtor is not possible.
+ * Java mirror of Chrome trace event API. See base/trace_event/trace_event.h.
+ *
+ * To get scoped trace events, use the "try with resource" construct, for instance:
+ * <pre>{@code
+ * try (TraceEvent e = TraceEvent.scoped("MyTraceEvent")) {
+ *   // code.
+ * }
+ * }</pre>
+ *
  * It is OK to use tracing before the native library has loaded, in a slightly restricted fashion.
  * @see EarlyTraceEvent for details.
  */
 @JNINamespace("base::android")
 @MainDex
-public class TraceEvent {
+public class TraceEvent implements AutoCloseable {
     private static volatile boolean sEnabled;
     private static volatile boolean sATraceEnabled; // True when taking an Android systrace.
 
     private static class BasicLooperMonitor implements Printer {
+        private static final String EARLY_TOPLEVEL_TASK_NAME = "Looper.dispatchMessage: ";
+
         @Override
         public void println(final String line) {
             if (line.startsWith(">")) {
@@ -38,18 +46,36 @@ public class TraceEvent {
         }
 
         void beginHandling(final String line) {
-            if (sEnabled) {
-                // Android Looper formats |line| as ">>>>> Dispatching to (TARGET) [...]" since at
-                // least 2009 (Donut). Extracts the TARGET part of the message.
-                int start = line.indexOf('(', 21); // strlen(">>>>> Dispatching to ")
-                int end = start == -1 ? -1 : line.indexOf(')', start);
-                String target = end != -1 ? line.substring(start + 1, end) : "";
-                nativeBeginToplevel(target);
+            // May return an out-of-date value. this is not an issue as EarlyTraceEvent#begin()
+            // will filter the event in this case.
+            boolean earlyTracingActive = EarlyTraceEvent.isActive();
+            if (sEnabled || earlyTracingActive) {
+                String target = getTarget(line);
+                if (sEnabled) {
+                    nativeBeginToplevel(target);
+                } else if (earlyTracingActive) {
+                    // Synthesize a task name instead of using a parameter, as early tracing doesn't
+                    // support parameters.
+                    EarlyTraceEvent.begin(EARLY_TOPLEVEL_TASK_NAME + target);
+                }
             }
         }
 
         void endHandling(final String line) {
+            if (EarlyTraceEvent.isActive()) {
+                EarlyTraceEvent.end(EARLY_TOPLEVEL_TASK_NAME + getTarget(line));
+            }
             if (sEnabled) nativeEndToplevel();
+        }
+
+        /**
+         * Android Looper formats |line| as ">>>>> Dispatching to (TARGET) [...]" since at least
+         * 2009 (Donut). Extracts the TARGET part of the message.
+         */
+        private static String getTarget(String logLine) {
+            int start = logLine.indexOf('(', 21); // strlen(">>>>> Dispatching to ")
+            int end = start == -1 ? -1 : logLine.indexOf(')', start);
+            return end != -1 ? logLine.substring(start + 1, end) : "";
         }
     }
 
@@ -174,6 +200,33 @@ public class TraceEvent {
                 ? new IdleTracingLooperMonitor() : new BasicLooperMonitor();
     }
 
+    private final String mName;
+
+    /**
+     * Constructor used to support the "try with resource" construct.
+     */
+    private TraceEvent(String name) {
+        mName = name;
+        begin(name);
+    }
+
+    @Override
+    public void close() {
+        end(mName);
+    }
+
+    /**
+     * Factory used to support the "try with resource" construct.
+     *
+     * Note that if tracing is not enabled, this will not result in allocating an object.
+     *
+     * @param name Trace event name.
+     * @return a TraceEvent, or null if tracing is not enabled.
+     */
+    public static TraceEvent scoped(String name) {
+        if (!(EarlyTraceEvent.enabled() || enabled())) return null;
+        return new TraceEvent(name);
+    }
 
     /**
      * Register an enabled observer, such that java traces are always enabled with native.
@@ -207,6 +260,9 @@ public class TraceEvent {
      */
     public static void maybeEnableEarlyTracing() {
         EarlyTraceEvent.maybeEnable();
+        if (EarlyTraceEvent.isActive()) {
+            ThreadUtils.getUiThreadLooper().setMessageLogging(LooperMonitorHolder.sInstance);
+        }
     }
 
     /**

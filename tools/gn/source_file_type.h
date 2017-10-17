@@ -27,4 +27,6 @@ enum SourceFileType {
   SOURCE_NUMTYPES,
 };
 
+SourceFileType GetDefaultSourceFileType(const SourceFile& file);
+
 #endif  // TOOLS_GN_SOURCE_FILE_TYPE_H_

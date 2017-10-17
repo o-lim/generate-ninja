@@ -56,7 +56,13 @@ class BASE_EXPORT PlatformThreadLocalStorage {
   // SetTLSValue().
   static void FreeTLS(TLSKey key);
   static void SetTLSValue(TLSKey key, void* value);
-  static void* GetTLSValue(TLSKey key);
+  static void* GetTLSValue(TLSKey key) {
+#if defined(OS_WIN)
+    return TlsGetValue(key);
+#elif defined(OS_POSIX)
+    return pthread_getspecific(key);
+#endif
+  }
 
   // Each platform (OS implementation) is required to call this method on each
   // terminating thread when the thread is about to terminate.  This method
@@ -91,9 +97,7 @@ class BASE_EXPORT ThreadLocalStorage {
   typedef void (*TLSDestructorFunc)(void* value);
 
   // StaticSlot uses its own struct initializer-list style static
-  // initialization, as base's LINKER_INITIALIZED requires a constructor and on
-  // some compilers (notably gcc 4.4) this still ends up needing runtime
-  // initialization.
+  // initialization, which does not require a constructor.
   #define TLS_INITIALIZER {0}
 
   // A key representing one value stored in TLS.

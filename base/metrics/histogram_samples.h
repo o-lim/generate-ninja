@@ -46,7 +46,7 @@ class BASE_EXPORT HistogramSamples {
   // A structure for managing an atomic single sample. Because this is generally
   // used in association with other atomic values, the defined methods use
   // acquire/release operations to guarantee ordering with outside values.
-  union AtomicSingleSample {
+  union BASE_EXPORT AtomicSingleSample {
     AtomicSingleSample() : as_atomic(0) {}
     AtomicSingleSample(subtle::Atomic32 rhs) : as_atomic(rhs) {}
 
@@ -128,7 +128,6 @@ class BASE_EXPORT HistogramSamples {
     LocalMetadata();
   };
 
-  explicit HistogramSamples(uint64_t id);
   HistogramSamples(uint64_t id, Metadata* meta);
   virtual ~HistogramSamples();
 
@@ -145,7 +144,7 @@ class BASE_EXPORT HistogramSamples {
   virtual void Subtract(const HistogramSamples& other);
 
   virtual std::unique_ptr<SampleCountIterator> Iterator() const = 0;
-  virtual bool Serialize(Pickle* pickle) const;
+  virtual void Serialize(Pickle* pickle) const;
 
   // Accessor fuctions.
   uint64_t id() const { return meta_->id; }
@@ -180,11 +179,9 @@ class BASE_EXPORT HistogramSamples {
     return meta_->single_sample;
   }
 
+  Metadata* meta() { return meta_; }
+
  private:
-  // In order to support histograms shared through an external memory segment,
-  // meta values may be the local storage or external storage depending on the
-  // wishes of the derived class.
-  LocalMetadata local_meta_;
   Metadata* meta_;
 
   DISALLOW_COPY_AND_ASSIGN(HistogramSamples);

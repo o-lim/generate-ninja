@@ -10,10 +10,10 @@
 #include "base/debug/alias.h"
 #include "base/debug/profiler.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_id_name_manager.h"
 #include "base/threading/thread_restrictions.h"
-#include "base/tracked_objects.h"
 #include "base/win/scoped_handle.h"
 
 namespace base {
@@ -114,13 +114,20 @@ bool CreateThreadInternal(size_t stack_size,
   params->joinable = out_thread_handle != nullptr;
   params->priority = priority;
 
-  // Using CreateThread here vs _beginthreadex makes thread creation a bit
-  // faster and doesn't require the loader lock to be available.  Our code will
-  // have to work running on CreateThread() threads anyway, since we run code
-  // on the Windows thread pool, etc.  For some background on the difference:
-  //   http://www.microsoft.com/msj/1099/win32/win321099.aspx
-  void* thread_handle =
-      ::CreateThread(nullptr, stack_size, ThreadFunc, params, flags, nullptr);
+  void* thread_handle;
+  {
+    SCOPED_UMA_HISTOGRAM_TIMER("Windows.CreateThreadTime");
+
+    // Using CreateThread here vs _beginthreadex makes thread creation a bit
+    // faster and doesn't require the loader lock to be available.  Our code
+    // will  have to work running on CreateThread() threads anyway, since we run
+    // code on the Windows thread pool, etc.  For some background on the
+    // difference:
+    //   http://www.microsoft.com/msj/1099/win32/win321099.aspx
+    thread_handle =
+        ::CreateThread(nullptr, stack_size, ThreadFunc, params, flags, nullptr);
+  }
+
   if (!thread_handle) {
     delete params;
     return false;
@@ -167,15 +174,6 @@ void PlatformThread::Sleep(TimeDelta duration) {
 // static
 void PlatformThread::SetName(const std::string& name) {
   ThreadIdNameManager::GetInstance()->SetName(CurrentId(), name);
-
-  // On Windows only, we don't need to tell the profiler about the "BrokerEvent"
-  // thread, as it exists only in the chrome.exe image, and never spawns or runs
-  // tasks (items which could be profiled).  This test avoids the notification,
-  // which would also (as a side effect) initialize the profiler in this unused
-  // context, including setting up thread local storage, etc.  The performance
-  // impact is not terrible, but there is no reason to do initialize it.
-  if (name != "BrokerEvent")
-    tracked_objects::ThreadData::InitializeThreadContext(name);
 
   // The SetThreadDescription API works even if no debugger is attached.
   auto set_thread_description_func =
@@ -225,9 +223,6 @@ bool PlatformThread::CreateNonJoinableWithPriority(size_t stack_size,
 
 // static
 void PlatformThread::Join(PlatformThreadHandle thread_handle) {
-  // Record the event that this thread is blocking upon (for hang diagnosis).
-  base::debug::ScopedThreadJoinActivity thread_activity(&thread_handle);
-
   DCHECK(thread_handle.platform_handle());
   // TODO(willchan): Enable this check once I can get it to work for Windows
   // shutdown.
@@ -247,6 +242,9 @@ void PlatformThread::Join(PlatformThreadHandle thread_handle) {
   // Record information about the exiting thread in case joining hangs.
   base::debug::Alias(&thread_id);
   base::debug::Alias(&last_error);
+
+  // Record the event that this thread is blocking upon (for hang diagnosis).
+  base::debug::ScopedThreadJoinActivity thread_activity(&thread_handle);
 
   // Wait for the thread to exit.  It should already have terminated but make
   // sure this assumption is valid.

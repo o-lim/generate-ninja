@@ -94,6 +94,14 @@ int64_t TimeDelta::InMicroseconds() const {
   return delta_;
 }
 
+int64_t TimeDelta::InNanoseconds() const {
+  if (is_max()) {
+    // Preserve max to prevent overflow.
+    return std::numeric_limits<int64_t>::max();
+  }
+  return delta_ * Time::kNanosecondsPerMicrosecond;
+}
+
 namespace time_internal {
 
 int64_t SaturatedAdd(TimeDelta delta, int64_t value) {
@@ -103,7 +111,7 @@ int64_t SaturatedAdd(TimeDelta delta, int64_t value) {
     return rv.ValueOrDie();
   // Positive RHS overflows. Negative RHS underflows.
   if (value < 0)
-    return -std::numeric_limits<int64_t>::max();
+    return std::numeric_limits<int64_t>::min();
   return std::numeric_limits<int64_t>::max();
 }
 
@@ -115,7 +123,7 @@ int64_t SaturatedSub(TimeDelta delta, int64_t value) {
   // Negative RHS overflows. Positive RHS underflows.
   if (value < 0)
     return std::numeric_limits<int64_t>::max();
-  return -std::numeric_limits<int64_t>::max();
+  return std::numeric_limits<int64_t>::min();
 }
 
 }  // namespace time_internal

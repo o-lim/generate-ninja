@@ -237,6 +237,14 @@ Value RunMarkUsedFrom(Scope* scope,
                       const ListNode* args_list,
                       Err* err);
 
+extern const char kNotNeeded[];
+extern const char kNotNeeded_HelpShort[];
+extern const char kNotNeeded_Help[];
+Value RunNotNeeded(Scope* scope,
+                   const FunctionCallNode* function,
+                   const ListNode* args_list,
+                   Err* err);
+
 extern const char kPool[];
 extern const char kPool_HelpShort[];
 extern const char kPool_Help[];

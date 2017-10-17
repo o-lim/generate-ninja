@@ -23,7 +23,6 @@
 
 
 
-(eval-when-compile (require 'cl))       ;For the `case' macro.
 (require 'smie)
 
 (defgroup gn nil
@@ -58,28 +57,37 @@
 variable name or the '{{' and '}}' which surround it."
   :group 'gn-faces)
 
-(defvar gn-font-lock-target-declaration-keywords
-  '("action" "action_foreach" "copy" "executable" "group" "loadable_module"
-    "shared_library" "source_set" "static_library" "if" "else"))
+(defvar gn-font-lock-reserved-keywords
+  '("true" "false" "if" "else"))
 
+(defvar gn-font-lock-target-declaration-keywords
+  '("action" "action_foreach" "bundle_data" "copy" "create_bundle" "executable"
+    "group" "loadable_module" "shared_library" "source_set" "static_library"
+    "target"))
+
+;; pool() is handled specially since it's also a variable name
 (defvar gn-font-lock-buildfile-fun-keywords
   '("assert" "config" "declare_args" "defined" "exec_script" "foreach"
     "forward_variables_from" "get_label_info" "get_path_info"
     "get_target_outputs" "getenv" "import" "mark_used" "mark_used_from"
-    "print" "process_file_template" "read_file" "rebase_path"
+    "not_needed" "print" "process_file_template" "read_file" "rebase_path"
     "set_default_toolchain" "set_defaults" "set_sources_assignment_filter"
-    "template" "tool" "toolchain" "toolchain_args" "write_file"))
+    "split_list" "template" "tool" "toolchain" "toolchain_args" "write_file"))
 
 (defvar gn-font-lock-predefined-var-keywords
   '("current_cpu" "current_os" "current_toolchain" "default_toolchain"
-    "host_cpu" "host_os" "python_path" "root_build_dir" "root_gen_dir"
-    "root_out_dir" "target_cpu" "target_gen_dir" "target_os" "target_out_dir"
-    "true" "false"))
+    "host_cpu" "host_os" "invoker" "python_path" "root_build_dir" "root_gen_dir"
+    "root_out_dir" "target_cpu" "target_gen_dir" "target_Name" "target_os"
+    "target_out_dir" "true" "false"))
 
 (defvar gn-font-lock-var-keywords
   '("all_dependent_configs" "allow_circular_includes_from" "args" "arflags"
-    "asmflags" "asmppflags" "cflags" "cflags_c" "cflags_cc" "cflags_objc"
-    "cflags_objcc" "check_includes" "command" "complete_static_lib" "configs"
+    "asmflags" "asmppflags" "assert_no_deps" "bundle_contents_dir"
+    "bundle_deps_filter" "bundle_executable_dir" "bundle_plugins_dir"
+    "bundle_resources_dir" "bundle_root_dir" "cflags" "cflags_c"
+    "cflags_cc" "cflags_objc" "cflags_objcc" "check_includes"
+    "code_signing_args" "code_signing_outputs" "code_signing_script"
+    "code_signing_sources" "command" "complete_static_lib" "configs"
     "console" "cppflags" "cppflags_c" "cppflags_cc" "cppflags_objc"
     "cppflags_objcc" "data" "data_deps" "default_output_extension"
     "default_output_dir" "defines" "define_switch" "depend_output" "depfile"
@@ -89,13 +97,19 @@ variable name or the '{{' and '}}' which surround it."
     "outputs" "precompiled_header" "precompiled_header_type"
     "precompiled_source" "public" "public_configs" "public_deps" "rspfile"
     "rspfile_content" "runtime_link_output" "script" "sources"
-    "sys_include_dirs" "sys_include_switch" "testonly" "visibility"))
+    "sys_include_dirs" "sys_include_switch" "testonly" "visibility"
+    "write_runtime_deps"))
 
 (defconst gn-font-lock-keywords
-  `((,(regexp-opt gn-font-lock-target-declaration-keywords 'words) .
+  `((,(regexp-opt gn-font-lock-reserved-keywords 'words) .
      font-lock-keyword-face)
+    (,(regexp-opt gn-font-lock-target-declaration-keywords 'words) .
+     font-lock-type-face)
     (,(regexp-opt gn-font-lock-buildfile-fun-keywords 'words) .
      font-lock-function-name-face)
+    ;; pool() as a function
+    ("\\<\\(pool\\)\\s-*("
+     (1 font-lock-function-name-face))
     (,(regexp-opt gn-font-lock-predefined-var-keywords 'words) .
      font-lock-constant-face)
     (,(regexp-opt gn-font-lock-var-keywords 'words) .

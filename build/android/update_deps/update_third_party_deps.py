@@ -59,9 +59,17 @@ def _CheckFileList(local_path, file_list):
   for f in abs_path_list:
     if os.path.commonprefix([f, local_path]) != local_path:
       raise IOError(
-          '%s in the arguments are not decendants of the specified directory %s'
+          '%s in the arguments is not descendant of the specified directory %s'
           % (f, local_path))
   return abs_path_list
+
+
+def _PurgeSymlinks(local_path):
+  for dirpath, _, filenames in os.walk(local_path):
+    for f in filenames:
+      path = os.path.join(dirpath, f)
+      if os.path.islink(path):
+        os.remove(path)
 
 
 def Upload(arguments):
@@ -84,6 +92,7 @@ def Download(arguments):
   """Download files based on sha1 files in a third_party dir from gcs"""
   bucket_url, local_path = _CheckPaths(arguments.bucket_path,
                                        arguments.local_path)
+  _PurgeSymlinks(local_path)
   download_from_google_storage.download_from_google_storage(
       local_path,
       bucket_url,

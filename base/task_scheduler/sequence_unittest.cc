@@ -19,28 +19,27 @@ namespace internal {
 
 namespace {
 
-
 class TaskSchedulerSequenceTest : public testing::Test {
  public:
   TaskSchedulerSequenceTest()
       : task_a_owned_(new Task(FROM_HERE,
-                               Bind(&DoNothing),
+                               BindOnce(&DoNothing),
                                {TaskPriority::BACKGROUND},
                                TimeDelta())),
         task_b_owned_(new Task(FROM_HERE,
-                               Bind(&DoNothing),
+                               BindOnce(&DoNothing),
                                {TaskPriority::USER_VISIBLE},
                                TimeDelta())),
         task_c_owned_(new Task(FROM_HERE,
-                               Bind(&DoNothing),
+                               BindOnce(&DoNothing),
                                {TaskPriority::USER_BLOCKING},
                                TimeDelta())),
         task_d_owned_(new Task(FROM_HERE,
-                               Bind(&DoNothing),
+                               BindOnce(&DoNothing),
                                {TaskPriority::USER_BLOCKING},
                                TimeDelta())),
         task_e_owned_(new Task(FROM_HERE,
-                               Bind(&DoNothing),
+                               BindOnce(&DoNothing),
                                {TaskPriority::BACKGROUND},
                                TimeDelta())),
         task_a_(task_a_owned_.get()),
@@ -195,8 +194,8 @@ TEST_F(TaskSchedulerSequenceTest, GetSortKey) {
 // isn't empty.
 TEST_F(TaskSchedulerSequenceTest, PopNonEmptyFrontSlot) {
   scoped_refptr<Sequence> sequence(new Sequence);
-  sequence->PushTask(
-      MakeUnique<Task>(FROM_HERE, Bind(&DoNothing), TaskTraits(), TimeDelta()));
+  sequence->PushTask(std::make_unique<Task>(FROM_HERE, Bind(&DoNothing),
+                                            TaskTraits(), TimeDelta()));
 
   EXPECT_DCHECK_DEATH({ sequence->Pop(); });
 }
@@ -205,8 +204,8 @@ TEST_F(TaskSchedulerSequenceTest, PopNonEmptyFrontSlot) {
 // slot is empty.
 TEST_F(TaskSchedulerSequenceTest, TakeEmptyFrontSlot) {
   scoped_refptr<Sequence> sequence(new Sequence);
-  sequence->PushTask(
-      MakeUnique<Task>(FROM_HERE, Bind(&DoNothing), TaskTraits(), TimeDelta()));
+  sequence->PushTask(std::make_unique<Task>(FROM_HERE, Bind(&DoNothing),
+                                            TaskTraits(), TimeDelta()));
 
   EXPECT_TRUE(sequence->TakeTask());
   EXPECT_DCHECK_DEATH({ sequence->TakeTask(); });

@@ -28,6 +28,7 @@
 #include <uiviewsettingsinterop.h>
 #include <windows.ui.viewmanagement.h>
 #include <winstring.h>
+#include <wrl/client.h>
 #include <wrl/wrappers/corewrappers.h>
 
 #include <memory>
@@ -42,9 +43,11 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/win/core_winrt_util.h"
 #include "base/win/registry.h"
-#include "base/win/scoped_comptr.h"
+#include "base/win/scoped_co_mem.h"
 #include "base/win/scoped_handle.h"
+#include "base/win/scoped_hstring.h"
 #include "base/win/scoped_propvariant.h"
 #include "base/win/windows_version.h"
 
@@ -63,7 +66,19 @@ bool SetPropVariantValueForPropertyStore(
   HRESULT result = property_store->SetValue(property_key, property_value.get());
   if (result == S_OK)
     result = property_store->Commit();
-  return SUCCEEDED(result);
+  if (SUCCEEDED(result))
+    return true;
+#if DCHECK_IS_ON()
+  ScopedCoMem<OLECHAR> guidString;
+  ::StringFromCLSID(property_key.fmtid, &guidString);
+  if (HRESULT_FACILITY(result) == FACILITY_WIN32)
+    ::SetLastError(HRESULT_CODE(result));
+  // See third_party/perl/c/i686-w64-mingw32/include/propkey.h for GUID and
+  // PID definitions.
+  DPLOG(ERROR) << "Failed to set property with GUID " << guidString << " PID "
+               << property_key.pid;
+#endif
+  return false;
 }
 
 void __cdecl ForceCrashOnSigAbort(int) {
@@ -74,6 +89,34 @@ void __cdecl ForceCrashOnSigAbort(int) {
 // API for that.
 POWER_PLATFORM_ROLE GetPlatformRole() {
   return PowerDeterminePlatformRoleEx(POWER_PLATFORM_ROLE_V2);
+}
+
+// Method used for Windows 8.1 and later.
+// Since we support versions earlier than 8.1, we must dynamically load this
+// function from user32.dll, so it won't fail to load in runtime. For earlier
+// Windows versions GetProcAddress will return null and report failure so that
+// callers can fall back on the deprecated SetProcessDPIAware.
+bool SetProcessDpiAwarenessWrapper(PROCESS_DPI_AWARENESS value) {
+  decltype(&::SetProcessDpiAwareness) set_process_dpi_awareness_func =
+      reinterpret_cast<decltype(&::SetProcessDpiAwareness)>(GetProcAddress(
+          GetModuleHandle(L"user32.dll"), "SetProcessDpiAwarenessInternal"));
+  if (set_process_dpi_awareness_func) {
+    HRESULT hr = set_process_dpi_awareness_func(value);
+    if (SUCCEEDED(hr))
+      return true;
+    DLOG_IF(ERROR, hr == E_ACCESSDENIED)
+        << "Access denied error from SetProcessDpiAwarenessInternal. Function "
+           "called twice, or manifest was used.";
+    NOTREACHED()
+        << "SetProcessDpiAwarenessInternal failed with unexpected error: "
+        << hr;
+    return false;
+  }
+
+  DCHECK_LT(GetVersion(), VERSION_WIN8_1) << "SetProcessDpiAwarenessInternal "
+                                             "should be available on all "
+                                             "platforms >= Windows 8.1";
+  return false;
 }
 
 }  // namespace
@@ -87,58 +130,21 @@ bool IsWindows10TabletMode(HWND hwnd) {
   if (GetVersion() < VERSION_WIN10)
     return false;
 
-  using RoGetActivationFactoryFunction = decltype(&RoGetActivationFactory);
-  using WindowsCreateStringFunction = decltype(&WindowsCreateString);
-
-  static RoGetActivationFactoryFunction get_factory = nullptr;
-  static WindowsCreateStringFunction create_string = nullptr;
-
-  if (!get_factory) {
-    DCHECK_EQ(create_string, static_cast<WindowsCreateStringFunction>(
-        nullptr));
-
-    HMODULE combase_dll = ::LoadLibrary(L"combase.dll");
-    if (!combase_dll)
-      return false;
-
-    get_factory = reinterpret_cast<RoGetActivationFactoryFunction>(
-        ::GetProcAddress(combase_dll, "RoGetActivationFactory"));
-    if (!get_factory) {
-      CHECK(false);
-      return false;
-    }
-
-    create_string = reinterpret_cast<WindowsCreateStringFunction>(
-        ::GetProcAddress(combase_dll, "WindowsCreateString"));
-    if (!create_string) {
-      CHECK(false);
-      return false;
-    }
+  if (!ResolveCoreWinRTDelayload() ||
+      !ScopedHString::ResolveCoreWinRTStringDelayload()) {
+    return false;
   }
 
-  HRESULT hr = E_FAIL;
-  // This HSTRING is allocated on the heap and is leaked.
-  static HSTRING view_settings_guid = NULL;
-  if (!view_settings_guid) {
-    hr = create_string(
-        RuntimeClass_Windows_UI_ViewManagement_UIViewSettings,
-        static_cast<UINT32>(
-            wcslen(RuntimeClass_Windows_UI_ViewManagement_UIViewSettings)),
-        &view_settings_guid);
-    if (FAILED(hr))
-      return false;
-  }
-
-  base::win::ScopedComPtr<IUIViewSettingsInterop> view_settings_interop;
-  hr = get_factory(view_settings_guid, IID_PPV_ARGS(&view_settings_interop));
+  ScopedHString view_settings_guid = ScopedHString::Create(
+      RuntimeClass_Windows_UI_ViewManagement_UIViewSettings);
+  Microsoft::WRL::ComPtr<IUIViewSettingsInterop> view_settings_interop;
+  HRESULT hr = base::win::RoGetActivationFactory(
+      view_settings_guid.get(), IID_PPV_ARGS(&view_settings_interop));
   if (FAILED(hr))
     return false;
 
-  base::win::ScopedComPtr<ABI::Windows::UI::ViewManagement::IUIViewSettings>
+  Microsoft::WRL::ComPtr<ABI::Windows::UI::ViewManagement::IUIViewSettings>
       view_settings;
-  // TODO(ananta)
-  // Avoid using GetForegroundWindow here and pass in the HWND of the window
-  // intiating the request to display the keyboard.
   hr = view_settings_interop->GetForWindow(hwnd, IID_PPV_ARGS(&view_settings));
   if (FAILED(hr))
     return false;
@@ -154,7 +160,7 @@ bool IsWindows10TabletMode(HWND hwnd) {
 // if the keyboard count is 1 or more.. While this will work in most cases
 // it won't work if there are devices which expose keyboard interfaces which
 // are attached to the machine.
-bool IsKeyboardPresentOnSlate(std::string* reason) {
+bool IsKeyboardPresentOnSlate(std::string* reason, HWND hwnd) {
   bool result = false;
 
   if (GetVersion() < VERSION_WIN8) {
@@ -182,7 +188,7 @@ bool IsKeyboardPresentOnSlate(std::string* reason) {
   }
 
   // If it is a tablet device we assume that there is no keyboard attached.
-  if (IsTabletDevice(reason)) {
+  if (IsTabletDevice(reason, hwnd)) {
     if (reason)
       *reason += "Tablet device.\n";
     return false;
@@ -425,14 +431,14 @@ void SetAbortBehaviorForCrashReporting() {
   signal(SIGABRT, ForceCrashOnSigAbort);
 }
 
-bool IsTabletDevice(std::string* reason) {
+bool IsTabletDevice(std::string* reason, HWND hwnd) {
   if (GetVersion() < VERSION_WIN8) {
     if (reason)
       *reason = "Tablet device detection not supported below Windows 8\n";
     return false;
   }
 
-  if (IsWindows10TabletMode(::GetForegroundWindow()))
+  if (IsWindows10TabletMode(hwnd))
     return true;
 
   if (GetSystemMetrics(SM_MAXIMUMTOUCHES) == 0) {
@@ -452,6 +458,25 @@ bool IsTabletDevice(std::string* reason) {
     }
   }
 
+  // If the device is not supporting rotation, it's unlikely to be a tablet,
+  // a convertible or a detachable.
+  // See
+  // https://msdn.microsoft.com/en-us/library/windows/desktop/dn629263(v=vs.85).aspx
+  typedef decltype(GetAutoRotationState)* GetAutoRotationStateType;
+  GetAutoRotationStateType get_auto_rotation_state_func =
+      reinterpret_cast<GetAutoRotationStateType>(GetProcAddress(
+          GetModuleHandle(L"user32.dll"), "GetAutoRotationState"));
+
+  if (get_auto_rotation_state_func) {
+    AR_STATE rotation_state;
+    ZeroMemory(&rotation_state, sizeof(AR_STATE));
+    if (get_auto_rotation_state_func(&rotation_state)) {
+      if ((rotation_state & AR_NOT_SUPPORTED) || (rotation_state & AR_LAPTOP) ||
+          (rotation_state & AR_NOSENSOR))
+        return false;
+    }
+  }
+
   // PlatformRoleSlate was added in Windows 8+.
   POWER_PLATFORM_ROLE role = GetPlatformRole();
   bool mobile_power_profile = (role == PlatformRoleMobile);
@@ -468,8 +493,8 @@ bool IsTabletDevice(std::string* reason) {
       }
     } else {
       if (reason) {
-        *reason += (role == PlatformRoleMobile) ? "PlatformRoleMobile\n" :
-                                                  "PlatformRoleSlate\n";
+        *reason += (role == PlatformRoleMobile) ? "PlatformRoleMobile\n"
+                                                : "PlatformRoleSlate\n";
       }
     }
   } else {
@@ -538,7 +563,7 @@ bool IsUser32AndGdi32Available() {
     // If win32k syscalls aren't disabled, then user32 and gdi32 are available.
 
     // Can't disable win32k prior to windows 8.
-    if (base::win::GetVersion() < base::win::VERSION_WIN8)
+    if (GetVersion() < VERSION_WIN8)
       return true;
 
     typedef decltype(
@@ -638,6 +663,21 @@ bool IsProcessPerMonitorDpiAware() {
     }
   }
   return per_monitor_dpi_aware == PerMonitorDpiAware::PER_MONITOR_DPI_AWARE;
+}
+
+void EnableHighDPISupport() {
+  // Enable per-monitor DPI for Win10 or above instead of Win8.1 since Win8.1
+  // does not have EnableChildWindowDpiMessage, necessary for correct non-client
+  // area scaling across monitors.
+  PROCESS_DPI_AWARENESS process_dpi_awareness =
+      GetVersion() >= VERSION_WIN10 ? PROCESS_PER_MONITOR_DPI_AWARE
+                                    : PROCESS_SYSTEM_DPI_AWARE;
+  if (!SetProcessDpiAwarenessWrapper(process_dpi_awareness)) {
+    // For windows versions where SetProcessDpiAwareness is not available or
+    // failed, try its predecessor.
+    BOOL result = ::SetProcessDPIAware();
+    DCHECK(result) << "SetProcessDPIAware failed.";
+  }
 }
 
 }  // namespace win

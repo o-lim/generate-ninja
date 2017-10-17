@@ -28,6 +28,10 @@
 #include <sys/syscall.h>
 #endif
 
+#if defined(OS_FUCHSIA)
+#include <zircon/process.h>
+#endif
+
 namespace base {
 
 void InitThreading();
@@ -137,6 +141,8 @@ PlatformThreadId PlatformThread::CurrentId() {
   return syscall(__NR_gettid);
 #elif defined(OS_ANDROID)
   return gettid();
+#elif defined(OS_FUCHSIA)
+  return zx_thread_self();
 #elif defined(OS_SOLARIS) || defined(OS_QNX)
   return pthread_self();
 #elif defined(OS_NACL) && defined(__GLIBC__)

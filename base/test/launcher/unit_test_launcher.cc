@@ -183,7 +183,7 @@ bool GetSwitchValueAsInt(const std::string& switch_name, int* result) {
 }
 
 int LaunchUnitTestsInternal(const RunTestSuiteCallback& run_test_suite,
-                            int default_jobs,
+                            size_t parallel_jobs,
                             int default_batch_limit,
                             bool use_job_objects,
                             const Closure& gtest_init) {
@@ -246,7 +246,7 @@ int LaunchUnitTestsInternal(const RunTestSuiteCallback& run_test_suite,
   DefaultUnitTestPlatformDelegate platform_delegate;
   UnitTestLauncherDelegate delegate(
       &platform_delegate, batch_limit, use_job_objects);
-  base::TestLauncher launcher(&delegate, default_jobs);
+  base::TestLauncher launcher(&delegate, parallel_jobs);
   bool success = launcher.Run();
 
   fprintf(stdout, "Tests took %" PRId64 " seconds.\n",
@@ -373,16 +373,29 @@ bool ProcessTestResults(
     fflush(stdout);
 
     // We do not have reliable details about test results (parsing test
-    // stdout is known to be unreliable), apply the executable exit code
-    // to all tests.
-    // TODO(phajdan.jr): Be smarter about this, e.g. retry each test
-    // individually.
-    for (size_t i = 0; i < test_names.size(); i++) {
+    // stdout is known to be unreliable).
+    if (test_names.size() == 1) {
+      // There is only one test. Try to determine status by exit code.
+      const std::string& test_name = test_names.front();
       TestResult test_result;
-      test_result.full_name = test_names[i];
-      test_result.status = TestResult::TEST_UNKNOWN;
+      test_result.full_name = test_name;
+
+      if (was_timeout) {
+        test_result.status = TestResult::TEST_TIMEOUT;
+      } else if (exit_code != 0) {
+        test_result.status = TestResult::TEST_FAILURE;
+      } else {
+        // It's strange case when test executed successfully,
+        // but we failed to read machine-readable report for it.
+        test_result.status = TestResult::TEST_UNKNOWN;
+      }
+
       test_launcher->OnTestFinished(test_result);
       called_any_callback = true;
+    } else {
+      // There is more than one test. Retry them individually.
+      for (const std::string& test_name : test_names)
+        tests_to_relaunch->push_back(test_name);
     }
   }
 
@@ -455,40 +468,33 @@ int LaunchUnitTests(int argc,
                     char** argv,
                     const RunTestSuiteCallback& run_test_suite) {
   CommandLine::Init(argc, argv);
-  return LaunchUnitTestsInternal(
-      run_test_suite,
-      SysInfo::NumberOfProcessors(),
-      kDefaultTestBatchLimit,
-      true,
-      Bind(&InitGoogleTestChar, &argc, argv));
+  size_t parallel_jobs = NumParallelJobs();
+  if (parallel_jobs == 0U) {
+    return 1;
+  }
+  return LaunchUnitTestsInternal(run_test_suite, parallel_jobs,
+                                 kDefaultTestBatchLimit, true,
+                                 Bind(&InitGoogleTestChar, &argc, argv));
 }
 
 int LaunchUnitTestsSerially(int argc,
                             char** argv,
                             const RunTestSuiteCallback& run_test_suite) {
   CommandLine::Init(argc, argv);
-  return LaunchUnitTestsInternal(
-      run_test_suite,
-      1,
-      kDefaultTestBatchLimit,
-      true,
-      Bind(&InitGoogleTestChar, &argc, argv));
+  return LaunchUnitTestsInternal(run_test_suite, 1U, kDefaultTestBatchLimit,
+                                 true, Bind(&InitGoogleTestChar, &argc, argv));
 }
 
-int LaunchUnitTestsWithOptions(
-    int argc,
-    char** argv,
-    int default_jobs,
-    int default_batch_limit,
-    bool use_job_objects,
-    const RunTestSuiteCallback& run_test_suite) {
+int LaunchUnitTestsWithOptions(int argc,
+                               char** argv,
+                               size_t parallel_jobs,
+                               int default_batch_limit,
+                               bool use_job_objects,
+                               const RunTestSuiteCallback& run_test_suite) {
   CommandLine::Init(argc, argv);
-  return LaunchUnitTestsInternal(
-      run_test_suite,
-      default_jobs,
-      default_batch_limit,
-      use_job_objects,
-      Bind(&InitGoogleTestChar, &argc, argv));
+  return LaunchUnitTestsInternal(run_test_suite, parallel_jobs,
+                                 default_batch_limit, use_job_objects,
+                                 Bind(&InitGoogleTestChar, &argc, argv));
 }
 
 #if defined(OS_WIN)
@@ -498,12 +504,13 @@ int LaunchUnitTests(int argc,
                     const RunTestSuiteCallback& run_test_suite) {
   // Windows CommandLine::Init ignores argv anyway.
   CommandLine::Init(argc, NULL);
-  return LaunchUnitTestsInternal(
-      run_test_suite,
-      SysInfo::NumberOfProcessors(),
-      kDefaultTestBatchLimit,
-      use_job_objects,
-      Bind(&InitGoogleTestWChar, &argc, argv));
+  size_t parallel_jobs = NumParallelJobs();
+  if (parallel_jobs == 0U) {
+    return 1;
+  }
+  return LaunchUnitTestsInternal(run_test_suite, parallel_jobs,
+                                 kDefaultTestBatchLimit, use_job_objects,
+                                 Bind(&InitGoogleTestWChar, &argc, argv));
 }
 #endif  // defined(OS_WIN)
 

@@ -15,6 +15,10 @@
 #include "base/win/scoped_handle.h"
 #endif
 
+#if defined(OS_FUCHSIA)
+#include "base/fuchsia/scoped_zx_handle.h"
+#endif
+
 #if defined(OS_MACOSX)
 #include "base/feature_list.h"
 #include "base/process/port_provider_mac.h"
@@ -36,11 +40,13 @@ extern const Feature kMacAllowBackgroundingProcesses;
 // and can be used to gather some information about that process, but most
 // methods will obviously fail.
 //
-// POSIX: The underlying PorcessHandle is not guaranteed to remain valid after
+// POSIX: The underlying ProcessHandle is not guaranteed to remain valid after
 // the process dies, and it may be reused by the system, which means that it may
 // end up pointing to the wrong process.
 class BASE_EXPORT Process {
  public:
+  // On Windows, this takes ownership of |handle|. On POSIX, this does not take
+  // ownership of |handle|.
   explicit Process(ProcessHandle handle = kNullProcessHandle);
 
   Process(Process&& other);
@@ -97,6 +103,16 @@ class BASE_EXPORT Process {
 
   // Close the process handle. This will not terminate the process.
   void Close();
+
+  // Returns true if this process is still running. This is only safe on Windows
+  // (and maybe Fuchsia?), because the ProcessHandle will keep the zombie
+  // process information available until itself has been released. But on Posix,
+  // the OS may reuse the ProcessId.
+#if defined(OS_WIN)
+  bool IsRunning() const {
+    return !WaitForExitWithTimeout(base::TimeDelta(), nullptr);
+  }
+#endif
 
   // Terminates the process with extreme prejudice. The given |exit_code| will
   // be the exit code of the process. If |wait| is true, this method will wait
@@ -163,10 +179,15 @@ class BASE_EXPORT Process {
 
  private:
 #if defined(OS_WIN)
-  bool is_current_process_;
   win::ScopedHandle process_;
+#elif defined(OS_FUCHSIA)
+  ScopedZxHandle process_;
 #else
   ProcessHandle process_;
+#endif
+
+#if defined(OS_WIN) || defined(OS_FUCHSIA)
+  bool is_current_process_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(Process);

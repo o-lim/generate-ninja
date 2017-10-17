@@ -9,8 +9,11 @@
 #include <utility>
 
 #include "base/bits.h"
-#include "base/json/json_writer.h"
+#include "base/containers/circular_deque.h"
+#include "base/json/string_escape.h"
 #include "base/memory/ptr_util.h"
+#include "base/trace_event/common/trace_event_common.h"
+#include "base/trace_event/trace_event_impl.h"
 #include "base/trace_event/trace_event_memory_overhead.h"
 #include "base/values.h"
 
@@ -26,7 +29,7 @@ const char kTypeBool = 'b';
 const char kTypeInt = 'i';
 const char kTypeDouble = 'd';
 const char kTypeString = 's';
-const char kTypeCStr = '*';
+const char kTypeCStr = '*';  // only used for key names
 
 #ifndef NDEBUG
 const bool kStackTypeDict = false;
@@ -243,7 +246,7 @@ void TracedValue::SetValue(const char* name,
 void TracedValue::SetBaseValueWithCopiedName(base::StringPiece name,
                                              const base::Value& value) {
   DCHECK_CURRENT_CONTAINER_IS(kStackTypeDict);
-  switch (value.GetType()) {
+  switch (value.type()) {
     case base::Value::Type::NONE:
     case base::Value::Type::BINARY:
       NOTREACHED();
@@ -297,7 +300,7 @@ void TracedValue::SetBaseValueWithCopiedName(base::StringPiece name,
 
 void TracedValue::AppendBaseValue(const base::Value& value) {
   DCHECK_CURRENT_CONTAINER_IS(kStackTypeArray);
-  switch (value.GetType()) {
+  switch (value.type()) {
     case base::Value::Type::NONE:
     case base::Value::Type::BINARY:
       NOTREACHED();
@@ -361,14 +364,13 @@ std::unique_ptr<base::Value> TracedValue::ToBaseValue() const {
     DCHECK((cur_dict && !cur_list) || (cur_list && !cur_dict));
     switch (*type) {
       case kTypeStartDict: {
-        auto* new_dict = new DictionaryValue();
+        auto new_dict = std::make_unique<DictionaryValue>();
         if (cur_dict) {
-          cur_dict->SetWithoutPathExpansion(ReadKeyName(it),
-                                            WrapUnique(new_dict));
           stack.push_back(cur_dict);
-          cur_dict = new_dict;
+          cur_dict = cur_dict->SetDictionaryWithoutPathExpansion(
+              ReadKeyName(it), std::move(new_dict));
         } else {
-          cur_list->Append(WrapUnique(new_dict));
+          cur_list->Append(std::move(new_dict));
           // |new_dict| is invalidated at this point, so |cur_dict| needs to be
           // reset.
           cur_list->GetDictionary(cur_list->GetSize() - 1, &cur_dict);
@@ -388,17 +390,17 @@ std::unique_ptr<base::Value> TracedValue::ToBaseValue() const {
       } break;
 
       case kTypeStartArray: {
-        auto* new_list = new ListValue();
+        auto new_list = std::make_unique<ListValue>();
         if (cur_dict) {
-          cur_dict->SetWithoutPathExpansion(ReadKeyName(it),
-                                            WrapUnique(new_list));
           stack.push_back(cur_dict);
+          cur_list = cur_dict->SetListWithoutPathExpansion(ReadKeyName(it),
+                                                           std::move(new_list));
           cur_dict = nullptr;
-          cur_list = new_list;
         } else {
-          cur_list->Append(WrapUnique(new_list));
+          cur_list->Append(std::move(new_list));
           stack.push_back(cur_list);
-          // |cur_list| is invalidated at this point, so it needs to be reset.
+          // |cur_list| is invalidated at this point by the Append, so it needs
+          // to be reset.
           cur_list->GetList(cur_list->GetSize() - 1, &cur_list);
         }
       } break;
@@ -407,7 +409,7 @@ std::unique_ptr<base::Value> TracedValue::ToBaseValue() const {
         bool value;
         CHECK(it.ReadBool(&value));
         if (cur_dict) {
-          cur_dict->SetBooleanWithoutPathExpansion(ReadKeyName(it), value);
+          cur_dict->SetKey(ReadKeyName(it), Value(value));
         } else {
           cur_list->AppendBoolean(value);
         }
@@ -417,7 +419,7 @@ std::unique_ptr<base::Value> TracedValue::ToBaseValue() const {
         int value;
         CHECK(it.ReadInt(&value));
         if (cur_dict) {
-          cur_dict->SetIntegerWithoutPathExpansion(ReadKeyName(it), value);
+          cur_dict->SetKey(ReadKeyName(it), Value(value));
         } else {
           cur_list->AppendInteger(value);
         }
@@ -427,7 +429,7 @@ std::unique_ptr<base::Value> TracedValue::ToBaseValue() const {
         double value;
         CHECK(it.ReadDouble(&value));
         if (cur_dict) {
-          cur_dict->SetDoubleWithoutPathExpansion(ReadKeyName(it), value);
+          cur_dict->SetKey(ReadKeyName(it), Value(value));
         } else {
           cur_list->AppendDouble(value);
         }
@@ -437,7 +439,7 @@ std::unique_ptr<base::Value> TracedValue::ToBaseValue() const {
         std::string value;
         CHECK(it.ReadString(&value));
         if (cur_dict) {
-          cur_dict->SetStringWithoutPathExpansion(ReadKeyName(it), value);
+          cur_dict->SetKey(ReadKeyName(it), Value(value));
         } else {
           cur_list->AppendString(value);
         }
@@ -455,12 +457,106 @@ void TracedValue::AppendAsTraceFormat(std::string* out) const {
   DCHECK_CURRENT_CONTAINER_IS(kStackTypeDict);
   DCHECK_CONTAINER_STACK_DEPTH_EQ(1u);
 
-  // TODO(primiano): this could be smarter, skip the ToBaseValue encoding and
-  // produce the JSON on its own. This will require refactoring JSONWriter
-  // to decouple the base::Value traversal from the JSON writing bits
-  std::string tmp;
-  JSONWriter::Write(*ToBaseValue(), &tmp);
-  *out += tmp;
+  struct State {
+    enum Type { kTypeDict, kTypeArray };
+    Type type;
+    bool needs_comma;
+  };
+
+  auto maybe_append_key_name = [](State current_state, PickleIterator* it,
+                                  std::string* out) {
+    if (current_state.type == State::kTypeDict) {
+      EscapeJSONString(ReadKeyName(*it), true, out);
+      out->append(":");
+    }
+  };
+
+  base::circular_deque<State> state_stack;
+
+  out->append("{");
+  state_stack.push_back({State::kTypeDict});
+
+  PickleIterator it(pickle_);
+  for (const char* type; it.ReadBytes(&type, 1);) {
+    switch (*type) {
+      case kTypeEndDict:
+        out->append("}");
+        state_stack.pop_back();
+        continue;
+
+      case kTypeEndArray:
+        out->append("]");
+        state_stack.pop_back();
+        continue;
+    }
+
+    // Use an index so it will stay valid across resizes.
+    size_t current_state_index = state_stack.size() - 1;
+    if (state_stack[current_state_index].needs_comma)
+      out->append(",");
+
+    switch (*type) {
+      case kTypeStartDict: {
+        maybe_append_key_name(state_stack[current_state_index], &it, out);
+        out->append("{");
+        state_stack.push_back({State::kTypeDict});
+        break;
+      }
+
+      case kTypeStartArray: {
+        maybe_append_key_name(state_stack[current_state_index], &it, out);
+        out->append("[");
+        state_stack.push_back({State::kTypeArray});
+        break;
+      }
+
+      case kTypeBool: {
+        TraceEvent::TraceValue json_value;
+        CHECK(it.ReadBool(&json_value.as_bool));
+        maybe_append_key_name(state_stack[current_state_index], &it, out);
+        TraceEvent::AppendValueAsJSON(TRACE_VALUE_TYPE_BOOL, json_value, out);
+        break;
+      }
+
+      case kTypeInt: {
+        int value;
+        CHECK(it.ReadInt(&value));
+        maybe_append_key_name(state_stack[current_state_index], &it, out);
+        TraceEvent::TraceValue json_value;
+        json_value.as_int = value;
+        TraceEvent::AppendValueAsJSON(TRACE_VALUE_TYPE_INT, json_value, out);
+        break;
+      }
+
+      case kTypeDouble: {
+        TraceEvent::TraceValue json_value;
+        CHECK(it.ReadDouble(&json_value.as_double));
+        maybe_append_key_name(state_stack[current_state_index], &it, out);
+        TraceEvent::AppendValueAsJSON(TRACE_VALUE_TYPE_DOUBLE, json_value, out);
+        break;
+      }
+
+      case kTypeString: {
+        std::string value;
+        CHECK(it.ReadString(&value));
+        maybe_append_key_name(state_stack[current_state_index], &it, out);
+        TraceEvent::TraceValue json_value;
+        json_value.as_string = value.c_str();
+        TraceEvent::AppendValueAsJSON(TRACE_VALUE_TYPE_STRING, json_value, out);
+        break;
+      }
+
+      default:
+        NOTREACHED();
+    }
+
+    state_stack[current_state_index].needs_comma = true;
+  }
+
+  out->append("}");
+  state_stack.pop_back();
+
+  DCHECK(state_stack.empty());
 }
 
 void TracedValue::EstimateTraceMemoryOverhead(

@@ -336,8 +336,8 @@ TEST(Operators, NonemptyOverwriting) {
 
   // Set up "foo" with a nonempty scope.
   const char bar[] = "bar";
-  old_value = Value(
-      nullptr, std::unique_ptr<Scope>(new Scope(setup.settings())));
+  old_value =
+      Value(nullptr, std::unique_ptr<Scope>(new Scope(setup.settings())));
   old_value.scope_value()->SetValue(bar, Value(nullptr, "bar"), nullptr);
   setup.scope()->SetValue(foo, old_value, nullptr);
 

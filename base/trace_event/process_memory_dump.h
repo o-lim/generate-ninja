@@ -7,19 +7,17 @@
 
 #include <stddef.h>
 
+#include <map>
 #include <unordered_map>
 #include <vector>
 
 #include "base/base_export.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_vector.h"
 #include "base/trace_event/heap_profiler_serialization_state.h"
 #include "base/trace_event/memory_allocator_dump.h"
 #include "base/trace_event/memory_allocator_dump_guid.h"
 #include "base/trace_event/memory_dump_request_args.h"
-#include "base/trace_event/process_memory_maps.h"
-#include "base/trace_event/process_memory_totals.h"
 #include "build/build_config.h"
 
 // Define COUNT_RESIDENT_BYTES_SUPPORTED if platform supports counting of the
@@ -29,6 +27,10 @@
 #endif
 
 namespace base {
+
+class SharedMemory;
+class UnguessableToken;
+
 namespace trace_event {
 
 class HeapProfilerSerializationState;
@@ -38,20 +40,26 @@ class TracedValue;
 // produced by the MemoryDumpProvider(s) for a specific process.
 class BASE_EXPORT ProcessMemoryDump {
  public:
-  struct MemoryAllocatorDumpEdge {
+  struct BASE_EXPORT MemoryAllocatorDumpEdge {
+    bool operator==(const MemoryAllocatorDumpEdge&) const;
+    bool operator!=(const MemoryAllocatorDumpEdge&) const;
+
     MemoryAllocatorDumpGuid source;
     MemoryAllocatorDumpGuid target;
     int importance;
-    const char* type;
+    bool overridable;
   };
 
   // Maps allocator dumps absolute names (allocator_name/heap/subheap) to
   // MemoryAllocatorDump instances.
   using AllocatorDumpsMap =
-      std::unordered_map<std::string, std::unique_ptr<MemoryAllocatorDump>>;
+      std::map<std::string, std::unique_ptr<MemoryAllocatorDump>>;
 
-  using HeapDumpsMap =
-      std::unordered_map<std::string, std::unique_ptr<TracedValue>>;
+  using HeapDumpsMap = std::map<std::string, std::unique_ptr<TracedValue>>;
+
+  // Stores allocator dump edges indexed by source allocator dump GUID.
+  using AllocatorDumpEdgesMap =
+      std::map<MemoryAllocatorDumpGuid, MemoryAllocatorDumpEdge>;
 
 #if defined(COUNT_RESIDENT_BYTES_SUPPORTED)
   // Returns the number of bytes in a kernel memory page. Some platforms may
@@ -65,12 +73,20 @@ class BASE_EXPORT ProcessMemoryDump {
   // value returned is valid only if the given range is currently mmapped by the
   // process. The |start_address| must be page-aligned.
   static size_t CountResidentBytes(void* start_address, size_t mapped_size);
+
+  // Returns the total bytes resident for the given |shared_memory|'s mapped
+  // region.
+  static base::Optional<size_t> CountResidentBytesInSharedMemory(
+      const SharedMemory& shared_memory);
 #endif
 
   ProcessMemoryDump(scoped_refptr<HeapProfilerSerializationState>
                         heap_profiler_serialization_state,
                     const MemoryDumpArgs& dump_args);
+  ProcessMemoryDump(ProcessMemoryDump&&);
   ~ProcessMemoryDump();
+
+  ProcessMemoryDump& operator=(ProcessMemoryDump&&);
 
   // Creates a new MemoryAllocatorDump with the given name and returns the
   // empty object back to the caller.
@@ -118,6 +134,18 @@ class BASE_EXPORT ProcessMemoryDump {
   // Returns the map of the MemoryAllocatorDumps added to this dump.
   const AllocatorDumpsMap& allocator_dumps() const { return allocator_dumps_; }
 
+  AllocatorDumpsMap* mutable_allocator_dumps_for_serialization() const {
+    // Mojo takes a const input argument even for move-only types that can be
+    // mutate while serializing (like this one). Hence the const_cast.
+    return const_cast<AllocatorDumpsMap*>(&allocator_dumps_);
+  }
+  void SetAllocatorDumpsForSerialization(
+      std::vector<std::unique_ptr<MemoryAllocatorDump>>);
+
+  // Only for mojo serialization.
+  std::vector<MemoryAllocatorDumpEdge> GetAllEdgesForSerialization() const;
+  void SetAllEdgesForSerialization(const std::vector<MemoryAllocatorDumpEdge>&);
+
   // Dumps heap usage with |allocator_name|.
   void DumpHeapUsage(
       const std::unordered_map<base::trace_event::AllocationContext,
@@ -137,7 +165,35 @@ class BASE_EXPORT ProcessMemoryDump {
   void AddOwnershipEdge(const MemoryAllocatorDumpGuid& source,
                         const MemoryAllocatorDumpGuid& target);
 
-  const std::vector<MemoryAllocatorDumpEdge>& allocator_dumps_edges() const {
+  // Adds edges that can be overriden by a later or earlier call to
+  // AddOwnershipEdge() with the same source and target with a different
+  // |importance| value.
+  void AddOverridableOwnershipEdge(const MemoryAllocatorDumpGuid& source,
+                                   const MemoryAllocatorDumpGuid& target,
+                                   int importance);
+
+  // Creates ownership edges for memory backed by base::SharedMemory. Handles
+  // the case of cross process sharing and importnace of ownership for the case
+  // with and without the base::SharedMemory dump provider. The new version
+  // should just use global dumps created by SharedMemoryTracker and this
+  // function handles the transition until we get SharedMemory IDs through mojo
+  // channel crbug.com/713763. The weak version creates a weak global dump.
+  // |client_local_dump_guid| The guid of the local dump created by the client
+  // of base::SharedMemory.
+  // |shared_memory_guid| The ID of the base::SharedMemory that is assigned
+  // globally, used to create global dump edges in the new model.
+  // |importance| Importance of the global dump edges to say if the current
+  // process owns the memory segment.
+  void CreateSharedMemoryOwnershipEdge(
+      const MemoryAllocatorDumpGuid& client_local_dump_guid,
+      const UnguessableToken& shared_memory_guid,
+      int importance);
+  void CreateWeakSharedMemoryOwnershipEdge(
+      const MemoryAllocatorDumpGuid& client_local_dump_guid,
+      const UnguessableToken& shared_memory_guid,
+      int importance);
+
+  const AllocatorDumpEdgesMap& allocator_dumps_edges() const {
     return allocator_dumps_edges_;
   }
 
@@ -166,17 +222,12 @@ class BASE_EXPORT ProcessMemoryDump {
   // of the MemoryDumpProvider::OnMemoryDump(ProcessMemoryDump*) callback.
   void TakeAllDumpsFrom(ProcessMemoryDump* other);
 
-  // Called at trace generation time to populate the TracedValue.
-  void AsValueInto(TracedValue* value) const;
+  // Populate the traced value with information about the memory allocator
+  // dumps.
+  void SerializeAllocatorDumpsInto(TracedValue* value) const;
 
-  ProcessMemoryTotals* process_totals() { return &process_totals_; }
-  const ProcessMemoryTotals* process_totals() const { return &process_totals_; }
-  bool has_process_totals() const { return has_process_totals_; }
-  void set_has_process_totals() { has_process_totals_ = true; }
-
-  ProcessMemoryMaps* process_mmaps() { return &process_mmaps_; }
-  bool has_process_mmaps() const { return has_process_mmaps_; }
-  void set_has_process_mmaps() { has_process_mmaps_ = true; }
+  // Populate the traced value with information about the heap profiler.
+  void SerializeHeapProfilerDumpsInto(TracedValue* value) const;
 
   const HeapDumpsMap& heap_dumps() const { return heap_dumps_; }
 
@@ -188,13 +239,13 @@ class BASE_EXPORT ProcessMemoryDump {
   MemoryAllocatorDump* AddAllocatorDumpInternal(
       std::unique_ptr<MemoryAllocatorDump> mad);
 
+  void CreateSharedMemoryOwnershipEdgeInternal(
+      const MemoryAllocatorDumpGuid& client_local_dump_guid,
+      const UnguessableToken& shared_memory_guid,
+      int importance,
+      bool is_weak);
+
   MemoryAllocatorDump* GetBlackHoleMad();
-
-  ProcessMemoryTotals process_totals_;
-  bool has_process_totals_;
-
-  ProcessMemoryMaps process_mmaps_;
-  bool has_process_mmaps_;
 
   AllocatorDumpsMap allocator_dumps_;
   HeapDumpsMap heap_dumps_;
@@ -204,10 +255,10 @@ class BASE_EXPORT ProcessMemoryDump {
       heap_profiler_serialization_state_;
 
   // Keeps track of relationships between MemoryAllocatorDump(s).
-  std::vector<MemoryAllocatorDumpEdge> allocator_dumps_edges_;
+  AllocatorDumpEdgesMap allocator_dumps_edges_;
 
   // Level of detail of the current dump.
-  const MemoryDumpArgs dump_args_;
+  MemoryDumpArgs dump_args_;
 
   // This allocator dump is returned when an invalid dump is created in
   // background mode. The attributes of the dump are ignored and not added to

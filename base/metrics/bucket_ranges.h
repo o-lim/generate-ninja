@@ -40,7 +40,11 @@ class BASE_EXPORT BucketRanges {
 
   size_t size() const { return ranges_.size(); }
   HistogramBase::Sample range(size_t i) const { return ranges_[i]; }
-  void set_range(size_t i, HistogramBase::Sample value);
+  void set_range(size_t i, HistogramBase::Sample value) {
+    DCHECK_LT(i, ranges_.size());
+    DCHECK_GE(value, 0);
+    ranges_[i] = value;
+  }
   uint32_t checksum() const { return checksum_; }
   void set_checksum(uint32_t checksum) { checksum_ = checksum; }
 
@@ -64,10 +68,10 @@ class BASE_EXPORT BucketRanges {
   // safety against overwriting an existing value since though it is wasteful
   // to have multiple identical persistent records, it is still safe.
   void set_persistent_reference(uint32_t ref) const {
-    subtle::NoBarrier_Store(&persistent_reference_, ref);
+    subtle::Release_Store(&persistent_reference_, ref);
   }
   uint32_t persistent_reference() const {
-    return subtle::NoBarrier_Load(&persistent_reference_);
+    return subtle::Acquire_Load(&persistent_reference_);
   }
 
  private:

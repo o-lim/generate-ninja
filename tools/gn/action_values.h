@@ -9,10 +9,12 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "tools/gn/label_ptr.h"
 #include "tools/gn/source_file.h"
 #include "tools/gn/substitution_pattern.h"
 #include "tools/gn/substitution_list.h"
 
+class Pool;
 class Target;
 
 // Holds the values (outputs, args, script name, etc.) for either an action or
@@ -55,9 +57,9 @@ class ActionValues {
   }
   bool uses_rsp_file() const { return !rsp_file_contents_.list().empty(); }
 
-  // Console pool option
-  bool is_console() const { return console_; }
-  void set_console(bool value) { console_ = value; }
+  // Pool option
+  const LabelPtrPair<Pool>& pool() const { return pool_; }
+  void set_pool(LabelPtrPair<Pool> pool) { pool_ = std::move(pool); }
 
   // Description option
   bool has_description() const { return !description_.empty(); }
@@ -78,7 +80,7 @@ class ActionValues {
   SubstitutionList outputs_;
   SubstitutionPattern depfile_;
   SubstitutionList rsp_file_contents_;
-  bool console_;
+  LabelPtrPair<Pool> pool_;
 
   DISALLOW_COPY_AND_ASSIGN(ActionValues);
 };

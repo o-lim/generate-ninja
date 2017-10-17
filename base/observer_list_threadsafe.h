@@ -103,8 +103,8 @@ class ObserverListThreadSafe
       if (current_notification) {
         task_runner->PostTask(
             current_notification->from_here,
-            Bind(&ObserverListThreadSafe<ObserverType>::NotifyWrapper, this,
-                 observer, *current_notification));
+            BindOnce(&ObserverListThreadSafe<ObserverType>::NotifyWrapper, this,
+                     observer, *current_notification));
       }
     }
   }
@@ -132,8 +132,7 @@ class ObserverListThreadSafe
   // all Observers have been Notified. The notification may still be pending
   // delivery.
   template <typename Method, typename... Params>
-  void Notify(const tracked_objects::Location& from_here,
-              Method m, Params&&... params) {
+  void Notify(const Location& from_here, Method m, Params&&... params) {
     Callback<void(ObserverType*)> method =
         Bind(&internal::Dispatcher<ObserverType, Method>::Run,
              m, std::forward<Params>(params)...);
@@ -151,11 +150,11 @@ class ObserverListThreadSafe
   friend class RefCountedThreadSafe<ObserverListThreadSafe<ObserverType>>;
 
   struct NotificationData {
-    NotificationData(const tracked_objects::Location& from_here_in,
+    NotificationData(const Location& from_here_in,
                      const Callback<void(ObserverType*)>& method_in)
         : from_here(from_here_in), method(method_in) {}
 
-    tracked_objects::Location from_here;
+    Location from_here;
     Callback<void(ObserverType*)> method;
   };
 
@@ -170,7 +169,7 @@ class ObserverListThreadSafe
       auto it = observers_.find(observer);
       if (it == observers_.end())
         return;
-      DCHECK(it->second->RunsTasksOnCurrentThread());
+      DCHECK(it->second->RunsTasksInCurrentSequence());
     }
 
     // Keep track of the notification being dispatched on the current thread.

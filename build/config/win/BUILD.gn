@@ -60,7 +60,7 @@ config("compiler") {
   # Building with Clang on Windows is a work in progress and very
   # experimental. See crbug.com/82385.
   if (is_clang) {
-    cflags += [ "-fmsc-version=1900" ]
+    cflags += [ "-fmsc-version=1911" ]
 
     if (current_cpu == "x86") {
       cflags += [ "-m32" ]
@@ -178,6 +178,12 @@ config("runtime_library") {
     "_SCL_SECURE_NO_DEPRECATE",
   ]
 
+  if (is_clang) {
+    # Work around Fall Creators Update SDK bug - crbug.com/773476 has details.
+    # https://developercommunity.visualstudio.com/content/problem/131391/154-fails-to-define-deprecatedenumerator-2.html
+    defines += [ "DEPRECATEDENUMERATOR(x)=[[deprecated(x)]]" ]
+  }
+
   # Defines that set up the Windows SDK.
   defines += [
     "_ATL_NO_OPENGL",
@@ -267,8 +273,10 @@ config("cfi_linker") {
   # turned on either.
   # TODO(thakis): Turn this on with lld once supported, https://crbug.com/693709
   if (!is_debug && !use_lld) {
-    # Turn on CFG in msvc linker, regardless of compiler used.
-    ldflags = [ "/guard:cf" ]
+    # Turn on CFG in msvc linker, regardless of compiler used. Turn off CFG for
+    # longjmp (new in VS 2017) because it relies on compiler support which we do
+    # not have enabled.
+    ldflags = [ "/guard:cf,nolongjmp" ]
   }
 }
 
@@ -294,8 +302,21 @@ config("default_crt") {
   }
 }
 
+# Use this to force the debug CRT for when building perf-critical build tools
+# that need to be fully optimized even in debug builds, for those times when the
+# debug CRT is part of the bottleneck. This also avoids *implicitly* defining
+# _DEBUG.
+config("release_crt") {
+  if (is_component_build) {
+    cflags = [ "/MD" ]
+  } else {
+    cflags = [ "/MT" ]
+  }
+}
+
 config("dynamic_crt") {
   if (is_debug) {
+    # This pulls in the DLL debug CRT and defines _DEBUG
     cflags = [ "/MDd" ]
   } else {
     cflags = [ "/MD" ]
@@ -304,6 +325,7 @@ config("dynamic_crt") {
 
 config("static_crt") {
   if (is_debug) {
+    # This pulls in the static debug CRT and defines _DEBUG
     cflags = [ "/MTd" ]
   } else {
     cflags = [ "/MT" ]
@@ -359,13 +381,12 @@ config("no_incremental_linking") {
 # config should be applied to large modules to turn off incremental linking
 # when it won't work.
 config("default_large_module_incremental_linking") {
-  if (symbol_level > 0 && (current_cpu == "x86" || !is_component_build)) {
-    # When symbols are on, things get so large that the tools fail due to the
-    # size of the .ilk files.
-    ldflags = incremental_linking_off_switch
-  } else {
-    # Otherwise just do the default incremental linking for this build type.
+  if (symbol_level == 0 || (current_cpu == "x86" && is_component_build)) {
+    # In these configurations, ilk file sizes stay low enough that we can
+    # link incrementally.
     ldflags = default_incremental_linking_switch
+  } else {
+    ldflags = incremental_linking_off_switch
   }
 }
 
@@ -383,7 +404,7 @@ config("unicode") {
 
 # Some third party code might not compile with WIN32_LEAN_AND_MEAN so we have
 # to have a separate config for it. Remove this config from your target to
-# get the "bloaty and accomodating" version of windows.h.
+# get the "bloaty and accommodating" version of windows.h.
 config("lean_and_mean") {
   defines = [ "WIN32_LEAN_AND_MEAN" ]
 }
@@ -411,14 +432,4 @@ config("target_winrt") {
     "/ZW",
     "/EHsc",
   ]
-}
-
-# Internal stuff --------------------------------------------------------------
-
-# Config used by the MIDL template to disable warnings.
-config("midl_warnings") {
-  if (is_clang) {
-    # MIDL generates code like "#endif !_MIDL_USE_GUIDDEF_".
-    cflags = [ "-Wno-extra-tokens" ]
-  }
 }

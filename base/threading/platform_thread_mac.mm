@@ -18,7 +18,6 @@
 #include "base/mac/foundation_util.h"
 #include "base/mac/mach_logging.h"
 #include "base/threading/thread_id_name_manager.h"
-#include "base/tracked_objects.h"
 #include "build/build_config.h"
 
 namespace base {
@@ -51,7 +50,6 @@ void InitThreading() {
 // static
 void PlatformThread::SetName(const std::string& name) {
   ThreadIdNameManager::GetInstance()->SetName(CurrentId(), name);
-  tracked_objects::ThreadData::InitializeThreadContext(name);
 
   // Mac OS X does not expose the length limit of the name, so
   // hardcode it.
@@ -64,30 +62,18 @@ void PlatformThread::SetName(const std::string& name) {
 
 namespace {
 
-void SetPriorityNormal(mach_port_t mach_thread_id) {
-  // Make thread standard policy.
-  // Please note that this call could fail in rare cases depending
-  // on runtime conditions.
-  thread_standard_policy policy;
-  kern_return_t result =
-      thread_policy_set(mach_thread_id,
-                        THREAD_STANDARD_POLICY,
-                        reinterpret_cast<thread_policy_t>(&policy),
-                        THREAD_STANDARD_POLICY_COUNT);
-
-  if (result != KERN_SUCCESS)
-    MACH_DVLOG(1, result) << "thread_policy_set";
-}
-
 // Enables time-contraint policy and priority suitable for low-latency,
 // glitch-resistant audio.
-void SetPriorityRealtimeAudio(mach_port_t mach_thread_id) {
+void SetPriorityRealtimeAudio() {
   // Increase thread priority to real-time.
 
   // Please note that the thread_policy_set() calls may fail in
   // rare cases if the kernel decides the system is under heavy load
   // and is unable to handle boosting the thread priority.
   // In these cases we just return early and go on with life.
+
+  mach_port_t mach_thread_id =
+      pthread_mach_thread_np(PlatformThread::CurrentHandle().platform_handle());
 
   // Make thread fixed priority.
   thread_extended_policy_data_t policy;
@@ -168,19 +154,21 @@ bool PlatformThread::CanIncreaseCurrentThreadPriority() {
 
 // static
 void PlatformThread::SetCurrentThreadPriority(ThreadPriority priority) {
-  // Convert from pthread_t to mach thread identifier.
-  mach_port_t mach_thread_id =
-      pthread_mach_thread_np(PlatformThread::CurrentHandle().platform_handle());
+  // Changing the priority of the main thread causes performance regressions.
+  // https://crbug.com/601270
+  DCHECK(![[NSThread currentThread] isMainThread]);
 
   switch (priority) {
-    case ThreadPriority::NORMAL:
     case ThreadPriority::BACKGROUND:
+      [[NSThread currentThread] setThreadPriority:0];
+      break;
+    case ThreadPriority::NORMAL:
     case ThreadPriority::DISPLAY:
-      // Add support for non-NORMAL thread priorities. https://crbug.com/554651
-      SetPriorityNormal(mach_thread_id);
+      [[NSThread currentThread] setThreadPriority:0.5];
       break;
     case ThreadPriority::REALTIME_AUDIO:
-      SetPriorityRealtimeAudio(mach_thread_id);
+      SetPriorityRealtimeAudio();
+      DCHECK_EQ([[NSThread currentThread] threadPriority], 1.0);
       break;
   }
 

@@ -187,6 +187,12 @@ class FilePathWatcherImpl : public FilePathWatcher::PlatformDelegate {
   std::unordered_map<InotifyReader::Watch, FilePath> recursive_paths_by_watch_;
   std::map<FilePath, InotifyReader::Watch> recursive_watches_by_path_;
 
+  // Read only while INotifyReader::lock_ is held, and used to post asynchronous
+  // notifications to the Watcher on its home task_runner(). Ideally this should
+  // be const, but since it is initialized from |weak_factory_|, which must
+  // appear after it, that is not possible.
+  WeakPtr<FilePathWatcherImpl> weak_ptr_;
+
   WeakPtrFactory<FilePathWatcherImpl> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(FilePathWatcherImpl);
@@ -313,10 +319,12 @@ void InotifyReader::OnInotifyEvent(const inotify_event* event) {
 }
 
 FilePathWatcherImpl::FilePathWatcherImpl()
-    : recursive_(false), weak_factory_(this) {}
+    : recursive_(false), weak_factory_(this) {
+  weak_ptr_ = weak_factory_.GetWeakPtr();
+}
 
 FilePathWatcherImpl::~FilePathWatcherImpl() {
-  DCHECK(!task_runner() || task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(!task_runner() || task_runner()->RunsTasksInCurrentSequence());
 }
 
 void FilePathWatcherImpl::OnFilePathChanged(InotifyReader::Watch fired_watch,
@@ -324,7 +332,7 @@ void FilePathWatcherImpl::OnFilePathChanged(InotifyReader::Watch fired_watch,
                                             bool created,
                                             bool deleted,
                                             bool is_dir) {
-  DCHECK(!task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(!task_runner()->RunsTasksInCurrentSequence());
 
   // This method is invoked on the Inotify thread. Switch to task_runner() to
   // access |watches_| safely. Use a WeakPtr to prevent the callback from
@@ -332,8 +340,7 @@ void FilePathWatcherImpl::OnFilePathChanged(InotifyReader::Watch fired_watch,
   task_runner()->PostTask(
       FROM_HERE,
       BindOnce(&FilePathWatcherImpl::OnFilePathChangedOnOriginSequence,
-               weak_factory_.GetWeakPtr(), fired_watch, child, created, deleted,
-               is_dir));
+               weak_ptr_, fired_watch, child, created, deleted, is_dir));
 }
 
 void FilePathWatcherImpl::OnFilePathChangedOnOriginSequence(
@@ -342,7 +349,7 @@ void FilePathWatcherImpl::OnFilePathChangedOnOriginSequence(
     bool created,
     bool deleted,
     bool is_dir) {
-  DCHECK(task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(task_runner()->RunsTasksInCurrentSequence());
   DCHECK(!watches_.empty());
   DCHECK(HasValidWatchVector());
 
@@ -451,7 +458,7 @@ void FilePathWatcherImpl::Cancel() {
     return;
   }
 
-  DCHECK(task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(task_runner()->RunsTasksInCurrentSequence());
   DCHECK(!is_cancelled());
 
   set_cancelled();
@@ -467,7 +474,7 @@ void FilePathWatcherImpl::Cancel() {
 void FilePathWatcherImpl::UpdateWatches() {
   // Ensure this runs on the task_runner() exclusively in order to avoid
   // concurrency issues.
-  DCHECK(task_runner()->RunsTasksOnCurrentThread());
+  DCHECK(task_runner()->RunsTasksInCurrentSequence());
   DCHECK(HasValidWatchVector());
 
   // Walk the list of watches and update them as we go.
@@ -644,7 +651,7 @@ bool FilePathWatcherImpl::HasValidWatchVector() const {
 
 FilePathWatcher::FilePathWatcher() {
   sequence_checker_.DetachFromSequence();
-  impl_ = MakeUnique<FilePathWatcherImpl>();
+  impl_ = std::make_unique<FilePathWatcherImpl>();
 }
 
 }  // namespace base

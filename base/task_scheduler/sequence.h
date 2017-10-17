@@ -8,9 +8,9 @@
 #include <stddef.h>
 
 #include <memory>
-#include <queue>
 
 #include "base/base_export.h"
+#include "base/containers/queue.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequence_token.h"
@@ -18,6 +18,7 @@
 #include "base/task_scheduler/sequence_sort_key.h"
 #include "base/task_scheduler/task.h"
 #include "base/task_scheduler/task_traits.h"
+#include "base/threading/sequence_local_storage_map.h"
 
 namespace base {
 namespace internal {
@@ -70,6 +71,10 @@ class BASE_EXPORT Sequence : public RefCountedThreadSafe<Sequence> {
   // Returns a token that uniquely identifies this Sequence.
   const SequenceToken& token() const { return token_; }
 
+  SequenceLocalStorageMap* sequence_local_storage() {
+    return &sequence_local_storage_;
+  }
+
  private:
   friend class RefCountedThreadSafe<Sequence>;
   ~Sequence();
@@ -80,11 +85,14 @@ class BASE_EXPORT Sequence : public RefCountedThreadSafe<Sequence> {
   mutable SchedulerLock lock_;
 
   // Queue of tasks to execute.
-  std::queue<std::unique_ptr<Task>> queue_;
+  base::queue<std::unique_ptr<Task>> queue_;
 
   // Number of tasks contained in the Sequence for each priority.
   size_t num_tasks_per_priority_[static_cast<int>(TaskPriority::HIGHEST) + 1] =
       {};
+
+  // Holds data stored through the SequenceLocalStorageSlot API.
+  SequenceLocalStorageMap sequence_local_storage_;
 
   DISALLOW_COPY_AND_ASSIGN(Sequence);
 };

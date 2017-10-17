@@ -45,6 +45,8 @@ analyzer_wrapper =
 #      "CXX" (which follows).
 #  - extra_cxxflags
 #      Extra flags to be appended when compiling C++ files (but not C files).
+#  - extra_asmflags
+#      Extra flags to be appended when compiling assembly.
 #  - extra_ldflags
 #      Extra flags to be appended when linking
 #
@@ -60,6 +62,9 @@ analyzer_wrapper =
 #      The content of this array, if specified, will be added to the list of
 #      outputs from the link command. This can be useful in conjunction with
 #      the post_link parameter.
+#  - use_unstripped_as_runtime_outputs
+#      When |strip| is set, mark unstripped executables as runtime deps rather
+#      than stripped ones.
 #  - post_link
 #      The content of this string, if specified, will be run as a separate
 #      command following the the link command.
@@ -248,6 +253,12 @@ template("gcc_toolchain") {
       extra_cxxflags = ""
     }
 
+    if (defined(invoker.extra_asmflags) && invoker.extra_asmflags != "") {
+      extra_asmflags = " " + invoker.extra_asmflags
+    } else {
+      extra_asmflags = ""
+    }
+
     if (defined(invoker.extra_ldflags) && invoker.extra_ldflags != "") {
       extra_ldflags = " " + invoker.extra_ldflags
     } else {
@@ -303,7 +314,7 @@ template("gcc_toolchain") {
     tool("asm") {
       # For GCC we can just use the C compiler to compile assembly.
       depfile = "{{output}}.d"
-      command = "$asm -MMD -MF $depfile ${rebuild_string}{{defines}} {{include_dirs}} {{asmflags}} -c {{source}} -o {{output}}"
+      command = "$asm -MMD -MF $depfile ${rebuild_string}{{defines}} {{include_dirs}} {{asmflags}}${extra_asmflags} -c {{source}} -o {{output}}"
       depsformat = "gcc"
       description = "ASM {{output}}"
       outputs = [
@@ -384,7 +395,8 @@ template("gcc_toolchain") {
       # This needs a Python script to avoid using a complex shell command
       # requiring sh control structures, pipelines, and POSIX utilities.
       # The host might not have a POSIX shell and utilities (e.g. Windows).
-      solink_wrapper = rebase_path("//build/toolchain/gcc_solink_wrapper.py")
+      solink_wrapper =
+          rebase_path("//build/toolchain/gcc_solink_wrapper.py", root_build_dir)
       command = "$python_path \"$solink_wrapper\" --readelf=\"$readelf\" --nm=\"$nm\" $strip_switch--sofile=\"$unstripped_sofile\" --tocfile=\"$tocfile\"$map_switch --output=\"$sofile\"$whitelist_flag -- $link_command"
 
 
@@ -418,6 +430,10 @@ template("gcc_toolchain") {
       }
       if (sofile != unstripped_sofile) {
         outputs += [ unstripped_sofile ]
+        if (defined(invoker.use_unstripped_as_runtime_outputs) &&
+            invoker.use_unstripped_as_runtime_outputs) {
+          runtime_outputs = [ unstripped_sofile ]
+        }
       }
       if (defined(map_file)) {
         outputs += [ map_file ]
@@ -440,7 +456,7 @@ template("gcc_toolchain") {
       command = "$ld -shared {{ldflags}}${extra_ldflags} -o \"$unstripped_sofile\" -Wl,-soname=\"$soname\" -Wl,--whole-archive {{inputs}} {{solibs}} -Wl,--no-whole-archive $solink_libs_section_prefix {{libs}} $solink_libs_section_postfix"
 
       if (defined(invoker.strip)) {
-        strip_command = "${invoker.strip} --strip-unneeded -o \"$sofile\" \"$unstripped_sofile\""
+        strip_command = "${invoker.strip} -o \"$sofile\" \"$unstripped_sofile\""
         command += " && " + strip_command
       }
 
@@ -467,6 +483,10 @@ template("gcc_toolchain") {
       ]
       if (sofile != unstripped_sofile) {
         outputs += [ unstripped_sofile ]
+        if (defined(invoker.use_unstripped_as_runtime_outputs) &&
+            invoker.use_unstripped_as_runtime_outputs) {
+          runtime_outputs = [ unstripped_sofile ]
+        }
       }
     }
 
@@ -526,6 +546,10 @@ template("gcc_toolchain") {
       ]
       if (outfile != unstripped_outfile) {
         outputs += [ unstripped_outfile ]
+        if (defined(invoker.use_unstripped_as_runtime_outputs) &&
+            invoker.use_unstripped_as_runtime_outputs) {
+          runtime_outputs = [ unstripped_outfile ]
+        }
       }
       if (defined(invoker.link_outputs)) {
         outputs += invoker.link_outputs

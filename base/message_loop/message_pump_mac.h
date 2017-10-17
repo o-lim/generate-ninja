@@ -79,26 +79,30 @@ typedef NSAutoreleasePool AutoreleasePoolType;
 #endif  // !defined(__OBJC__) || __has_feature(objc_arc)
 
 class BASE_EXPORT MessagePumpCFRunLoopBase : public MessagePump {
+ public:
+  // MessagePump:
+  void Run(Delegate* delegate) override;
+  void ScheduleWork() override;
+  void ScheduleDelayedWork(const TimeTicks& delayed_work_time) override;
+  void SetTimerSlack(TimerSlack timer_slack) override;
+
+ protected:
   // Needs access to CreateAutoreleasePool.
   friend class MessagePumpScopedAutoreleasePool;
   friend class TestMessagePumpCFRunLoopBase;
 
- public:
-  MessagePumpCFRunLoopBase();
+  // Tasks will be pumped in the run loop modes described by
+  // |initial_mode_mask|, which maps bits to the index of an internal array of
+  // run loop mode identifiers.
+  explicit MessagePumpCFRunLoopBase(int initial_mode_mask);
   ~MessagePumpCFRunLoopBase() override;
 
   // Subclasses should implement the work they need to do in MessagePump::Run
   // in the DoRun method.  MessagePumpCFRunLoopBase::Run calls DoRun directly.
   // This arrangement is used because MessagePumpCFRunLoopBase needs to set
   // up and tear down things before and after the "meat" of DoRun.
-  void Run(Delegate* delegate) override;
   virtual void DoRun(Delegate* delegate) = 0;
 
-  void ScheduleWork() override;
-  void ScheduleDelayedWork(const TimeTicks& delayed_work_time) override;
-  void SetTimerSlack(TimerSlack timer_slack) override;
-
- protected:
   // Accessors for private data members to be used by subclasses.
   CFRunLoopRef run_loop() const { return run_loop_; }
   int nesting_level() const { return nesting_level_; }
@@ -114,7 +118,18 @@ class BASE_EXPORT MessagePumpCFRunLoopBase : public MessagePump {
   // objects autoreleased by work to fall into the current autorelease pool.
   virtual AutoreleasePoolType* CreateAutoreleasePool();
 
+  // Enable and disable entries in |enabled_modes_| to match |mode_mask|.
+  void SetModeMask(int mode_mask);
+
+  // Get the current mode mask from |enabled_modes_|.
+  int GetModeMask() const;
+
  private:
+  class ScopedModeEnabler;
+
+  // The maximum number of run loop modes that can be monitored.
+  static constexpr int kNumModes = 4;
+
   // Marking timers as invalid at the right time helps significantly reduce
   // power use (see the comment in RunDelayedWorkTimer()), however there is no
   // public API for doing so. CFRuntime.h states that CFRuntimeBase, upon which
@@ -189,6 +204,9 @@ class BASE_EXPORT MessagePumpCFRunLoopBase : public MessagePump {
 
   // The thread's run loop.
   CFRunLoopRef run_loop_;
+
+  // The enabled modes. Posted tasks may run in any non-null entry.
+  std::unique_ptr<ScopedModeEnabler> enabled_modes_[kNumModes];
 
   // The timer, sources, and observers are described above alongside their
   // callbacks.
@@ -297,6 +315,17 @@ class MessagePumpUIApplication : public MessagePumpCFRunLoopBase {
 
 #else
 
+// While in scope, permits posted tasks to be run in private AppKit run loop
+// modes that would otherwise make the UI unresponsive. E.g., menu fade out.
+class BASE_EXPORT ScopedPumpMessagesInPrivateModes {
+ public:
+  ScopedPumpMessagesInPrivateModes();
+  ~ScopedPumpMessagesInPrivateModes();
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ScopedPumpMessagesInPrivateModes);
+};
+
 class MessagePumpNSApplication : public MessagePumpCFRunLoopBase {
  public:
   MessagePumpNSApplication();
@@ -306,6 +335,8 @@ class MessagePumpNSApplication : public MessagePumpCFRunLoopBase {
   void Quit() override;
 
  private:
+  friend class ScopedPumpMessagesInPrivateModes;
+
   // False after Quit is called.
   bool keep_running_;
 

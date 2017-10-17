@@ -671,12 +671,8 @@ int ReadFile(const FilePath& filename, char* data, int max_size) {
 
 int WriteFile(const FilePath& filename, const char* data, int size) {
   ThreadRestrictions::AssertIOAllowed();
-  win::ScopedHandle file(CreateFile(filename.value().c_str(),
-                                    GENERIC_WRITE,
-                                    0,
-                                    NULL,
-                                    CREATE_ALWAYS,
-                                    0,
+  win::ScopedHandle file(CreateFile(filename.value().c_str(), GENERIC_WRITE, 0,
+                                    NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL,
                                     NULL));
   if (!file.IsValid()) {
     DPLOG(WARNING) << "CreateFile failed for path "
@@ -731,7 +727,6 @@ bool AppendToFile(const FilePath& filename, const char* data, int size) {
   return false;
 }
 
-// Gets the current working directory for the process.
 bool GetCurrentDirectory(FilePath* dir) {
   ThreadRestrictions::AssertIOAllowed();
 
@@ -748,11 +743,9 @@ bool GetCurrentDirectory(FilePath* dir) {
   return true;
 }
 
-// Sets the current working directory for the process.
 bool SetCurrentDirectory(const FilePath& directory) {
   ThreadRestrictions::AssertIOAllowed();
-  BOOL ret = ::SetCurrentDirectory(directory.value().c_str());
-  return ret != 0;
+  return ::SetCurrentDirectory(directory.value().c_str()) != 0;
 }
 
 int GetMaximumPathComponentLength(const FilePath& path) {

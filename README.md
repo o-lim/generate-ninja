@@ -22,9 +22,11 @@ with the following files/directories exported directly via `git archive`:
  - build
  - build\_overrides
  - tools/gn
- - testing/test.gni
+ - testing/gmock
+ - testing/gtest
  - testing/perf
  - testing/libfuzzer
+ - testing/test.gni
  - testing/\*.h
  - testing/\*.cc
  - testing/\*.mm
@@ -33,12 +35,11 @@ with the following files/directories exported directly via `git archive`:
  - third\_party/googletest
  - third\_party/libxml
  - third\_party/modp\_b64
+ - third\_party/win\_build\_output
  - third\_party/zlib
 
 and the following git sub-repos exported into their respective directories:
 
- - testing/gmock
- - testing/gtest
  - third\_party/ced/src
  - third\_party/icu
  - third\_party/googletest/src

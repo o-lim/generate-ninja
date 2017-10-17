@@ -2,10 +2,59 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build_overrides/build.gni")
+if (current_cpu == "arm" || current_cpu == "arm64") {
+  import("//build/config/arm.gni")
+}
 
 config("zlib_config") {
   include_dirs = [ "." ]
+}
+
+config("zlib_adler32_simd_config") {
+  if (!is_ios && (current_cpu == "x86" || current_cpu == "x64")) {
+    defines = [ "ADLER32_SIMD_SSSE3" ]
+  }
+
+  if (current_cpu == "arm" || current_cpu == "arm64") {
+    if (arm_use_neon) {
+      defines = [ "ADLER32_SIMD_NEON" ]
+    }
+  }
+}
+
+source_set("zlib_adler32_simd") {
+  visibility = [ ":*" ]
+
+  if (!is_ios && (current_cpu == "x86" || current_cpu == "x64")) {
+    sources = [
+      "adler32_simd.c",
+      "adler32_simd.h",
+    ]
+
+    if (!is_win || is_clang) {
+      cflags = [ "-mssse3" ]
+    }
+  }
+
+  if (current_cpu == "arm" || current_cpu == "arm64") {
+    if (arm_use_neon) {
+      sources = [
+        "adler32_simd.c",
+        "adler32_simd.h",
+      ]
+
+      if (!is_debug) {
+        # Use optimize_speed (-O3) to output the _smallest_ code.
+        configs -= [ "//build/config/compiler:default_optimization" ]
+        configs += [ "//build/config/compiler:optimize_speed" ]
+      }
+    }
+  }
+
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+
+  public_configs = [ ":zlib_adler32_simd_config" ]
 }
 
 static_library("zlib_x86_simd") {
@@ -73,8 +122,34 @@ static_library("zlib") {
     "zutil.h",
   ]
 
+  if (current_cpu == "arm" || current_cpu == "arm64") {
+    if (arm_use_neon) {
+      # TODO: handle InflateBack case, see crbug.com/769880.
+      sources -= [
+        "inffast.c",
+        "inflate.c",
+      ]
+      sources += [
+        "contrib/arm/chunkcopy.h",
+        "contrib/arm/inffast.c",
+        "contrib/arm/inflate.c",
+      ]
+    }
+  }
+
+  defines = []
+  deps = []
+
   if (!is_ios && (current_cpu == "x86" || current_cpu == "x64")) {
     sources += [ "x86.c" ]
+
+    deps += [ ":zlib_adler32_simd" ]
+  }
+
+  if (current_cpu == "arm" || current_cpu == "arm64") {
+    if (arm_use_neon) {
+      deps += [ ":zlib_adler32_simd" ]
+    }
   }
 
   configs -= [ "//build/config/compiler:chromium_code" ]
@@ -86,8 +161,9 @@ static_library("zlib") {
   ]
 
   public_configs = [ ":zlib_config" ]
-  deps = [
-    ":zlib_x86_simd",
+
+  deps += [
+    ":zlib_x86_simd"
   ]
 }
 
@@ -134,32 +210,6 @@ static_library("minizip") {
     # Must be after no_chromium_code for warning flags to be ordered correctly.
     ":minizip_warnings",
   ]
+
   public_configs = [ ":zlib_config" ]
-}
-
-if (build_with_chromium) {
-  static_library("zip") {
-    sources = [
-      "google/zip.cc",
-      "google/zip.h",
-      "google/zip_internal.cc",
-      "google/zip_internal.h",
-      "google/zip_reader.cc",
-      "google/zip_reader.h",
-    ]
-    deps = [
-      ":minizip",
-      "//base",
-    ]
-  }
-
-  static_library("compression_utils") {
-    sources = [
-      "google/compression_utils.cc",
-      "google/compression_utils.h",
-    ]
-    deps = [
-      ":zlib",
-    ]
-  }
 }

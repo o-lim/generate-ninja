@@ -29,10 +29,12 @@ Supported sanitizer configurations are:
 | GN Argument | Description |
 |--------------|----|
 | `is_asan=true` | enables [Address Sanitizer] to catch problems like buffer overruns. |
-| `is_msan=true` | enables [Memory Sanitizer] to catch problems like uninitialed reads<sup>\[[1](#note1)\]</sup>. |
-| `is_ubsan_security=true` | enables [Undefined Behavior Sanitizer] to catch<sup>\[[2](#note2)\]</sup> undefined behavior like integer overflow. |
+| `is_msan=true` | enables [Memory Sanitizer] to catch problems like uninitialed reads<sup>\[[*](reference.md#MSan)\]</sup>. |
+| `is_ubsan_security=true` | enables [Undefined Behavior Sanitizer] to catch<sup>\[[*](reference.md#UBSan)\]</sup> undefined behavior like integer overflow. |
 | | it is possible to run libfuzzer without any sanitizers; *probably not what you want*.|
 
+To get the exact GN configuration that are used on our builders, see
+[Build Config].
 
 ## Write Fuzzer Function
 
@@ -79,12 +81,29 @@ INFO: -max_len is not provided, using 64
 INFO: PreferSmall: 1
 #0      READ   units: 1 exec/s: 0
 #1      INITED cov: 2361 bits: 95 indir: 29 units: 1 exec/s: 0
-#2      NEW    cov: 2710 bits: 359 indir: 36 units: 2 exec/s: 0 L: 64 MS: 0 
+#2      NEW    cov: 2710 bits: 359 indir: 36 units: 2 exec/s: 0 L: 64 MS: 0
 ```
 
-The `... NEW ...` line appears when libFuzzer finds new and interesting input. The 
-efficient fuzzer should be able to finds lots of them rather quickly.
+The `... NEW ...` line appears when libFuzzer finds new and interesting input.
+The efficient fuzzer should be able to finds lots of them rather quickly.
 The `... pulse ...` line will appear periodically to show the current status.
+
+### Symbolize Stacktrace
+
+If your fuzzer crashes when running locally and you see non-symbolized
+stacktrace, make sure that you have directory containing `llvm-symbolizer`
+binary added in `$PATH`. The symbolizer binary is included in Chromium's Clang
+package located at `third_party/llvm-build/Release+Asserts/bin/` directory.
+
+Alternatively, you can set `external_symbolizer_path` option via `ASAN_OPTIONS`
+env variable:
+
+```bash
+$ ASAN_OPTIONS=external_symbolizer_path=/my/local/llvm/build/llvm-symbolizer \
+    ./fuzzer ./crash-input
+```
+
+The same approach works with other sanitizers (e.g. `MSAN_OPTIONS` and others).
 
 ## Improving Your Fuzzer
 
@@ -136,26 +155,6 @@ a day or two.
 performance and for optimization hints.
 
 
-## Notes
-
-*[1]* {#note1}You need to [download prebuilt instrumented libraries](https://www.chromium.org/developers/testing/memorysanitizer#TOC-How-to-build-and-run)
-to use msan ([crbug/653712](https://bugs.chromium.org/p/chromium/issues/detail?id=653712)):
-```bash
-GYP_DEFINES='use_goma=1 msan=1 use_prebuilt_instrumented_libraries=1' gclient runhooks
-```
-
-*[2]* {#note2}By default UBSan doesn't crash once undefined behavior has been detected.
-To make it crash the following additional option should be provided:
-```bash
-UBSAN_OPTIONS=halt_on_error=1 ./fuzzer <corpus_directory_or_single_testcase_path>
-```
-Other useful options (used by ClusterFuzz) are:
-```bash
-UBSAN_OPTIONS=symbolize=1:halt_on_error=1:print_stacktrace=1 ./fuzzer <corpus_directory_or_single_testcase_path>
-```
-
-
-
 [Address Sanitizer]: http://clang.llvm.org/docs/AddressSanitizer.html
 [ClusterFuzz status]: clusterfuzz.md#Status-Links
 [Efficient Fuzzer Guide]: efficient_fuzzer.md
@@ -166,3 +165,4 @@ UBSAN_OPTIONS=symbolize=1:halt_on_error=1:print_stacktrace=1 ./fuzzer <corpus_di
 [Undefined Behavior Sanitizer]: http://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html
 [crbug/598448]: https://bugs.chromium.org/p/chromium/issues/detail?id=598448
 [url_parse_fuzzer.cc]: https://code.google.com/p/chromium/codesearch#chromium/src/testing/libfuzzer/fuzzers/url_parse_fuzzer.cc
+[Build Config]: reference.md#Builder-configurations

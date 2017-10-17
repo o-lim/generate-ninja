@@ -61,22 +61,14 @@ class BASE_EXPORT TaskRunner
   // will not be run.
   //
   // Equivalent to PostDelayedTask(from_here, task, 0).
-  bool PostTask(const tracked_objects::Location& from_here, OnceClosure task);
+  bool PostTask(const Location& from_here, OnceClosure task);
 
-  // Like PostTask, but tries to run the posted task only after
-  // |delay_ms| has passed.
-  //
-  // It is valid for an implementation to ignore |delay_ms|; that is,
-  // to have PostDelayedTask behave the same as PostTask.
-  virtual bool PostDelayedTask(const tracked_objects::Location& from_here,
+  // Like PostTask, but tries to run the posted task only after |delay_ms|
+  // has passed. Implementations should use a tick clock, rather than wall-
+  // clock time, to implement |delay|.
+  virtual bool PostDelayedTask(const Location& from_here,
                                OnceClosure task,
                                base::TimeDelta delay) = 0;
-
-  // Drepecated: favor RunsTasksInCurrentSequence().
-  // TODO(http://crbug.com/665062): mass redirect callers and remove this.
-  bool RunsTasksOnCurrentThread() const {
-    return RunsTasksInCurrentSequence();
-  }
 
   // Returns true iff tasks posted to this TaskRunner are sequenced
   // with this call.
@@ -137,7 +129,7 @@ class BASE_EXPORT TaskRunner
   //   * The DataLoader object can be deleted while |task| is still running,
   //     and the reply will cancel itself safely because it is bound to a
   //     WeakPtr<>.
-  bool PostTaskAndReply(const tracked_objects::Location& from_here,
+  bool PostTaskAndReply(const Location& from_here,
                         OnceClosure task,
                         OnceClosure reply);
 

@@ -585,32 +585,70 @@ TEST(StringUtilTest, FormatBytesUnlocalized) {
 }
 TEST(StringUtilTest, ReplaceSubstringsAfterOffset) {
   static const struct {
-    const char* str;
-    string16::size_type start_offset;
-    const char* find_this;
-    const char* replace_with;
-    const char* expected;
+    StringPiece str;
+    size_t start_offset;
+    StringPiece find_this;
+    StringPiece replace_with;
+    StringPiece expected;
   } cases[] = {
-    {"aaa", 0, "a", "b", "bbb"},
-    {"abb", 0, "ab", "a", "ab"},
-    {"Removing some substrings inging", 0, "ing", "", "Remov some substrs "},
-    {"Not found", 0, "x", "0", "Not found"},
-    {"Not found again", 5, "x", "0", "Not found again"},
-    {" Making it much longer ", 0, " ", "Four score and seven years ago",
-     "Four score and seven years agoMakingFour score and seven years agoit"
-     "Four score and seven years agomuchFour score and seven years agolonger"
-     "Four score and seven years ago"},
-    {"Invalid offset", 9999, "t", "foobar", "Invalid offset"},
-    {"Replace me only me once", 9, "me ", "", "Replace me only once"},
-    {"abababab", 2, "ab", "c", "abccc"},
+      {"aaa", 0, "", "b", "aaa"},
+      {"aaa", 1, "", "b", "aaa"},
+      {"aaa", 0, "a", "b", "bbb"},
+      {"aaa", 0, "aa", "b", "ba"},
+      {"aaa", 0, "aa", "bbb", "bbba"},
+      {"aaaaa", 0, "aa", "b", "bba"},
+      {"ababaaababa", 0, "aba", "", "baaba"},
+      {"ababaaababa", 0, "aba", "_", "_baa_ba"},
+      {"ababaaababa", 0, "aba", "__", "__baa__ba"},
+      {"ababaaababa", 0, "aba", "___", "___baa___ba"},
+      {"ababaaababa", 0, "aba", "____", "____baa____ba"},
+      {"ababaaababa", 0, "aba", "_____", "_____baa_____ba"},
+      {"abb", 0, "ab", "a", "ab"},
+      {"Removing some substrings inging", 0, "ing", "", "Remov some substrs "},
+      {"Not found", 0, "x", "0", "Not found"},
+      {"Not found again", 5, "x", "0", "Not found again"},
+      {" Making it much longer ", 0, " ", "Four score and seven years ago",
+       "Four score and seven years agoMakingFour score and seven years agoit"
+       "Four score and seven years agomuchFour score and seven years agolonger"
+       "Four score and seven years ago"},
+      {" Making it much much much much shorter ", 0,
+       "Making it much much much much shorter", "", "  "},
+      {"so much much much much much very much much much shorter", 0, "much ",
+       "", "so very shorter"},
+      {"Invalid offset", 9999, "t", "foobar", "Invalid offset"},
+      {"Replace me only me once", 9, "me ", "", "Replace me only once"},
+      {"abababab", 2, "ab", "c", "abccc"},
+      {"abababab", 1, "ab", "c", "abccc"},
+      {"abababab", 1, "aba", "c", "abcbab"},
   };
 
-  for (size_t i = 0; i < arraysize(cases); i++) {
-    string16 str = ASCIIToUTF16(cases[i].str);
-    ReplaceSubstringsAfterOffset(&str, cases[i].start_offset,
-                                 ASCIIToUTF16(cases[i].find_this),
-                                 ASCIIToUTF16(cases[i].replace_with));
-    EXPECT_EQ(ASCIIToUTF16(cases[i].expected), str);
+  // base::string16 variant
+  for (const auto& scenario : cases) {
+    string16 str = ASCIIToUTF16(scenario.str);
+    ReplaceSubstringsAfterOffset(&str, scenario.start_offset,
+                                 ASCIIToUTF16(scenario.find_this),
+                                 ASCIIToUTF16(scenario.replace_with));
+    EXPECT_EQ(ASCIIToUTF16(scenario.expected), str);
+  }
+
+  // std::string with insufficient capacity: expansion must realloc the buffer.
+  for (const auto& scenario : cases) {
+    std::string str = scenario.str.as_string();
+    str.shrink_to_fit();  // This is nonbinding, but it's the best we've got.
+    ReplaceSubstringsAfterOffset(&str, scenario.start_offset,
+                                 scenario.find_this, scenario.replace_with);
+    EXPECT_EQ(scenario.expected, str);
+  }
+
+  // std::string with ample capacity: should be possible to grow in-place.
+  for (const auto& scenario : cases) {
+    std::string str = scenario.str.as_string();
+    str.reserve(std::max(scenario.str.length(), scenario.expected.length()) *
+                2);
+
+    ReplaceSubstringsAfterOffset(&str, scenario.start_offset,
+                                 scenario.find_this, scenario.replace_with);
+    EXPECT_EQ(scenario.expected, str);
   }
 }
 
@@ -954,6 +992,54 @@ TEST(StringUtilTest, ReplaceStringPlaceholders) {
   EXPECT_EQ(ASCIIToUTF16("9aa,8bb,7cc,6dd,5ee,4ff,3gg,2hh,1ii"), formatted);
 }
 
+TEST(StringUtilTest, ReplaceStringPlaceholdersNetExpansionWithContraction) {
+  // In this test, some of the substitutions are shorter than the placeholders,
+  // but overall the string gets longer.
+  std::vector<string16> subst;
+  subst.push_back(ASCIIToUTF16("9a____"));
+  subst.push_back(ASCIIToUTF16("B"));
+  subst.push_back(ASCIIToUTF16("7c___"));
+  subst.push_back(ASCIIToUTF16("d"));
+  subst.push_back(ASCIIToUTF16("5e____"));
+  subst.push_back(ASCIIToUTF16("F"));
+  subst.push_back(ASCIIToUTF16("3g___"));
+  subst.push_back(ASCIIToUTF16("h"));
+  subst.push_back(ASCIIToUTF16("1i_____"));
+
+  string16 original = ASCIIToUTF16("$1a,$2b,$3c,$4d,$5e,$6f,$7g,$8h,$9i");
+  string16 expected =
+      ASCIIToUTF16("9a____a,Bb,7c___c,dd,5e____e,Ff,3g___g,hh,1i_____i");
+
+  EXPECT_EQ(expected, ReplaceStringPlaceholders(original, subst, nullptr));
+
+  std::vector<size_t> offsets;
+  EXPECT_EQ(expected, ReplaceStringPlaceholders(original, subst, &offsets));
+  std::vector<size_t> expected_offsets = {0, 8, 11, 18, 21, 29, 32, 39, 42};
+  EXPECT_EQ(offsets.size(), subst.size());
+  EXPECT_EQ(expected_offsets, offsets);
+  for (size_t i = 0; i < offsets.size(); i++) {
+    EXPECT_EQ(expected.substr(expected_offsets[i], subst[i].length()),
+              subst[i]);
+  }
+}
+
+TEST(StringUtilTest, ReplaceStringPlaceholdersNetContractionWithExpansion) {
+  // In this test, some of the substitutions are longer than the placeholders,
+  // but overall the string gets smaller. Additionally, the placeholders appear
+  // in a permuted order.
+  std::vector<string16> subst;
+  subst.push_back(ASCIIToUTF16("z"));
+  subst.push_back(ASCIIToUTF16("y"));
+  subst.push_back(ASCIIToUTF16("XYZW"));
+  subst.push_back(ASCIIToUTF16("x"));
+  subst.push_back(ASCIIToUTF16("w"));
+
+  string16 formatted =
+      ReplaceStringPlaceholders(ASCIIToUTF16("$3_$4$2$1$5"), subst, nullptr);
+
+  EXPECT_EQ(ASCIIToUTF16("XYZW_xyzw"), formatted);
+}
+
 TEST(StringUtilTest, ReplaceStringPlaceholdersOneDigit) {
   std::vector<string16> subst;
   subst.push_back(ASCIIToUTF16("1a"));
@@ -987,6 +1073,22 @@ TEST(StringUtilTest, StdStringReplaceStringPlaceholders) {
           "$1a,$2b,$3c,$4d,$5e,$6f,$7g,$8h,$9i", subst, nullptr);
 
   EXPECT_EQ("9aa,8bb,7cc,6dd,5ee,4ff,3gg,2hh,1ii", formatted);
+}
+
+TEST(StringUtilTest, StdStringReplaceStringPlaceholdersMultipleMatches) {
+  std::vector<std::string> subst;
+  subst.push_back("4");   // Referenced twice.
+  subst.push_back("?");   // Unreferenced.
+  subst.push_back("!");   // Unreferenced.
+  subst.push_back("16");  // Referenced once.
+
+  std::string original = "$1 * $1 == $4";
+  std::string expected = "4 * 4 == 16";
+  EXPECT_EQ(expected, ReplaceStringPlaceholders(original, subst, nullptr));
+  std::vector<size_t> offsets;
+  EXPECT_EQ(expected, ReplaceStringPlaceholders(original, subst, &offsets));
+  std::vector<size_t> expected_offsets = {0, 4, 9};
+  EXPECT_EQ(expected_offsets, offsets);
 }
 
 TEST(StringUtilTest, ReplaceStringPlaceholdersConsecutiveDollarSigns) {
@@ -1108,29 +1210,66 @@ TEST(StringUtilTest, ReplaceChars) {
     const char* output;
     bool result;
   } cases[] = {
-    { "", "", "", "", false },
-    { "test", "", "", "test", false },
-    { "test", "", "!", "test", false },
-    { "test", "z", "!", "test", false },
-    { "test", "e", "!", "t!st", true },
-    { "test", "e", "!?", "t!?st", true },
-    { "test", "ez", "!", "t!st", true },
-    { "test", "zed", "!?", "t!?st", true },
-    { "test", "t", "!?", "!?es!?", true },
-    { "test", "et", "!>", "!>!>s!>", true },
-    { "test", "zest", "!", "!!!!", true },
-    { "test", "szt", "!", "!e!!", true },
-    { "test", "t", "test", "testestest", true },
+      {"", "", "", "", false},
+      {"t", "t", "t", "t", true},
+      {"a", "b", "c", "a", false},
+      {"b", "b", "c", "c", true},
+      {"bob", "b", "p", "pop", true},
+      {"bob", "o", "i", "bib", true},
+      {"test", "", "", "test", false},
+      {"test", "", "!", "test", false},
+      {"test", "z", "!", "test", false},
+      {"test", "e", "!", "t!st", true},
+      {"test", "e", "!?", "t!?st", true},
+      {"test", "ez", "!", "t!st", true},
+      {"test", "zed", "!?", "t!?st", true},
+      {"test", "t", "!?", "!?es!?", true},
+      {"test", "et", "!>", "!>!>s!>", true},
+      {"test", "zest", "!", "!!!!", true},
+      {"test", "szt", "!", "!e!!", true},
+      {"test", "t", "test", "testestest", true},
+      {"tetst", "t", "test", "testeteststest", true},
+      {"ttttttt", "t", "-", "-------", true},
+      {"aAaAaAAaAAa", "A", "", "aaaaa", true},
+      {"xxxxxxxxxx", "x", "", "", true},
+      {"xxxxxxxxxx", "x", "x", "xxxxxxxxxx", true},
+      {"xxxxxxxxxx", "x", "y-", "y-y-y-y-y-y-y-y-y-y-", true},
+      {"xxxxxxxxxx", "x", "xy", "xyxyxyxyxyxyxyxyxyxy", true},
+      {"xxxxxxxxxx", "x", "zyx", "zyxzyxzyxzyxzyxzyxzyxzyxzyxzyx", true},
+      {"xaxxaxxxaxxxax", "x", "xy", "xyaxyxyaxyxyxyaxyxyxyaxy", true},
+      {"-xaxxaxxxaxxxax-", "x", "xy", "-xyaxyxyaxyxyxyaxyxyxyaxy-", true},
   };
 
-  for (size_t i = 0; i < arraysize(cases); ++i) {
+  for (const TestData& scenario : cases) {
+    // Test with separate output and input vars.
     std::string output;
-    bool result = ReplaceChars(cases[i].input,
-                               cases[i].replace_chars,
-                               cases[i].replace_with,
-                               &output);
-    EXPECT_EQ(cases[i].result, result);
-    EXPECT_EQ(cases[i].output, output);
+    bool result = ReplaceChars(scenario.input, scenario.replace_chars,
+                               scenario.replace_with, &output);
+    EXPECT_EQ(scenario.result, result) << scenario.input;
+    EXPECT_EQ(scenario.output, output);
+  }
+
+  for (const TestData& scenario : cases) {
+    // Test with an input/output var of limited capacity.
+    std::string input_output = scenario.input;
+    input_output.shrink_to_fit();
+    bool result = ReplaceChars(input_output, scenario.replace_chars,
+                               scenario.replace_with, &input_output);
+    EXPECT_EQ(scenario.result, result) << scenario.input;
+    EXPECT_EQ(scenario.output, input_output);
+  }
+
+  for (const TestData& scenario : cases) {
+    // Test with an input/output var of ample capacity; should
+    // not realloc.
+    std::string input_output = scenario.input;
+    input_output.reserve(strlen(scenario.output) * 2);
+    const void* original_buffer = input_output.data();
+    bool result = ReplaceChars(input_output, scenario.replace_chars,
+                               scenario.replace_with, &input_output);
+    EXPECT_EQ(scenario.result, result) << scenario.input;
+    EXPECT_EQ(scenario.output, input_output);
+    EXPECT_EQ(original_buffer, input_output.data());
   }
 }
 

@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include "base/logging.h"
+#include "base/memory/shared_memory_tracker.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/strings/stringprintf.h"
@@ -289,17 +290,25 @@ bool SharedMemory::Open(const std::string& name, bool read_only) {
 }
 
 bool SharedMemory::MapAt(off_t offset, size_t bytes) {
-  if (!shm_.IsValid())
+  if (!shm_.IsValid()) {
+    DLOG(ERROR) << "Invalid SharedMemoryHandle.";
     return false;
+  }
 
-  if (bytes > static_cast<size_t>(std::numeric_limits<int>::max()))
+  if (bytes > static_cast<size_t>(std::numeric_limits<int>::max())) {
+    DLOG(ERROR) << "Bytes required exceeds the 2G limitation.";
     return false;
+  }
 
-  if (memory_)
+  if (memory_) {
+    DLOG(ERROR) << "The SharedMemory has been mapped already.";
     return false;
+  }
 
-  if (external_section_ && !IsSectionSafeToMap(shm_.GetHandle()))
+  if (external_section_ && !IsSectionSafeToMap(shm_.GetHandle())) {
+    DLOG(ERROR) << "SharedMemoryHandle is not safe to be mapped.";
     return false;
+  }
 
   memory_ = MapViewOfFile(
       shm_.GetHandle(),
@@ -309,8 +318,11 @@ bool SharedMemory::MapAt(off_t offset, size_t bytes) {
     DCHECK_EQ(0U, reinterpret_cast<uintptr_t>(memory_) &
         (SharedMemory::MAP_MINIMUM_ALIGNMENT - 1));
     mapped_size_ = GetMemorySectionSize(memory_);
+    mapped_id_ = shm_.GetGUID();
+    SharedMemoryTracker::GetInstance()->IncrementMemoryUsage(*this);
     return true;
   }
+  DPLOG(ERROR) << "Failed executing MapViewOfFile";
   return false;
 }
 
@@ -318,8 +330,10 @@ bool SharedMemory::Unmap() {
   if (memory_ == NULL)
     return false;
 
+  SharedMemoryTracker::GetInstance()->DecrementMemoryUsage(*this);
   UnmapViewOfFile(memory_);
   memory_ = NULL;
+  mapped_id_ = UnguessableToken();
   return true;
 }
 

@@ -206,7 +206,7 @@ struct BASE_EXPORT LoggingSettings {
 // whether NDEBUG is defined or not so that we'll fail to link if someone tries
 // to compile logging.cc with NDEBUG but includes logging.h without defining it,
 // or vice versa.
-#if NDEBUG
+#if defined(NDEBUG)
 #define BaseInitLoggingImpl BaseInitLoggingImpl_built_with_NDEBUG
 #else
 #define BaseInitLoggingImpl BaseInitLoggingImpl_built_without_NDEBUG
@@ -252,12 +252,10 @@ BASE_EXPORT bool ShouldCreateLogMessage(int severity);
 // Gets the VLOG default verbosity level.
 BASE_EXPORT int GetVlogVerbosity();
 
-// Gets the current vlog level for the given file (usually taken from
-// __FILE__).
-
 // Note that |N| is the size *with* the null terminator.
 BASE_EXPORT int GetVlogLevelHelper(const char* file_start, size_t N);
 
+// Gets the current vlog level for the given file (usually taken from __FILE__).
 template <size_t N>
 int GetVlogLevel(const char (&file)[N]) {
   return GetVlogLevelHelper(file, N);
@@ -308,6 +306,9 @@ BASE_EXPORT LogMessageHandlerFunction GetLogMessageHandler();
 // to Clang which control what code paths are statically analyzed,
 // and is meant to be used in conjunction with assert & assert-like functions.
 // The expression is passed straight through if analysis isn't enabled.
+//
+// ANALYZER_SKIP_THIS_PATH() suppresses static analysis for the current
+// codepath and any other branching codepaths that might follow.
 #if defined(__clang_analyzer__)
 
 inline constexpr bool AnalyzerNoReturn() __attribute__((analyzer_noreturn)) {
@@ -320,11 +321,16 @@ inline constexpr bool AnalyzerAssumeTrue(bool arg) {
   return arg || AnalyzerNoReturn();
 }
 
-#define ANALYZER_ASSUME_TRUE(arg) ::logging::AnalyzerAssumeTrue(!!(arg))
+#define ANALYZER_ASSUME_TRUE(arg) logging::AnalyzerAssumeTrue(!!(arg))
+#define ANALYZER_SKIP_THIS_PATH() \
+  static_cast<void>(::logging::AnalyzerNoReturn())
+#define ANALYZER_ALLOW_UNUSED(var) static_cast<void>(var);
 
 #else  // !defined(__clang_analyzer__)
 
 #define ANALYZER_ASSUME_TRUE(arg) (arg)
+#define ANALYZER_SKIP_THIS_PATH()
+#define ANALYZER_ALLOW_UNUSED(var) static_cast<void>(var);
 
 #endif  // defined(__clang_analyzer__)
 
@@ -339,7 +345,7 @@ const LogSeverity LOG_FATAL = 3;
 const LogSeverity LOG_NUM_SEVERITIES = 4;
 
 // LOG_DFATAL is LOG_FATAL in debug mode, ERROR in normal mode
-#ifdef NDEBUG
+#if defined(NDEBUG)
 const LogSeverity LOG_DFATAL = LOG_ERROR;
 #else
 const LogSeverity LOG_DFATAL = LOG_FATAL;
@@ -359,17 +365,15 @@ const LogSeverity LOG_DFATAL = LOG_FATAL;
   ::logging::ClassName(__FILE__, __LINE__, ::logging::LOG_FATAL, ##__VA_ARGS__)
 #define COMPACT_GOOGLE_LOG_EX_DFATAL(ClassName, ...) \
   ::logging::ClassName(__FILE__, __LINE__, ::logging::LOG_DFATAL, ##__VA_ARGS__)
+#define COMPACT_GOOGLE_LOG_EX_DCHECK(ClassName, ...) \
+  ::logging::ClassName(__FILE__, __LINE__, ::logging::LOG_DCHECK, ##__VA_ARGS__)
 
-#define COMPACT_GOOGLE_LOG_INFO \
-  COMPACT_GOOGLE_LOG_EX_INFO(LogMessage)
-#define COMPACT_GOOGLE_LOG_WARNING \
-  COMPACT_GOOGLE_LOG_EX_WARNING(LogMessage)
-#define COMPACT_GOOGLE_LOG_ERROR \
-  COMPACT_GOOGLE_LOG_EX_ERROR(LogMessage)
-#define COMPACT_GOOGLE_LOG_FATAL \
-  COMPACT_GOOGLE_LOG_EX_FATAL(LogMessage)
-#define COMPACT_GOOGLE_LOG_DFATAL \
-  COMPACT_GOOGLE_LOG_EX_DFATAL(LogMessage)
+#define COMPACT_GOOGLE_LOG_INFO COMPACT_GOOGLE_LOG_EX_INFO(LogMessage)
+#define COMPACT_GOOGLE_LOG_WARNING COMPACT_GOOGLE_LOG_EX_WARNING(LogMessage)
+#define COMPACT_GOOGLE_LOG_ERROR COMPACT_GOOGLE_LOG_EX_ERROR(LogMessage)
+#define COMPACT_GOOGLE_LOG_FATAL COMPACT_GOOGLE_LOG_EX_FATAL(LogMessage)
+#define COMPACT_GOOGLE_LOG_DFATAL COMPACT_GOOGLE_LOG_EX_DFATAL(LogMessage)
+#define COMPACT_GOOGLE_LOG_DCHECK COMPACT_GOOGLE_LOG_EX_DCHECK(LogMessage)
 
 #if defined(OS_WIN)
 // wingdi.h defines ERROR to be 0. When we call LOG(ERROR), it gets
@@ -596,7 +600,13 @@ class CheckOpResult {
 #define CHECK(condition) \
   UNLIKELY(!(condition)) ? IMMEDIATE_CRASH() : EAT_STREAM_PARAMETERS
 
-#define PCHECK(condition) CHECK(condition)
+// PCHECK includes the system error code, which is useful for determining
+// why the condition failed. In official builds, preserve only the error code
+// message so that it is available in crash reports. The stringified
+// condition and any additional stream parameters are dropped.
+#define PCHECK(condition)                                  \
+  LAZY_STREAM(PLOG_STREAM(FATAL), UNLIKELY(!(condition))); \
+  EAT_STREAM_PARAMETERS
 
 #define CHECK_OP(name, op, val1, val2) CHECK((val1) op (val2))
 
@@ -805,18 +815,17 @@ DEFINE_CHECK_OP_IMPL(GT, > )
 
 #if DCHECK_IS_ON()
 
-#define COMPACT_GOOGLE_LOG_EX_DCHECK(ClassName, ...) \
-  COMPACT_GOOGLE_LOG_EX_FATAL(ClassName , ##__VA_ARGS__)
-#define COMPACT_GOOGLE_LOG_DCHECK COMPACT_GOOGLE_LOG_FATAL
+#if defined(SYZYASAN)
+BASE_EXPORT extern LogSeverity LOG_DCHECK;
+#else
 const LogSeverity LOG_DCHECK = LOG_FATAL;
+#endif
 
 #else  // DCHECK_IS_ON()
 
-// These are just dummy values.
-#define COMPACT_GOOGLE_LOG_EX_DCHECK(ClassName, ...) \
-  COMPACT_GOOGLE_LOG_EX_INFO(ClassName , ##__VA_ARGS__)
-#define COMPACT_GOOGLE_LOG_DCHECK COMPACT_GOOGLE_LOG_INFO
-const LogSeverity LOG_DCHECK = LOG_INFO;
+// There may be users of LOG_DCHECK that are enabled independently
+// of DCHECK_IS_ON(), so default to FATAL logging for those.
+const LogSeverity LOG_DCHECK = LOG_FATAL;
 
 #endif  // DCHECK_IS_ON()
 

@@ -14,7 +14,7 @@ namespace {
 void MarkUsedAllValues(const FunctionCallNode* function,
                        Scope* source,
                        const std::set<std::string>& exclusion_set) {
-  source->MarkAllUsedExcept(exclusion_set);
+  source->MarkAllUsed(exclusion_set);
 }
 
 void MarkUsedFromList(Scope* source,

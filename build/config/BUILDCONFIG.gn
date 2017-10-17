@@ -220,7 +220,7 @@ if (host_toolchain == "") {
     # On Windows always use the target CPU for host builds. On the
     # configurations we support this will always work and it saves build steps.
     if (is_clang) {
-      host_toolchain = "//build/toolchain/win:clang_$target_cpu"
+      host_toolchain = "//build/toolchain/win:win_clang_$target_cpu"
     } else {
       host_toolchain = "//build/toolchain/win:$target_cpu"
     }
@@ -257,9 +257,11 @@ if (target_os == "android") {
   _default_toolchain = host_toolchain
 } else if (target_os == "win") {
   # On Windows we use the same toolchain for host and target by default.
-  assert(target_os == host_os, "Win cross-compiles only work on win hosts.")
+  # Beware, win cross builds mostly don't work yet, see docs/win_cross.md
+  # TODO(thakis): Allow on Mac as well soon.
+  assert(host_os != "mac", "https://crbug.com/774209")
   if (is_clang) {
-    _default_toolchain = "//build/toolchain/win:clang_$target_cpu"
+    _default_toolchain = "//build/toolchain/win:win_clang_$target_cpu"
   } else {
     _default_toolchain = "//build/toolchain/win:$target_cpu"
   }
@@ -515,13 +517,20 @@ set_sources_assignment_filter(sources_assignment_filter)
 # The values configured here will be automatically set on the scope of the
 # corresponding target. Target definitions can add or remove to the settings
 # here as needed.
+#
+# WHAT GOES HERE?
+#
+# Other than the main compiler and linker configs, the only reason for a config
+# to be in this list is if some targets need to explicitly override that config
+# by removing it. This is how targets opt-out of flags. If you don't have that
+# requirement and just need to add a config everywhere, reference it as a
+# sub-config of an existing one, most commonly the main "compiler" one.
 
 # Holds all configs used for running the compiler.
 default_compiler_configs = [
   "//build/config:feature_flags",
   "//build/config/compiler:afdo",
   "//build/config/compiler:compiler",
-  "//build/config/compiler:pthread",
   "//build/config/compiler:clang_stackrealign",
   "//build/config/compiler:compiler_arm_fpu",
   "//build/config/compiler:compiler_arm_thumb",
@@ -532,6 +541,7 @@ default_compiler_configs = [
   "//build/config/compiler:default_symbols",
   "//build/config/compiler:no_rtti",
   "//build/config/compiler:runtime_library",
+  "//build/config/coverage:default_coverage",
   "//build/config/sanitizers:default_sanitizer_flags",
 ]
 if (is_win) {

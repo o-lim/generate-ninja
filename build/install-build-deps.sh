@@ -112,7 +112,7 @@ fi
 
 distro_codename=$(lsb_release --codename --short)
 distro_id=$(lsb_release --id --short)
-supported_codenames="(trusty|xenial|yakkety)"
+supported_codenames="(trusty|xenial|yakkety|zesty)"
 supported_ids="(Debian)"
 if [ 0 -eq "${do_unsupported-0}" ] && [ 0 -eq "${do_quick_check-0}" ] ; then
   if [[ ! $distro_codename =~ $supported_codenames &&
@@ -121,6 +121,7 @@ if [ 0 -eq "${do_unsupported-0}" ] && [ 0 -eq "${do_quick_check-0}" ] ; then
       "\tUbuntu 14.04 (trusty)\n" \
       "\tUbuntu 16.04 (xenial)\n" \
       "\tUbuntu 16.10 (yakkety)\n" \
+      "\tUbuntu 17.04 (zesty)\n" \
       "\tDebian 8 (jessie) or later" >&2
     exit 1
   fi
@@ -164,6 +165,7 @@ dev_list="\
   libcap-dev
   libcups2-dev
   libcurl4-gnutls-dev
+  libdconf-dev
   libdrm-dev
   libelf-dev
   libffi-dev
@@ -189,6 +191,7 @@ dev_list="\
   libxss-dev
   libxt-dev
   libxtst-dev
+  locales
   openbox
   patch
   perl
@@ -207,6 +210,7 @@ dev_list="\
   subversion
   ttf-dejavu-core
   wdiff
+  x11-utils
   xcompmgr
   zip
   $chromeos_dev_list
@@ -229,6 +233,7 @@ lib_list="\
   libcairo2
   libcap2
   libcups2
+  libdconf1
   libexpat1
   libffi6
   libfontconfig1
@@ -307,7 +312,7 @@ else
 fi
 
 # 32-bit libraries needed e.g. to compile V8 snapshot for Android or armhf
-lib32_list="linux-libc-dev:i386"
+lib32_list="linux-libc-dev:i386 libpci3:i386"
 
 # arm cross toolchain packages needed to build chrome on armhf
 EM_REPO="deb http://emdebian.org/tools/debian/ jessie main"
@@ -359,7 +364,7 @@ case $distro_codename in
     arm_list+=" g++-4.8-multilib-arm-linux-gnueabihf
                 gcc-4.8-multilib-arm-linux-gnueabihf"
     ;;
-  xenial|yakkety)
+  xenial|yakkety|zesty)
     arm_list+=" g++-5-multilib-arm-linux-gnueabihf
                 gcc-5-multilib-arm-linux-gnueabihf
                 gcc-arm-linux-gnueabihf"
@@ -374,6 +379,7 @@ nacl_list="\
   libasound2:i386
   libcap2:i386
   libelf-dev:i386
+  libdconf1:i386
   libfontconfig1:i386
   libgconf-2-4:i386
   libglib2.0-0:i386
@@ -486,14 +492,6 @@ if package_exists ttf-mscorefonts-installer; then
 elif package_exists msttcorefonts; then
   dev_list="${dev_list} msttcorefonts"
 fi
-# Ubuntu 16.04 has this package deleted.
-if package_exists ttf-kochi-gothic; then
-  dev_list="${dev_list} ttf-kochi-gothic"
-fi
-# Ubuntu 16.04 has this package deleted.
-if package_exists ttf-kochi-mincho; then
-  dev_list="${dev_list} ttf-kochi-mincho"
-fi
 
 # Some packages are only needed if the distribution actually supports
 # installing them.
@@ -601,9 +599,6 @@ fi
 
 if test "$do_inst_lib32" = "1" || test "$do_inst_nacl" = "1"; then
   sudo dpkg --add-architecture i386
-  if [[ $distro_id == "Debian" ]]; then
-      sudo dpkg --add-architecture armhf
-  fi
 fi
 sudo apt-get update
 

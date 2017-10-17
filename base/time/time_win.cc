@@ -95,6 +95,15 @@ const int kMinTimerIntervalLowResMs = 4;
 bool g_high_res_timer_enabled = false;
 // How many times the high resolution timer has been called.
 uint32_t g_high_res_timer_count = 0;
+// Start time of the high resolution timer usage monitoring. This is needed
+// to calculate the usage as percentage of the total elapsed time.
+TimeTicks g_high_res_timer_usage_start;
+// The cumulative time the high resolution timer has been in use since
+// |g_high_res_timer_usage_start| moment.
+TimeDelta g_high_res_timer_usage;
+// Timestamp of the last activation change of the high resolution timer. This
+// is used to calculate the cumulative usage.
+TimeTicks g_high_res_timer_last_activation;
 // The lock to control access to the above two variables.
 base::Lock* GetHighResLock() {
   static auto* lock = new base::Lock();
@@ -120,13 +129,6 @@ bool SafeConvertToWord(int in, WORD* out) {
 }  // namespace
 
 // Time -----------------------------------------------------------------------
-
-// The internal representation of Time uses FILETIME, whose epoch is 1601-01-01
-// 00:00:00 UTC.  ((1970-1601)*365+89)*24*60*60*1000*1000, where 89 is the
-// number of leap year days between 1601 and 1970: (1970-1601)/4 excluding
-// 1700, 1800, and 1900.
-// static
-const int64_t Time::kTimeTToMicrosecondsOffset = INT64_C(11644473600000000);
 
 // static
 Time Time::Now() {
@@ -225,13 +227,18 @@ bool Time::ActivateHighResolutionTimer(bool activating) {
   if (activating) {
     DCHECK_NE(g_high_res_timer_count, max);
     ++g_high_res_timer_count;
-    if (g_high_res_timer_count == 1)
+    if (g_high_res_timer_count == 1) {
+      g_high_res_timer_last_activation = TimeTicks::Now();
       timeBeginPeriod(period);
+    }
   } else {
     DCHECK_NE(g_high_res_timer_count, 0u);
     --g_high_res_timer_count;
-    if (g_high_res_timer_count == 0)
+    if (g_high_res_timer_count == 0) {
+      g_high_res_timer_usage +=
+          TimeTicks::Now() - g_high_res_timer_last_activation;
       timeEndPeriod(period);
+    }
   }
   return (period == kMinTimerIntervalHighResMs);
 }
@@ -240,6 +247,35 @@ bool Time::ActivateHighResolutionTimer(bool activating) {
 bool Time::IsHighResolutionTimerInUse() {
   base::AutoLock lock(*GetHighResLock());
   return g_high_res_timer_enabled && g_high_res_timer_count > 0;
+}
+
+// static
+void Time::ResetHighResolutionTimerUsage() {
+  base::AutoLock lock(*GetHighResLock());
+  g_high_res_timer_usage = TimeDelta();
+  g_high_res_timer_usage_start = TimeTicks::Now();
+  if (g_high_res_timer_count > 0)
+    g_high_res_timer_last_activation = g_high_res_timer_usage_start;
+}
+
+// static
+double Time::GetHighResolutionTimerUsage() {
+  base::AutoLock lock(*GetHighResLock());
+  TimeTicks now = TimeTicks::Now();
+  TimeDelta elapsed_time = now - g_high_res_timer_usage_start;
+  if (elapsed_time.is_zero()) {
+    // This is unexpected but possible if TimeTicks resolution is low and
+    // GetHighResolutionTimerUsage() is called promptly after
+    // ResetHighResolutionTimerUsage().
+    return 0.0;
+  }
+  TimeDelta used_time = g_high_res_timer_usage;
+  if (g_high_res_timer_count > 0) {
+    // If currently activated add the remainder of time since the last
+    // activation.
+    used_time += now - g_high_res_timer_last_activation;
+  }
+  return used_time.InMillisecondsF() / elapsed_time.InMillisecondsF() * 100;
 }
 
 // static

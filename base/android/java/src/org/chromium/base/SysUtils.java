@@ -4,6 +4,7 @@
 
 package org.chromium.base;
 
+import android.app.ActivityManager;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.Build;
@@ -11,6 +12,7 @@ import android.os.StrictMode;
 import android.util.Log;
 
 import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
@@ -20,6 +22,7 @@ import java.util.regex.Pattern;
 /**
  * Exposes system related information about the current device.
  */
+@JNINamespace("base::android")
 public class SysUtils {
     // A device reporting strictly more total memory in megabytes cannot be considered 'low-end'.
     private static final int ANDROID_LOW_MEMORY_DEVICE_THRESHOLD_MB = 512;
@@ -104,6 +107,19 @@ public class SysUtils {
     }
 
     /**
+     * @return Whether or not the system has low available memory.
+     */
+    @CalledByNative
+    private static boolean isCurrentlyLowMemory() {
+        ActivityManager am =
+                (ActivityManager) ContextUtils.getApplicationContext().getSystemService(
+                        Context.ACTIVITY_SERVICE);
+        ActivityManager.MemoryInfo info = new ActivityManager.MemoryInfo();
+        am.getMemoryInfo(info);
+        return info.lowMemory;
+    }
+
+    /**
      * Resets the cached value, if any.
      */
     @VisibleForTesting
@@ -138,4 +154,14 @@ public class SysUtils {
         }
         return ramSizeKB / 1024 <= ANDROID_LOW_MEMORY_DEVICE_THRESHOLD_MB;
     }
+
+    /**
+     * Creates a new trace event to log the number of minor / major page faults, if tracing is
+     * enabled.
+     */
+    public static void logPageFaultCountToTracing() {
+        nativeLogPageFaultCountToTracing();
+    }
+
+    private static native void nativeLogPageFaultCountToTracing();
 }

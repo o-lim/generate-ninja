@@ -144,8 +144,8 @@ File name handling
 R"(
 Variables
 
-  args, command, console, data, data_deps, depfile, deps, description,
-  inputs, interpreter, outputs*, response_file_contents, script, sources
+  args, command, data, data_deps, depfile, deps, description, inputs,
+  interpreter, outputs*, pool, response_file_contents, script, sources
   * = required
 
 Example
@@ -222,8 +222,8 @@ File name handling
 R"(
 Variables
 
-  args, command, console, data, data_deps, depfile, deps, description,
-  inputs, interpreter, outputs*, response_file_contents, script, sources
+  args, command, data, data_deps, depfile, deps, description, inputs,
+  interpreter, outputs*, pool, response_file_contents, script, sources
   * = required
 
 Example
@@ -266,9 +266,9 @@ Value RunActionForEach(Scope* scope,
 
 const char kBundleData[] = "bundle_data";
 const char kBundleData_HelpShort[] =
-    "bundle_data: [iOS/OS X] Declare a target without output.";
+    "bundle_data: [iOS/macOS] Declare a target without output.";
 const char kBundleData_Help[] =
-    R"(bundle_data: [iOS/OS X] Declare a target without output.
+    R"(bundle_data: [iOS/macOS] Declare a target without output.
 
   This target type allows to declare data that is required at runtime. It is
   used to inform "create_bundle" targets of the files to copy into generated
@@ -279,8 +279,8 @@ const char kBundleData_Help[] =
   output. The output must reference a file inside of {{bundle_root_dir}}.
 
   This target can be used on all platforms though it is designed only to
-  generate iOS/OS X bundle. In cross-platform projects, it is advised to put it
-  behind iOS/Mac conditionals.
+  generate iOS/macOS bundle. In cross-platform projects, it is advised to put it
+  behind iOS/macOS conditionals.
 
   See "gn help create_bundle" for more information.
 
@@ -331,11 +331,11 @@ Value RunBundleData(Scope* scope,
 
 const char kCreateBundle[] = "create_bundle";
 const char kCreateBundle_HelpShort[] =
-    "create_bundle: [iOS/OS X] Build an OS X / iOS bundle.";
+    "create_bundle: [iOS/macOS] Build an iOS or macOS bundle.";
 const char kCreateBundle_Help[] =
-    R"(create_bundle: [iOS/OS X] Build an OS X / iOS bundle.
+    R"(create_bundle: [ios/macOS] Build an iOS or macOS bundle.
 
-  This target generates an iOS/OS X bundle (which is a directory with a
+  This target generates an iOS or macOS bundle (which is a directory with a
   well-know structure). This target does not define any sources, instead they
   are computed from all "bundle_data" target this one depends on transitively
   (the recursion stops at "create_bundle" targets).
@@ -344,8 +344,8 @@ const char kCreateBundle_Help[] =
   expansion of {{bundle_*_dir}} rules in "bundle_data" outputs.
 
   This target can be used on all platforms though it is designed only to
-  generate iOS/OS X bundle. In cross-platform projects, it is advised to put it
-  behind iOS/Mac conditionals.
+  generate iOS or macOS bundle. In cross-platform projects, it is advised to put
+  it behind iOS/macOS conditionals.
 
   If a create_bundle is specified as a data_deps for another target, the bundle
   is considered a leaf, and its public and private dependencies will not
@@ -371,16 +371,17 @@ Code signing
 
 Variables
 
-  bundle_root_dir*, bundle_resources_dir*, bundle_executable_dir*,
-  bundle_plugins_dir*, bundle_deps_filter, deps, data_deps, public_deps,
-  visibility, product_type, code_signing_args, code_signing_script,
-  code_signing_sources, code_signing_outputs
+  bundle_root_dir*, bundle_contents_dir*, bundle_resources_dir*,
+  bundle_executable_dir*, bundle_plugins_dir*, bundle_deps_filter, deps,
+  data_deps, public_deps, visibility, product_type, code_signing_args,
+  code_signing_script, code_signing_sources, code_signing_outputs,
+  xcode_extra_attributes, xcode_test_application_name, partial_info_plist
   * = required
 
 Example
 
   # Defines a template to create an application. On most platform, this is just
-  # an alias for an "executable" target, but on iOS/OS X, it builds an
+  # an alias for an "executable" target, but on iOS/macOS, it builds an
   # application bundle.
   template("app") {
     if (!is_ios && !is_mac) {
@@ -402,7 +403,7 @@ Example
       bundle_data("${app_name}_bundle_info_plist") {
         deps = [ ":${app_name}_generate_info_plist" ]
         sources = [ "$gen_path/Info.plist" ]
-        outputs = [ "{{bundle_root_dir}}/Info.plist" ]
+        outputs = [ "{{bundle_contents_dir}}/Info.plist" ]
       }
 
       executable("${app_name}_generate_executable") {
@@ -427,16 +428,24 @@ Example
 
       create_bundle("${app_name}.app") {
         product_type = "com.apple.product-type.application"
+
         if (is_ios) {
           bundle_root_dir = "${root_build_dir}/$target_name"
-          bundle_resources_dir = bundle_root_dir
-          bundle_executable_dir = bundle_root_dir
-          bundle_plugins_dir = bundle_root_dir + "/Plugins"
+          bundle_contents_dir = bundle_root_dir
+          bundle_resources_dir = bundle_contents_dir
+          bundle_executable_dir = bundle_contents_dir
+          bundle_plugins_dir = "${bundle_contents_dir}/Plugins"
+
+          extra_attributes = {
+            ONLY_ACTIVE_ARCH = "YES"
+            DEBUG_INFORMATION_FORMAT = "dwarf"
+          }
         } else {
-          bundle_root_dir = "${root_build_dir}/target_name/Contents"
-          bundle_resources_dir = bundle_root_dir + "/Resources"
-          bundle_executable_dir = bundle_root_dir + "/MacOS"
-          bundle_plugins_dir = bundle_root_dir + "/Plugins"
+          bundle_root_dir = "${root_build_dir}/target_name"
+          bundle_contents_dir  = "${bundle_root_dir}/Contents"
+          bundle_resources_dir = "${bundle_contents_dir}/Resources"
+          bundle_executable_dir = "${bundle_contents_dir}/MacOS"
+          bundle_plugins_dir = "${bundle_contents_dir}/Plugins"
         }
         deps = [ ":${app_name}_bundle_info_plist" ]
         if (is_ios && code_signing) {

@@ -152,8 +152,7 @@ void ExpectProcessedEvents(EventInjector* injector, int count) {
 }
 
 // Posts a task on the current message loop.
-void PostMessageLoopTask(const tracked_objects::Location& from_here,
-                         OnceClosure task) {
+void PostMessageLoopTask(const Location& from_here, OnceClosure task) {
   ThreadTaskRunnerHandle::Get()->PostTask(from_here, std::move(task));
 }
 
@@ -309,7 +308,7 @@ class ConcurrentHelper : public RefCounted<ConcurrentHelper>  {
       --task_count_;
     }
     if (task_count_ == 0 && event_count_ == 0) {
-        MessageLoop::current()->QuitWhenIdle();
+      RunLoop::QuitCurrentWhenIdleDeprecated();
     } else {
       ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, BindOnce(&ConcurrentHelper::FromTask, this));
@@ -321,7 +320,7 @@ class ConcurrentHelper : public RefCounted<ConcurrentHelper>  {
       --event_count_;
     }
     if (task_count_ == 0 && event_count_ == 0) {
-        MessageLoop::current()->QuitWhenIdle();
+      RunLoop::QuitCurrentWhenIdleDeprecated();
     } else {
       injector_->AddEventAsTask(0,
                                 BindOnce(&ConcurrentHelper::FromEvent, this));
@@ -465,7 +464,7 @@ void TestGLibLoopInternal(EventInjector* injector) {
 
   ASSERT_EQ(3, task_count);
   EXPECT_EQ(4, injector->processed_events());
-  MessageLoop::current()->QuitWhenIdle();
+  RunLoop::QuitCurrentWhenIdleDeprecated();
 }
 
 void TestGtkLoopInternal(EventInjector* injector) {
@@ -498,7 +497,7 @@ void TestGtkLoopInternal(EventInjector* injector) {
 
   ASSERT_EQ(3, task_count);
   EXPECT_EQ(4, injector->processed_events());
-  MessageLoop::current()->QuitWhenIdle();
+  RunLoop::QuitCurrentWhenIdleDeprecated();
 }
 
 }  // namespace

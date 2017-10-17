@@ -701,8 +701,7 @@ TEST(NinjaBinaryTargetWriter, WinPrecompiledHeaders) {
 
   // This target specifies PCH.
   {
-    Target pch_target(&pch_settings,
-                      Label(SourceDir("//foo/"), "pch_target"));
+    Target pch_target(&pch_settings, Label(SourceDir("//foo/"), "pch_target"));
     pch_target.config_values().set_precompiled_header("build/precompile.h");
     pch_target.config_values().set_precompiled_source(
         SourceFile("//build/precompile.cc"));
@@ -842,8 +841,7 @@ TEST(NinjaBinaryTargetWriter, GCCPrecompiledHeaders) {
 
   // This target specifies PCH.
   {
-    Target pch_target(&pch_settings,
-                      Label(SourceDir("//foo/"), "pch_target"));
+    Target pch_target(&pch_settings, Label(SourceDir("//foo/"), "pch_target"));
     pch_target.config_values().set_precompiled_source(
         SourceFile("//build/precompile.h"));
     pch_target.config_values().cflags_c().push_back("-std=c99");

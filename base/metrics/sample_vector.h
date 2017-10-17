@@ -29,7 +29,6 @@ class BucketRanges;
 
 class BASE_EXPORT SampleVectorBase : public HistogramSamples {
  public:
-  SampleVectorBase(uint64_t id, const BucketRanges* bucket_ranges);
   SampleVectorBase(uint64_t id,
                    Metadata* meta,
                    const BucketRanges* bucket_ranges);
@@ -44,6 +43,9 @@ class BASE_EXPORT SampleVectorBase : public HistogramSamples {
 
   // Get count of a specific bucket.
   HistogramBase::Count GetCountAtIndex(size_t bucket_index) const;
+
+  // Access the bucket ranges held externally.
+  const BucketRanges* bucket_ranges() const { return bucket_ranges_; }
 
  protected:
   bool AddSubtractImpl(

@@ -5,9 +5,11 @@
 #include "base/run_loop.h"
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/lazy_instance.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/thread_local.h"
-#include "base/tracked_objects.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 
 namespace base {
@@ -16,6 +18,17 @@ namespace {
 
 LazyInstance<ThreadLocalPointer<RunLoop::Delegate>>::Leaky tls_delegate =
     LAZY_INSTANCE_INITIALIZER;
+
+// Runs |closure| immediately if this is called on |task_runner|, otherwise
+// forwards |closure| to it.
+void ProxyToTaskRunner(scoped_refptr<SequencedTaskRunner> task_runner,
+                       OnceClosure closure) {
+  if (task_runner->RunsTasksInCurrentSequence()) {
+    std::move(closure).Run();
+    return;
+  }
+  task_runner->PostTask(FROM_HERE, std::move(closure));
+}
 
 }  // namespace
 
@@ -34,11 +47,10 @@ RunLoop::Delegate::~Delegate() {
     tls_delegate.Get().Set(nullptr);
 }
 
-RunLoop* RunLoop::Delegate::Client::GetTopMostRunLoop() const {
+bool RunLoop::Delegate::Client::ShouldQuitWhenIdle() const {
   DCHECK_CALLED_ON_VALID_THREAD(outer_->bound_thread_checker_);
   DCHECK(outer_->bound_);
-  return outer_->active_run_loops_.empty() ? nullptr
-                                           : outer_->active_run_loops_.top();
+  return outer_->active_run_loops_.top()->quit_when_idle_received_;
 }
 
 bool RunLoop::Delegate::Client::IsNested() const {
@@ -47,8 +59,17 @@ bool RunLoop::Delegate::Client::IsNested() const {
   return outer_->active_run_loops_.size() > 1;
 }
 
+bool RunLoop::Delegate::Client::ProcessingTasksAllowed() const {
+  DCHECK_CALLED_ON_VALID_THREAD(outer_->bound_thread_checker_);
+  DCHECK(outer_->bound_);
+  DCHECK(!outer_->active_run_loops_.empty());
+  return outer_->active_run_loops_.size() == 1U ||
+         outer_->active_run_loops_.top()->type_ == Type::kNestableTasksAllowed;
+}
+
 RunLoop::Delegate::Client::Client(Delegate* outer) : outer_(outer) {}
 
+// static
 RunLoop::Delegate::Client* RunLoop::RegisterDelegateForCurrentThread(
     Delegate* delegate) {
   // Bind |delegate| to this thread.
@@ -63,9 +84,17 @@ RunLoop::Delegate::Client* RunLoop::RegisterDelegateForCurrentThread(
   return &delegate->client_interface_;
 }
 
-RunLoop::RunLoop() : delegate_(tls_delegate.Get().Get()), weak_factory_(this) {
-  // A RunLoop::Delegate must be bound to this thread prior to using RunLoop.
-  DCHECK(delegate_);
+RunLoop::RunLoop(Type type)
+    : delegate_(tls_delegate.Get().Get()),
+      type_(type),
+      origin_task_runner_(ThreadTaskRunnerHandle::Get()),
+      weak_factory_(this) {
+  DCHECK(delegate_) << "A RunLoop::Delegate must be bound to this thread prior "
+                       "to using RunLoop.";
+  DCHECK(origin_task_runner_);
+
+  DCHECK(IsNestingAllowedOnCurrentThread() ||
+         type_ != Type::kNestableTasksAllowed);
 }
 
 RunLoop::~RunLoop() {
@@ -86,12 +115,7 @@ void RunLoop::Run() {
   // multiple sequences is still disallowed).
   DETACH_FROM_SEQUENCE(sequence_checker_);
 
-  // Use task stopwatch to exclude the loop run time from the current task, if
-  // any.
-  tracked_objects::TaskStopwatch stopwatch;
-  stopwatch.Start();
   delegate_->Run();
-  stopwatch.Stop();
 
   // Rebind this RunLoop to the current thread after Run().
   DETACH_FROM_SEQUENCE(sequence_checker_);
@@ -108,7 +132,16 @@ void RunLoop::RunUntilIdle() {
 }
 
 void RunLoop::Quit() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // Thread-safe.
+
+  // This can only be hit if run_loop->Quit() is called directly (QuitClosure()
+  // proxies through ProxyToTaskRunner() as it can only deref its WeakPtr on
+  // |origin_task_runner_|).
+  if (!origin_task_runner_->RunsTasksInCurrentSequence()) {
+    origin_task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&RunLoop::Quit, Unretained(this)));
+    return;
+  }
 
   quit_called_ = true;
   if (running_ && delegate_->active_run_loops_.top() == this) {
@@ -118,20 +151,41 @@ void RunLoop::Quit() {
 }
 
 void RunLoop::QuitWhenIdle() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // Thread-safe.
+
+  // This can only be hit if run_loop->QuitWhenIdle() is called directly
+  // (QuitWhenIdleClosure() proxies through ProxyToTaskRunner() as it can only
+  // deref its WeakPtr on |origin_task_runner_|).
+  if (!origin_task_runner_->RunsTasksInCurrentSequence()) {
+    origin_task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&RunLoop::QuitWhenIdle, Unretained(this)));
+    return;
+  }
+
   quit_when_idle_received_ = true;
 }
 
 base::Closure RunLoop::QuitClosure() {
   // TODO(gab): Fix bad usage and enable this check, http://crbug.com/715235.
   // DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return base::Bind(&RunLoop::Quit, weak_factory_.GetWeakPtr());
+
+  // Need to use ProxyToTaskRunner() as WeakPtrs vended from
+  // |weak_factory_| may only be accessed on |origin_task_runner_|.
+  // TODO(gab): It feels wrong that QuitClosure() is bound to a WeakPtr.
+  return base::Bind(&ProxyToTaskRunner, origin_task_runner_,
+                    base::Bind(&RunLoop::Quit, weak_factory_.GetWeakPtr()));
 }
 
 base::Closure RunLoop::QuitWhenIdleClosure() {
   // TODO(gab): Fix bad usage and enable this check, http://crbug.com/715235.
   // DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return base::Bind(&RunLoop::QuitWhenIdle, weak_factory_.GetWeakPtr());
+
+  // Need to use ProxyToTaskRunner() as WeakPtrs vended from
+  // |weak_factory_| may only be accessed on |origin_task_runner_|.
+  // TODO(gab): It feels wrong that QuitWhenIdleClosure() is bound to a WeakPtr.
+  return base::Bind(
+      &ProxyToTaskRunner, origin_task_runner_,
+      base::Bind(&RunLoop::QuitWhenIdle, weak_factory_.GetWeakPtr()));
 }
 
 // static
@@ -172,11 +226,55 @@ void RunLoop::DisallowNestingOnCurrentThread() {
   tls_delegate.Get().Get()->allow_nesting_ = false;
 }
 
+// static
+void RunLoop::QuitCurrentDeprecated() {
+  DCHECK(IsRunningOnCurrentThread());
+  tls_delegate.Get().Get()->active_run_loops_.top()->Quit();
+}
+
+// static
+void RunLoop::QuitCurrentWhenIdleDeprecated() {
+  DCHECK(IsRunningOnCurrentThread());
+  tls_delegate.Get().Get()->active_run_loops_.top()->QuitWhenIdle();
+}
+
+#if DCHECK_IS_ON()
+RunLoop::ScopedDisallowRunningForTesting::ScopedDisallowRunningForTesting()
+    : current_delegate_(tls_delegate.Get().Get()),
+      previous_run_allowance_(
+          current_delegate_ ? current_delegate_->allow_running_for_testing_
+                            : false) {
+  if (current_delegate_)
+    current_delegate_->allow_running_for_testing_ = false;
+}
+
+RunLoop::ScopedDisallowRunningForTesting::~ScopedDisallowRunningForTesting() {
+  DCHECK_EQ(current_delegate_, tls_delegate.Get().Get());
+  if (current_delegate_)
+    current_delegate_->allow_running_for_testing_ = previous_run_allowance_;
+}
+#else   // DCHECK_IS_ON()
+// Defined out of line so that the compiler doesn't inline these and realize
+// the scope has no effect and then throws an "unused variable" warning in
+// non-dcheck builds.
+RunLoop::ScopedDisallowRunningForTesting::ScopedDisallowRunningForTesting() =
+    default;
+RunLoop::ScopedDisallowRunningForTesting::~ScopedDisallowRunningForTesting() =
+    default;
+#endif  // DCHECK_IS_ON()
+
 bool RunLoop::BeforeRun() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
+#if DCHECK_IS_ON()
+  DCHECK(delegate_->allow_running_for_testing_)
+      << "RunLoop::Run() isn't allowed in the scope of a "
+         "ScopedDisallowRunningForTesting. Hint: if mixing "
+         "TestMockTimeTaskRunners on same thread, use TestMockTimeTaskRunner's "
+         "API instead of RunLoop to drive individual task runners.";
   DCHECK(!run_called_);
   run_called_ = true;
+#endif  // DCHECK_IS_ON()
 
   // Allow Quit to be called before Run.
   if (quit_called_)
@@ -191,6 +289,8 @@ bool RunLoop::BeforeRun() {
     CHECK(delegate_->allow_nesting_);
     for (auto& observer : delegate_->nesting_observers_)
       observer.OnBeginNestedRunLoop();
+    if (type_ == Type::kNestableTasksAllowed)
+      delegate_->EnsureWorkScheduled();
   }
 
   running_ = true;
@@ -209,7 +309,7 @@ void RunLoop::AfterRun() {
   RunLoop* previous_run_loop =
       active_run_loops_.empty() ? nullptr : active_run_loops_.top();
 
-  // Execute deferred QuitNow, if any:
+  // Execute deferred Quit, if any:
   if (previous_run_loop && previous_run_loop->quit_called_)
     delegate_->Quit();
 }

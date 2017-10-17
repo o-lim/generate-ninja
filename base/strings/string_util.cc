@@ -245,50 +245,37 @@ const string16& EmptyString16() {
   return EmptyStrings::GetInstance()->s16;
 }
 
-template<typename STR>
-bool ReplaceCharsT(const STR& input,
-                   const STR& replace_chars,
-                   const STR& replace_with,
-                   STR* output) {
-  bool removed = false;
-  size_t replace_length = replace_with.length();
-
-  *output = input;
-
-  size_t found = output->find_first_of(replace_chars);
-  while (found != STR::npos) {
-    removed = true;
-    output->replace(found, 1, replace_with);
-    found = output->find_first_of(replace_chars, found + replace_length);
-  }
-
-  return removed;
-}
+template <class StringType>
+bool ReplaceCharsT(const StringType& input,
+                   BasicStringPiece<StringType> find_any_of_these,
+                   BasicStringPiece<StringType> replace_with,
+                   StringType* output);
 
 bool ReplaceChars(const string16& input,
                   const StringPiece16& replace_chars,
                   const string16& replace_with,
                   string16* output) {
-  return ReplaceCharsT(input, replace_chars.as_string(), replace_with, output);
+  return ReplaceCharsT(input, replace_chars, StringPiece16(replace_with),
+                       output);
 }
 
 bool ReplaceChars(const std::string& input,
                   const StringPiece& replace_chars,
                   const std::string& replace_with,
                   std::string* output) {
-  return ReplaceCharsT(input, replace_chars.as_string(), replace_with, output);
+  return ReplaceCharsT(input, replace_chars, StringPiece(replace_with), output);
 }
 
 bool RemoveChars(const string16& input,
                  const StringPiece16& remove_chars,
                  string16* output) {
-  return ReplaceChars(input, remove_chars.as_string(), string16(), output);
+  return ReplaceCharsT(input, remove_chars, StringPiece16(), output);
 }
 
 bool RemoveChars(const std::string& input,
                  const StringPiece& remove_chars,
                  std::string* output) {
-  return ReplaceChars(input, remove_chars.as_string(), std::string(), output);
+  return ReplaceCharsT(input, remove_chars, StringPiece(), output);
 }
 
 template<typename Str>
@@ -711,144 +698,227 @@ string16 FormatBytesUnlocalized(int64_t bytes) {
   return ASCIIToUTF16(buf);
 }
 
-// Runs in O(n) time in the length of |str|.
-template<class StringType>
-void DoReplaceSubstringsAfterOffset(StringType* str,
-                                    size_t offset,
-                                    BasicStringPiece<StringType> find_this,
-                                    BasicStringPiece<StringType> replace_with,
-                                    bool replace_all) {
-  DCHECK(!find_this.empty());
+// A Matcher for DoReplaceMatchesAfterOffset() that matches substrings.
+template <class StringType>
+struct SubstringMatcher {
+  BasicStringPiece<StringType> find_this;
+
+  size_t Find(const StringType& input, size_t pos) {
+    return input.find(find_this.data(), pos, find_this.length());
+  }
+  size_t MatchSize() { return find_this.length(); }
+};
+
+// A Matcher for DoReplaceMatchesAfterOffset() that matches single characters.
+template <class StringType>
+struct CharacterMatcher {
+  BasicStringPiece<StringType> find_any_of_these;
+
+  size_t Find(const StringType& input, size_t pos) {
+    return input.find_first_of(find_any_of_these.data(), pos,
+                               find_any_of_these.length());
+  }
+  constexpr size_t MatchSize() { return 1; }
+};
+
+enum class ReplaceType { REPLACE_ALL, REPLACE_FIRST };
+
+// Runs in O(n) time in the length of |str|, and transforms the string without
+// reallocating when possible. Returns |true| if any matches were found.
+//
+// This is parameterized on a |Matcher| traits type, so that it can be the
+// implementation for both ReplaceChars() and ReplaceSubstringsAfterOffset().
+template <class StringType, class Matcher>
+bool DoReplaceMatchesAfterOffset(StringType* str,
+                                 size_t initial_offset,
+                                 Matcher matcher,
+                                 BasicStringPiece<StringType> replace_with,
+                                 ReplaceType replace_type) {
+  using CharTraits = typename StringType::traits_type;
+
+  const size_t find_length = matcher.MatchSize();
+  if (!find_length)
+    return false;
 
   // If the find string doesn't appear, there's nothing to do.
-  offset = str->find(find_this.data(), offset, find_this.size());
-  if (offset == StringType::npos)
-    return;
+  size_t first_match = matcher.Find(*str, initial_offset);
+  if (first_match == StringType::npos)
+    return false;
 
   // If we're only replacing one instance, there's no need to do anything
   // complicated.
-  size_t find_length = find_this.length();
-  if (!replace_all) {
-    str->replace(offset, find_length, replace_with.data(), replace_with.size());
-    return;
+  const size_t replace_length = replace_with.length();
+  if (replace_type == ReplaceType::REPLACE_FIRST) {
+    str->replace(first_match, find_length, replace_with.data(), replace_length);
+    return true;
   }
 
   // If the find and replace strings are the same length, we can simply use
   // replace() on each instance, and finish the entire operation in O(n) time.
-  size_t replace_length = replace_with.length();
   if (find_length == replace_length) {
-    do {
-      str->replace(offset, find_length,
-                   replace_with.data(), replace_with.size());
-      offset = str->find(find_this.data(), offset + replace_length,
-                         find_this.size());
-    } while (offset != StringType::npos);
-    return;
+    auto* buffer = &((*str)[0]);
+    for (size_t offset = first_match; offset != StringType::npos;
+         offset = matcher.Find(*str, offset + replace_length)) {
+      CharTraits::copy(buffer + offset, replace_with.data(), replace_length);
+    }
+    return true;
   }
 
   // Since the find and replace strings aren't the same length, a loop like the
   // one above would be O(n^2) in the worst case, as replace() will shift the
-  // entire remaining string each time.  We need to be more clever to keep
-  // things O(n).
+  // entire remaining string each time. We need to be more clever to keep things
+  // O(n).
   //
-  // If we're shortening the string, we can alternate replacements with shifting
-  // forward the intervening characters using memmove().
+  // When the string is being shortened, it's possible to just shift the matches
+  // down in one pass while finding, and truncate the length at the end of the
+  // search.
+  //
+  // If the string is being lengthened, more work is required. The strategy used
+  // here is to make two find() passes through the string. The first pass counts
+  // the number of matches to determine the new size. The second pass will
+  // either construct the new string into a new buffer (if the existing buffer
+  // lacked capacity), or else -- if there is room -- create a region of scratch
+  // space after |first_match| by shifting the tail of the string to a higher
+  // index, and doing in-place moves from the tail to lower indices thereafter.
   size_t str_length = str->length();
-  if (find_length > replace_length) {
-    size_t write_offset = offset;
-    do {
-      if (replace_length) {
-        str->replace(write_offset, replace_length,
-                     replace_with.data(), replace_with.size());
-        write_offset += replace_length;
-      }
-      size_t read_offset = offset + find_length;
-      offset = std::min(
-          str->find(find_this.data(), read_offset, find_this.size()),
-          str_length);
-      size_t length = offset - read_offset;
-      if (length) {
-        memmove(&(*str)[write_offset], &(*str)[read_offset],
-                length * sizeof(typename StringType::value_type));
-        write_offset += length;
-      }
-    } while (offset < str_length);
-    str->resize(write_offset);
-    return;
-  }
-
-  // We're lengthening the string.  We can use alternating replacements and
-  // memmove() calls like above, but we need to precalculate the final string
-  // length and then expand from back-to-front to avoid overwriting the string
-  // as we're reading it, needing to shift, or having to copy to a second string
-  // temporarily.
-  size_t first_match = offset;
-
-  // First, calculate the final length and resize the string.
-  size_t final_length = str_length;
-  size_t expansion = replace_length - find_length;
-  size_t current_match;
-  do {
-    final_length += expansion;
-    // Minor optimization: save this offset into |current_match|, so that on
-    // exit from the loop, |current_match| will point at the last instance of
-    // the find string, and we won't need to find() it again immediately.
-    current_match = offset;
-    offset = str->find(find_this.data(), offset + find_length,
-                       find_this.size());
-  } while (offset != StringType::npos);
-  str->resize(final_length);
-
-  // Now do the replacement loop, working backwards through the string.
-  for (size_t prev_match = str_length, write_offset = final_length; ;
-       current_match = str->rfind(find_this.data(), current_match - 1,
-                                  find_this.size())) {
-    size_t read_offset = current_match + find_length;
-    size_t length = prev_match - read_offset;
-    if (length) {
-      write_offset -= length;
-      memmove(&(*str)[write_offset], &(*str)[read_offset],
-              length * sizeof(typename StringType::value_type));
+  size_t expansion = 0;
+  if (replace_length > find_length) {
+    // This operation lengthens the string; determine the new length by counting
+    // matches.
+    const size_t expansion_per_match = (replace_length - find_length);
+    size_t num_matches = 0;
+    for (size_t match = first_match; match != StringType::npos;
+         match = matcher.Find(*str, match + find_length)) {
+      expansion += expansion_per_match;
+      ++num_matches;
     }
-    write_offset -= replace_length;
-    str->replace(write_offset, replace_length,
-                 replace_with.data(), replace_with.size());
-    if (current_match == first_match)
-      return;
-    prev_match = current_match;
+    const size_t final_length = str_length + expansion;
+
+    if (str->capacity() < final_length) {
+      // If we'd have to allocate a new buffer to grow the string, build the
+      // result directly into the new allocation via append().
+      StringType src(str->get_allocator());
+      str->swap(src);
+      str->reserve(final_length);
+
+      size_t pos = 0;
+      for (size_t match = first_match;; match = matcher.Find(src, pos)) {
+        str->append(src, pos, match - pos);
+        str->append(replace_with.data(), replace_length);
+        pos = match + find_length;
+
+        // A mid-loop test/break enables skipping the final Find() call; the
+        // number of matches is known, so don't search past the last one.
+        if (!--num_matches)
+          break;
+      }
+
+      // Handle substring after the final match.
+      str->append(src, pos, str_length - pos);
+      return true;
+    }
+
+    // Prepare for the copy/move loop below -- expand the string to its final
+    // size by shifting the data after the first match to the end of the resized
+    // string.
+    size_t shift_src = first_match + find_length;
+    size_t shift_dst = shift_src + expansion;
+
+    // Big |expansion| factors (relative to |str_length|) require padding up to
+    // |shift_dst|.
+    if (shift_dst > str_length)
+      str->resize(shift_dst);
+
+    str->replace(shift_dst, str_length - shift_src, *str, shift_src,
+                 str_length - shift_src);
+    str_length = final_length;
   }
+
+  // We can alternate replacement and move operations. This won't overwrite the
+  // unsearched region of the string so long as |write_offset| <= |read_offset|;
+  // that condition is always satisfied because:
+  //
+  //   (a) If the string is being shortened, |expansion| is zero and
+  //       |write_offset| grows slower than |read_offset|.
+  //
+  //   (b) If the string is being lengthened, |write_offset| grows faster than
+  //       |read_offset|, but |expansion| is big enough so that |write_offset|
+  //       will only catch up to |read_offset| at the point of the last match.
+  auto* buffer = &((*str)[0]);
+  size_t write_offset = first_match;
+  size_t read_offset = first_match + expansion;
+  do {
+    if (replace_length) {
+      CharTraits::copy(buffer + write_offset, replace_with.data(),
+                       replace_length);
+      write_offset += replace_length;
+    }
+    read_offset += find_length;
+
+    // min() clamps StringType::npos (the largest unsigned value) to str_length.
+    size_t match = std::min(matcher.Find(*str, read_offset), str_length);
+
+    size_t length = match - read_offset;
+    if (length) {
+      CharTraits::move(buffer + write_offset, buffer + read_offset, length);
+      write_offset += length;
+      read_offset += length;
+    }
+  } while (read_offset < str_length);
+
+  // If we're shortening the string, truncate it now.
+  str->resize(write_offset);
+  return true;
+}
+
+template <class StringType>
+bool ReplaceCharsT(const StringType& input,
+                   BasicStringPiece<StringType> find_any_of_these,
+                   BasicStringPiece<StringType> replace_with,
+                   StringType* output) {
+  // Commonly, this is called with output and input being the same string; in
+  // that case, this assignment is inexpensive.
+  *output = input;
+
+  return DoReplaceMatchesAfterOffset(
+      output, 0, CharacterMatcher<StringType>{find_any_of_these}, replace_with,
+      ReplaceType::REPLACE_ALL);
 }
 
 void ReplaceFirstSubstringAfterOffset(string16* str,
                                       size_t start_offset,
                                       StringPiece16 find_this,
                                       StringPiece16 replace_with) {
-  DoReplaceSubstringsAfterOffset<string16>(
-      str, start_offset, find_this, replace_with, false);  // Replace first.
+  DoReplaceMatchesAfterOffset(str, start_offset,
+                              SubstringMatcher<string16>{find_this},
+                              replace_with, ReplaceType::REPLACE_FIRST);
 }
 
 void ReplaceFirstSubstringAfterOffset(std::string* str,
                                       size_t start_offset,
                                       StringPiece find_this,
                                       StringPiece replace_with) {
-  DoReplaceSubstringsAfterOffset<std::string>(
-      str, start_offset, find_this, replace_with, false);  // Replace first.
+  DoReplaceMatchesAfterOffset(str, start_offset,
+                              SubstringMatcher<std::string>{find_this},
+                              replace_with, ReplaceType::REPLACE_FIRST);
 }
 
 void ReplaceSubstringsAfterOffset(string16* str,
                                   size_t start_offset,
                                   StringPiece16 find_this,
                                   StringPiece16 replace_with) {
-  DoReplaceSubstringsAfterOffset<string16>(
-      str, start_offset, find_this, replace_with, true);  // Replace all.
+  DoReplaceMatchesAfterOffset(str, start_offset,
+                              SubstringMatcher<string16>{find_this},
+                              replace_with, ReplaceType::REPLACE_ALL);
 }
 
 void ReplaceSubstringsAfterOffset(std::string* str,
                                   size_t start_offset,
                                   StringPiece find_this,
                                   StringPiece replace_with) {
-  DoReplaceSubstringsAfterOffset<std::string>(
-      str, start_offset, find_this, replace_with, true);  // Replace all.
+  DoReplaceMatchesAfterOffset(str, start_offset,
+                              SubstringMatcher<std::string>{find_this},
+                              replace_with, ReplaceType::REPLACE_ALL);
 }
 
 template <class string_type>
@@ -969,12 +1039,11 @@ OutStringType DoReplaceStringPlaceholders(
           uintptr_t index = *i - '1';
           if (offsets) {
             ReplacementOffset r_offset(index,
-                static_cast<int>(formatted.size()));
-            r_offsets.insert(std::lower_bound(r_offsets.begin(),
-                                              r_offsets.end(),
-                                              r_offset,
-                                              &CompareParameter),
-                             r_offset);
+                                       static_cast<int>(formatted.size()));
+            r_offsets.insert(
+                std::upper_bound(r_offsets.begin(), r_offsets.end(), r_offset,
+                                 &CompareParameter),
+                r_offset);
           }
           if (index < substitutions)
             formatted.append(subst.at(index));

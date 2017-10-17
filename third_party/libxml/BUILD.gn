@@ -59,6 +59,10 @@ config("libxml_warnings") {
       # trio_is_special_quantity and trio_is_negative are only
       # used with certain preprocessor defines set.
       "-Wno-unused-function",
+
+      # Comparison between xmlElementType and xmlXPathTypeVal.
+      # TODO(hans): See if we can fix upstream (http://crbug.com/763944).
+      "-Wno-enum-compare",
     ]
   } else if (is_linux) {
     cflags = [
@@ -222,7 +226,7 @@ static_library("libxml") {
     "//third_party/zlib",
   ]
 
-  if (is_mac || is_ios || is_android) {
+  if (is_mac || is_ios || is_android || is_fuchsia) {
     # http://www.xmlsoft.org/threads.html says that this is required when using
     # libxml from several threads, which can possibly happen in chrome. On
     # linux, this is picked up by transitivity from pkg-config output from

@@ -21,3 +21,10 @@ buildflag_header("base_win_features") {
   header_dir = "base/win"
   flags = [ "SINGLE_MODULE_MODE_HANDLE_VERIFIER=$single_module_mode_handle_verifier" ]
 }
+
+static_library("pe_image") {
+  sources = [
+    "pe_image.cc",
+    "pe_image.h",
+  ]
+}

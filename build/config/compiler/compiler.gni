@@ -39,6 +39,10 @@ declare_args() {
   # been set, e.g. by a toolchain_args() block.
   use_debug_fission = "default"
 
+  # Enables support for ThinLTO, which links 3x-10x faster than full LTO. See
+  # also http://blog.llvm.org/2016/06/thinlto-scalable-and-incremental-lto.html
+  use_thin_lto = is_cfi
+
   # Tell VS to create a PDB that references information in .obj files rather
   # than copying it all. This should improve linker performance. mspdbcmf.exe
   # can be used to convert a fastlink pdb to a normal one.
@@ -66,26 +70,48 @@ declare_args() {
   use_pic = true
 }
 
+assert(!is_cfi || use_thin_lto, "CFI requires ThinLTO")
+
+# Exclude unwind tables for official builds as unwinding can be done from stack
+# dumps produced by Crashpad at a later time "offline" in the crash server.
+# For unofficial (e.g. development) builds and non-Chrome branded (e.g. Cronet
+# which doesn't use Crashpad, crbug.com/479283) builds it's useful to be able
+# to unwind at runtime.
+exclude_unwind_tables = (is_chrome_branded && is_official_build) ||
+                        (is_chromecast && !is_cast_desktop_build && !is_debug)
+
+# If true, optimize for size. Does not affect windows builds.
+# Linux & Mac favor speed over size.
+# TODO(brettw) it's weird that Mac and desktop Linux are different. We should
+# explore favoring size over speed in this case as well.
+optimize_for_size = is_android || is_ios
+
 # Determine whether to enable or disable frame pointers, based on the platform
 # and build arguments.
 if (is_mac || is_ios) {
   enable_frame_pointers = true
 } else if (is_win) {
   # 64-bit Windows ABI doesn't support frame pointers.
-  if (target_cpu == "x64") {
+  if (current_cpu == "x64") {
     enable_frame_pointers = false
   } else {
     enable_frame_pointers = true
   }
 } else if (is_chromeos) {
-  # ChromeOS requires frame pointers in x64 builds, to support CWP.
-  # TODO(711784): Building ARM Thumb without frame pointers can lead to code
-  # in ChromeOS which triggers some ARM A12/A17 errata. They can be disabled
-  # on non-x64 once that is resolved.
-  enable_frame_pointers = true
-} else if (current_cpu == "arm64") {
-  # Ensure that stacks from arm64 crash dumps are usable (crbug.com/391706).
-  enable_frame_pointers = true
+  # ChromeOS generally prefers frame pointers, to support CWP.
+  # However, Clang does not currently generate usable frame pointers in ARM
+  # 32-bit builds (https://bugs.llvm.org/show_bug.cgi?id=18505) so disable them
+  # there to avoid the unnecessary overhead.
+  enable_frame_pointers = current_cpu != "arm"
+} else if (is_android) {
+  enable_frame_pointers =
+      # Ensure that stacks from arm64 crash dumps are usable (crbug.com/391706).
+      current_cpu == "arm64" ||
+      # For x86 Android, unwind tables are huge without frame pointers
+      # (crbug.com/762629). Enabling frame pointers grows the code size slightly
+      # but overall shrinks binaries considerably by avoiding huge unwind
+      # tables.
+      (current_cpu == "x86" && !exclude_unwind_tables && optimize_for_size)
 } else {
   # Explicitly ask for frame pointers, otherwise:
   # * Stacks may be missing for sanitizer and profiling builds.
@@ -100,6 +126,7 @@ if (is_mac || is_ios) {
 can_unwind_with_frame_pointers = enable_frame_pointers
 if (current_cpu == "arm" && arm_use_thumb) {
   # We cannot currently unwind ARM Thumb frame pointers correctly.
+  # See https://bugs.llvm.org/show_bug.cgi?id=18505
   can_unwind_with_frame_pointers = false
 } else if (is_win) {
   # Windows 32-bit does provide frame pointers, but the compiler does not
@@ -120,15 +147,26 @@ declare_args() {
 }
 
 declare_args() {
+  # Set to true to use lld, the LLVM linker. This flag may be used on Windows,
+  # Linux or Fuchsia.
+  # TODO(pcc): Enable lld on more architectures on Linux. E.g. we probably need
+  # to fix some of crbug.com/742655 to enable it on ARM.
+  # TODO(pcc): Remove !is_msan once crbug.com/772559 is fixed.
+  use_lld = is_clang && !is_msan &&
+            ((is_win && host_os != "win") || is_fuchsia ||
+             (use_thin_lto && target_os != "chromeos") ||
+             (is_linux && current_cpu == "x64" && target_os != "chromeos"))
+}
+
+declare_args() {
   # Whether to use the gold linker from binutils instead of lld or bfd.
   use_gold =
-      !use_lld && !(is_chromecast && is_linux &&
-                    (current_cpu == "arm" || current_cpu == "mipsel")) &&
-      ((is_linux && (current_cpu == "x64" || current_cpu == "x86" ||
-                     current_cpu == "arm" || current_cpu == "mipsel")) ||
-       (is_android && (current_cpu == "x86" || current_cpu == "x64" ||
-                       current_cpu == "arm" || current_cpu == "arm64")) ||
-       is_fuchsia)
+      (!use_lld && !(is_chromecast && is_linux &&
+                     (current_cpu == "arm" || current_cpu == "mipsel")) &&
+       (is_linux && (current_cpu == "x64" || current_cpu == "x86" ||
+                     current_cpu == "arm" || current_cpu == "mipsel"))) ||
+      (is_android && (current_cpu == "x86" || current_cpu == "x64" ||
+                      current_cpu == "arm" || current_cpu == "arm64"))
 }
 
 # If it wasn't manually set, set to an appropriate default.
@@ -152,7 +190,8 @@ if (symbol_level == -1) {
     # If you use is_win_fastlink = true then you can set symbol_level = 2 when
     # using goma.
     symbol_level = 1
-  } else if ((!is_nacl && !is_linux) || is_debug || is_chromecast) {
+  } else if ((!is_nacl && !is_linux && !is_fuchsia) || is_debug ||
+             is_chromecast) {
     # Linux builds slower by having symbols as part of the target binary,
     # whereas Mac and Windows have them separate, so in Release Linux, default
     # them off, but keep them on for Chromecast builds.
