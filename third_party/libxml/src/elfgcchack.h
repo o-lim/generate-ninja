@@ -11,7 +11,7 @@
 #ifdef IN_LIBXML
 #ifdef __GNUC__
 #ifdef PIC
-#ifdef linux
+#ifdef __linux__
 #if (__GNUC__ == 3 && __GNUC_MINOR__ >= 3) || (__GNUC__ > 3)
 
 #include "libxml/c14n.h"
@@ -6544,16 +6544,6 @@ extern __typeof (xmlNoNetExternalEntityLoader) xmlNoNetExternalEntityLoader __at
 #ifndef xmlNoNetExternalEntityLoader
 extern __typeof (xmlNoNetExternalEntityLoader) xmlNoNetExternalEntityLoader__internal_alias __attribute((visibility("hidden")));
 #define xmlNoNetExternalEntityLoader xmlNoNetExternalEntityLoader__internal_alias
-#endif
-#endif
-
-#ifdef bottom_xmlIO
-#undef xmlNoXxeExternalEntityLoader
-extern __typeof (xmlNoXxeExternalEntityLoader) xmlNoXxeExternalEntityLoader __attribute((alias("xmlNoXxeExternalEntityLoader__internal_alias")));
-#else
-#ifndef xmlNoXxeExternalEntityLoader
-extern __typeof (xmlNoXxeExternalEntityLoader) xmlNoXxeExternalEntityLoader__internal_alias __attribute((visibility("hidden")));
-#define xmlNoXxeExternalEntityLoader xmlNoXxeExternalEntityLoader__internal_alias
 #endif
 #endif
 

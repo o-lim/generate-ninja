@@ -22,8 +22,8 @@ sys.path.insert(0, os.path.join(chrome_src, 'tools', 'gyp', 'pylib'))
 json_data_file = os.path.join(script_dir, 'win_toolchain.json')
 
 
-# Use MSVS2015 as the default toolchain.
-CURRENT_DEFAULT_TOOLCHAIN_VERSION = '2015'
+# Use MSVS2017 as the default toolchain.
+CURRENT_DEFAULT_TOOLCHAIN_VERSION = '2017'
 
 
 def SetEnvironmentAndGetRuntimeDllDirs():
@@ -41,7 +41,9 @@ def SetEnvironmentAndGetRuntimeDllDirs():
   if ((sys.platform in ('win32', 'cygwin') or os.path.exists(json_data_file))
       and depot_tools_win_toolchain):
     if ShouldUpdateToolchain():
-      Update()
+      update_result = Update()
+      if update_result != 0:
+        raise Exception('Failed to update, error code %d.' % update_result)
     with open(json_data_file, 'r') as tempf:
       toolchain_data = json.load(tempf)
 
@@ -153,6 +155,7 @@ def DetectVisualStudioPath():
     # For now we use a hardcoded default with an environment variable override.
     for path in (
         os.environ.get('vs2017_install'),
+        r'C:\Program Files (x86)\Microsoft Visual Studio\2017\Enterprise',
         r'C:\Program Files (x86)\Microsoft Visual Studio\2017\Professional',
         r'C:\Program Files (x86)\Microsoft Visual Studio\2017\Community'):
       if path and os.path.exists(path):
@@ -183,12 +186,14 @@ def _CopyRuntimeImpl(target, source, verbose=True):
     if verbose:
       print 'Copying %s to %s...' % (source, target)
     if os.path.exists(target):
-      # Make the file writable so that we can delete it now.
-      os.chmod(target, stat.S_IWRITE)
+      # Make the file writable so that we can delete it now, and keep it
+      # readable.
+      os.chmod(target, stat.S_IWRITE | stat.S_IREAD)
       os.unlink(target)
     shutil.copy2(source, target)
-    # Make the file writable so that we can overwrite or delete it later.
-    os.chmod(target, stat.S_IWRITE)
+    # Make the file writable so that we can overwrite or delete it later,
+    # keep it readable.
+    os.chmod(target, stat.S_IWRITE | stat.S_IREAD)
 
 
 def _CopyUCRTRuntime(target_dir, source_dir, target_cpu, dll_pattern, suffix):
@@ -207,7 +212,8 @@ def _CopyUCRTRuntime(target_dir, source_dir, target_cpu, dll_pattern, suffix):
   win_sdk_dir = os.path.normpath(
       os.environ.get('WINDOWSSDKDIR',
                      'C:\\Program Files (x86)\\Windows Kits\\10'))
-  ucrt_dll_dirs = os.path.join(win_sdk_dir, r'Redist\ucrt\DLLs', target_cpu)
+  ucrt_dll_dirs = os.path.join(win_sdk_dir, 'Redist', 'ucrt', 'DLLs',
+                               target_cpu)
   ucrt_files = glob.glob(os.path.join(ucrt_dll_dirs, 'api-ms-win-*.dll'))
   assert len(ucrt_files) > 0
   for ucrt_src_file in ucrt_files:
@@ -216,6 +222,29 @@ def _CopyUCRTRuntime(target_dir, source_dir, target_cpu, dll_pattern, suffix):
     _CopyRuntimeImpl(ucrt_dst_file, ucrt_src_file, False)
   _CopyRuntimeImpl(os.path.join(target_dir, 'ucrtbase' + suffix),
                     os.path.join(source_dir, 'ucrtbase' + suffix))
+
+
+def FindVCToolsRoot():
+  """In VS2017 the PGO runtime dependencies are located in
+  {toolchain_root}/VC/Tools/MSVC/{x.y.z}/bin/Host{target_cpu}/{target_cpu}/, the
+  {version_number} part is likely to change in case of a minor update of the
+  toolchain so we don't hardcode this value here (except for the major number).
+
+  This returns the '{toolchain_root}/VC/Tools/MSVC/{x.y.z}/bin/' path.
+
+  This function should only be called when using VS2017.
+  """
+  assert GetVisualStudioVersion() == '2017'
+  SetEnvironmentAndGetRuntimeDllDirs()
+  assert ('GYP_MSVS_OVERRIDE_PATH' in os.environ)
+  vc_tools_msvc_root = os.path.join(os.environ['GYP_MSVS_OVERRIDE_PATH'],
+      'VC', 'Tools', 'MSVC')
+  for directory in os.listdir(vc_tools_msvc_root):
+    if not os.path.isdir(os.path.join(vc_tools_msvc_root, directory)):
+      continue
+    if re.match('14\.\d+\.\d+', directory):
+      return os.path.join(vc_tools_msvc_root, directory, 'bin')
+  raise Exception('Unable to find the VC tools directory.')
 
 
 def _CopyPGORuntime(target_dir, target_cpu):
@@ -229,20 +258,7 @@ def _CopyPGORuntime(target_dir, target_cpu):
                                        'VC', 'bin')
     pgo_x64_runtime_dir = os.path.join(pgo_x86_runtime_dir, 'amd64')
   elif env_version == '2017':
-    # In VS2017 the PGO runtime dependencies are located in
-    # {toolchain_root}/VC/Tools/MSVC/{x.y.z}/bin/Host{target_cpu}/{target_cpu}/,
-    # the {version_number} part is likely to change in case of a minor update of
-    # the toolchain so we don't hardcode this value here (except for the major
-    # number).
-    vc_tools_msvc_root = os.path.join(os.environ.get('GYP_MSVS_OVERRIDE_PATH'),
-        'VC', 'Tools', 'MSVC')
-    pgo_runtime_root = None
-    for directory in os.listdir(vc_tools_msvc_root):
-      if not os.path.isdir(os.path.join(vc_tools_msvc_root, directory)):
-        continue
-      if re.match('14\.\d+\.\d+', directory):
-        pgo_runtime_root = os.path.join(vc_tools_msvc_root, directory, 'bin')
-        break
+    pgo_runtime_root = FindVCToolsRoot()
     assert pgo_runtime_root
     # There's no version of pgosweep.exe in HostX64/x86, so we use the copy
     # from HostX86/x86.
@@ -301,7 +317,7 @@ def CopyDlls(target_dir, configuration, target_cpu):
 
 
 def _CopyDebugger(target_dir, target_cpu):
-  """Copy dbghelp.dll into the requested directory as needed.
+  """Copy dbghelp.dll and dbgcore.dll into the requested directory as needed.
 
   target_cpu is one of 'x86' or 'x64'.
 
@@ -309,19 +325,28 @@ def _CopyDebugger(target_dir, target_cpu):
   from the SDK directory avoids using the system copy of dbghelp.dll which then
   ensures compatibility with recent debug information formats, such as VS
   2017 /debug:fastlink PDBs.
+
+  dbgcore.dll is needed when using some functions from dbghelp.dll (like
+  MinidumpWriteDump).
   """
   win_sdk_dir = SetEnvironmentAndGetSDKDir()
   if not win_sdk_dir:
     return
 
-  debug_file = 'dbghelp.dll'
-  full_path = os.path.join(win_sdk_dir, 'Debuggers', target_cpu, debug_file)
-  if not os.path.exists(full_path):
-    raise Exception('dbghelp.dll not found in "%s"\r\nYou must install the '
-                    '"Debugging Tools for Windows" feature from the Windows '
-                    '10 SDK.' % full_path)
-  target_path = os.path.join(target_dir, debug_file)
-  _CopyRuntimeImpl(target_path, full_path)
+  # List of debug files that should be copied, the first element of the tuple is
+  # the name of the file and the second indicates if it's optional.
+  debug_files = [('dbghelp.dll', False), ('dbgcore.dll', True)]
+  for debug_file, is_optional in debug_files:
+    full_path = os.path.join(win_sdk_dir, 'Debuggers', target_cpu, debug_file)
+    if not os.path.exists(full_path):
+      if is_optional:
+        continue
+      else:
+        raise Exception('%s not found in "%s"\r\nYou must install the '
+                        '"Debugging Tools for Windows" feature from the Windows'
+                        ' 10 SDK.' % (debug_file, full_path))
+    target_path = os.path.join(target_dir, debug_file)
+    _CopyRuntimeImpl(target_path, full_path)
 
 
 def _GetDesiredVsToolchainHashes():
@@ -329,11 +354,11 @@ def _GetDesiredVsToolchainHashes():
   to build with."""
   env_version = GetVisualStudioVersion()
   if env_version == '2015':
-    # Update 3 final with patches with 10.0.14393.0 SDK.
-    return ['d3cb0e37bdd120ad0ac4650b674b09e81be45616']
+    # Update 3 final with 10.0.15063.468 SDK and no vctip.exe.
+    return ['f53e4598951162bad6330f7a167486c7ae5db1e5']
   if env_version == '2017':
-    # VS 2017 RTM with 10.0.14393.0 SDK and dbghelp.dll fixes.
-    return ['4e8a360587a3c8ff3fa46aa9271e982bf3e948ec']
+    # VS 2017 Update 3.2 with 10.0.15063.468 SDK and patched setenv.cmd.
+    return ['a9e1098bba66d2acccc377d5ee81265910f29272']
   raise Exception('Unsupported VS version %s' % env_version)
 
 
@@ -367,6 +392,35 @@ def Update(force=False):
         depot_tools_win_toolchain):
     import find_depot_tools
     depot_tools_path = find_depot_tools.add_depot_tools_to_path()
+
+    # On Linux, the file system is usually case-sensitive while the Windows
+    # SDK only works on case-insensitive file systems.  If it doesn't already
+    # exist, set up a ciopfs fuse mount to put the SDK in a case-insensitive
+    # part of the file system.
+    toolchain_dir = os.path.join(depot_tools_path, 'win_toolchain', 'vs_files')
+    if sys.platform.startswith('linux') and not os.path.ismount(toolchain_dir):
+      import distutils.spawn
+      ciopfs = distutils.spawn.find_executable('ciopfs')
+      if not ciopfs:
+        # TODO(thakis): Offer to auto-install this?  Or have a
+        # build/install-build-deps-win.sh script and point to that? (Or run
+        # that?)
+        print >>sys.stderr, \
+            "\n\tCouldn't set up case-insensitive mount for Windows SDK."
+        print >>sys.stderr, \
+            "\tPlease run `sudo apt-get install ciopfs` and try again.\n"
+        return 1
+      if not os.path.isdir(toolchain_dir):
+        os.mkdir(toolchain_dir)
+      if not os.path.isdir(toolchain_dir + '.ciopfs'):
+        os.mkdir(toolchain_dir + '.ciopfs')
+      # Without use_ino, clang's #pragma once and Wnonportable-include-path
+      # both don't work right, see https://llvm.org/PR34931
+      # use_ino doesn't slow down builds, so it seems there's no drawback to
+      # just using it always.
+      subprocess.check_call([
+          ciopfs, '-o', 'use_ino', toolchain_dir + '.ciopfs', toolchain_dir])
+
     # Necessary so that get_toolchain_if_necessary.py will put the VS toolkit
     # in the correct directory.
     os.environ['GYP_MSVS_VERSION'] = GetVisualStudioVersion()

@@ -44,7 +44,8 @@ const DWORD kProcessKilledExitCode = 1;
 
 bool GetAppOutputInternal(const StringPiece16& cl,
                           bool include_stderr,
-                          std::string* output) {
+                          std::string* output,
+                          int* exit_code) {
   HANDLE out_read = nullptr;
   HANDLE out_write = nullptr;
 
@@ -122,11 +123,10 @@ bool GetAppOutputInternal(const StringPiece16& cl,
   // Let's wait for the process to finish.
   WaitForSingleObject(proc_info.process_handle(), INFINITE);
 
-  int exit_code;
   base::TerminationStatus status = GetTerminationStatus(
-      proc_info.process_handle(), &exit_code);
+      proc_info.process_handle(), exit_code);
   base::debug::GlobalActivityTracker::RecordProcessExitIfEnabled(
-      proc_info.process_id(), exit_code);
+      proc_info.process_id(), *exit_code);
   return status != base::TERMINATION_STATUS_PROCESS_CRASHED &&
          status != base::TERMINATION_STATUS_ABNORMAL_TERMINATION;
 }
@@ -212,48 +212,46 @@ Process LaunchProcess(const string16& cmdline,
   win::StartupInformation startup_info_wrapper;
   STARTUPINFO* startup_info = startup_info_wrapper.startup_info();
 
-  bool inherit_handles = options.inherit_handles;
+  bool inherit_handles = options.inherit_mode == LaunchOptions::Inherit::kAll;
   DWORD flags = 0;
-  if (options.handles_to_inherit) {
-    if (options.handles_to_inherit->empty()) {
-      inherit_handles = false;
-    } else {
-      if (options.handles_to_inherit->size() >
-              std::numeric_limits<DWORD>::max() / sizeof(HANDLE)) {
-        DLOG(ERROR) << "Too many handles to inherit.";
-        return Process();
-      }
+  if (!options.handles_to_inherit.empty()) {
+    DCHECK_EQ(options.inherit_mode, LaunchOptions::Inherit::kSpecific);
 
-      // Ensure the handles can be inherited.
-      for (HANDLE handle : *options.handles_to_inherit) {
-        BOOL result = SetHandleInformation(handle, HANDLE_FLAG_INHERIT,
-                                           HANDLE_FLAG_INHERIT);
-        PCHECK(result);
-      }
-
-      if (!startup_info_wrapper.InitializeProcThreadAttributeList(1)) {
-        DPLOG(ERROR);
-        return Process();
-      }
-
-      if (!startup_info_wrapper.UpdateProcThreadAttribute(
-              PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
-              const_cast<HANDLE*>(&options.handles_to_inherit->at(0)),
-              static_cast<DWORD>(options.handles_to_inherit->size() *
-                  sizeof(HANDLE)))) {
-        DPLOG(ERROR);
-        return Process();
-      }
-
-      inherit_handles = true;
-      flags |= EXTENDED_STARTUPINFO_PRESENT;
+    if (options.handles_to_inherit.size() >
+        std::numeric_limits<DWORD>::max() / sizeof(HANDLE)) {
+      DLOG(ERROR) << "Too many handles to inherit.";
+      return Process();
     }
+
+    // Ensure the handles can be inherited.
+    for (HANDLE handle : options.handles_to_inherit) {
+      BOOL result = SetHandleInformation(handle, HANDLE_FLAG_INHERIT,
+                                         HANDLE_FLAG_INHERIT);
+      PCHECK(result);
+    }
+
+    if (!startup_info_wrapper.InitializeProcThreadAttributeList(1)) {
+      DPLOG(ERROR);
+      return Process();
+    }
+
+    if (!startup_info_wrapper.UpdateProcThreadAttribute(
+            PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+            const_cast<HANDLE*>(&options.handles_to_inherit[0]),
+            static_cast<DWORD>(options.handles_to_inherit.size() *
+                               sizeof(HANDLE)))) {
+      DPLOG(ERROR);
+      return Process();
+    }
+
+    inherit_handles = true;
+    flags |= EXTENDED_STARTUPINFO_PRESENT;
   }
 
   if (options.empty_desktop_name)
     startup_info->lpDesktop = const_cast<wchar_t*>(L"");
   startup_info->dwFlags = STARTF_USESHOWWINDOW;
-  startup_info->wShowWindow = options.start_hidden ? SW_HIDE : SW_SHOW;
+  startup_info->wShowWindow = options.start_hidden ? SW_HIDE : SW_SHOWNORMAL;
 
   if (options.stdin_handle || options.stdout_handle || options.stderr_handle) {
     DCHECK(inherit_handles);
@@ -350,7 +348,7 @@ Process LaunchElevatedProcess(const CommandLine& cmdline,
   shex_info.lpFile = file.c_str();
   shex_info.lpParameters = arguments.c_str();
   shex_info.lpDirectory = nullptr;
-  shex_info.nShow = options.start_hidden ? SW_HIDE : SW_SHOW;
+  shex_info.nShow = options.start_hidden ? SW_HIDE : SW_SHOWNORMAL;
   shex_info.hInstApp = nullptr;
 
   if (!ShellExecuteEx(&shex_info)) {
@@ -381,11 +379,21 @@ bool GetAppOutput(const CommandLine& cl, std::string* output) {
 }
 
 bool GetAppOutputAndError(const CommandLine& cl, std::string* output) {
-  return GetAppOutputInternal(cl.GetCommandLineString(), true, output);
+  int exit_code;
+  return GetAppOutputInternal(
+      cl.GetCommandLineString(), true, output, &exit_code);
+}
+
+bool GetAppOutputWithExitCode(const CommandLine& cl,
+                              std::string* output,
+                              int* exit_code) {
+  return GetAppOutputInternal(
+      cl.GetCommandLineString(), false, output, exit_code);
 }
 
 bool GetAppOutput(const StringPiece16& cl, std::string* output) {
-  return GetAppOutputInternal(cl, false, output);
+  int exit_code;
+  return GetAppOutputInternal(cl, false, output, &exit_code);
 }
 
 void RaiseProcessToHighPriority() {

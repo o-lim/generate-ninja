@@ -62,10 +62,6 @@ HistogramBase* SparseHistogram::FactoryGet(const std::string& name,
       allocator->FinalizeHistogram(histogram_ref,
                                    histogram == tentative_histogram_ptr);
     }
-
-    ReportHistogramActivity(*histogram, HISTOGRAM_CREATED);
-  } else {
-    ReportHistogramActivity(*histogram, HISTOGRAM_LOOKUP);
   }
 
   CHECK_EQ(SPARSE_HISTOGRAM, histogram->GetHistogramType());
@@ -169,8 +165,9 @@ void SparseHistogram::WriteAscii(std::string* output) const {
   WriteAsciiImpl(true, "\n", output);
 }
 
-bool SparseHistogram::SerializeInfoImpl(Pickle* pickle) const {
-  return pickle->WriteString(histogram_name()) && pickle->WriteInt(flags());
+void SparseHistogram::SerializeInfoImpl(Pickle* pickle) const {
+  pickle->WriteString(histogram_name());
+  pickle->WriteInt(flags());
 }
 
 SparseHistogram::SparseHistogram(const std::string& name)

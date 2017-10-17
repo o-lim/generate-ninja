@@ -100,7 +100,11 @@ LSSharedFileListItemRef GetLoginItemForApp() {
         [login_items_array objectAtIndex:i]);
     CFURLRef item_url_ref = NULL;
 
-    if (LSSharedFileListItemResolve(item, 0, &item_url_ref, NULL) == noErr) {
+    // It seems that LSSharedFileListItemResolve() can return NULL in
+    // item_url_ref even if the function itself returns noErr. See
+    // https://crbug.com/760989
+    if (LSSharedFileListItemResolve(item, 0, &item_url_ref, NULL) == noErr &&
+        item_url_ref) {
       ScopedCFTypeRef<CFURLRef> item_url(item_url_ref);
       if (CFEqual(item_url, url)) {
         CFRetain(item);
@@ -418,9 +422,9 @@ int MacOSXMinorVersionInternal() {
   // immediate death.
   CHECK(darwin_major_version >= 6);
   int mac_os_x_minor_version = darwin_major_version - 4;
-  DLOG_IF(WARNING, darwin_major_version > 16) << "Assuming Darwin "
-      << base::IntToString(darwin_major_version) << " is Mac OS X 10."
-      << base::IntToString(mac_os_x_minor_version);
+  DLOG_IF(WARNING, darwin_major_version > 17)
+      << "Assuming Darwin " << base::IntToString(darwin_major_version)
+      << " is macOS 10." << base::IntToString(mac_os_x_minor_version);
 
   return mac_os_x_minor_version;
 }

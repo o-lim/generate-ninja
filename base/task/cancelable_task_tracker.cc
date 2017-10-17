@@ -42,7 +42,7 @@ void RunAndDeleteFlag(OnceClosure closure, const CancellationFlag* flag) {
 }
 
 void RunOrPostToTaskRunner(TaskRunner* task_runner, OnceClosure closure) {
-  if (task_runner->RunsTasksOnCurrentThread())
+  if (task_runner->RunsTasksInCurrentSequence())
     std::move(closure).Run();
   else
     task_runner->PostTask(FROM_HERE, std::move(closure));
@@ -64,7 +64,7 @@ CancelableTaskTracker::~CancelableTaskTracker() {
 
 CancelableTaskTracker::TaskId CancelableTaskTracker::PostTask(
     TaskRunner* task_runner,
-    const tracked_objects::Location& from_here,
+    const Location& from_here,
     OnceClosure task) {
   DCHECK(sequence_checker_.CalledOnValidSequence());
 
@@ -74,7 +74,7 @@ CancelableTaskTracker::TaskId CancelableTaskTracker::PostTask(
 
 CancelableTaskTracker::TaskId CancelableTaskTracker::PostTaskAndReply(
     TaskRunner* task_runner,
-    const tracked_objects::Location& from_here,
+    const Location& from_here,
     OnceClosure task,
     OnceClosure reply) {
   DCHECK(sequence_checker_.CalledOnValidSequence());

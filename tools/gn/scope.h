@@ -9,11 +9,11 @@
 #include <memory>
 #include <set>
 #include <utility>
+#include <vector>
 
 #include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_vector.h"
 #include "tools/gn/err.h"
 #include "tools/gn/pattern.h"
 #include "tools/gn/source_dir.h"
@@ -40,7 +40,7 @@ class Scope {
   typedef base::hash_map<base::StringPiece, Value, base::StringPieceHash>
       KeyValueMap;
   // Holds an owning list of Items.
-  typedef ScopedVector<Item> ItemVector;
+  typedef std::vector<std::unique_ptr<Item>> ItemVector;
 
   // A flag to indicate whether a function should recurse into nested scopes,
   // or only operate on the current scope.
@@ -206,6 +206,7 @@ class Scope {
   // Marks the given identifier as (un)used in the current scope.
   void MarkUsed(const base::StringPiece& ident);
   void MarkAllUsed();
+  void MarkAllUsed(const std::set<std::string>& excluded_values);
   void MarkUnused(const base::StringPiece& ident);
 
   // Checks to see if the scope has a var set that hasn't been used. This is

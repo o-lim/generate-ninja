@@ -24,6 +24,10 @@ enum NegativeSampleReason {
   PERSISTENT_SPARSE_ADDED_NEGATIVE_COUNT,
   PERSISTENT_SPARSE_ADD_WENT_NEGATIVE,
   PERSISTENT_SPARSE_ADD_OVERFLOW,
+  PERSISTENT_SPARSE_ACCUMULATE_NEGATIVE_COUNT,
+  PERSISTENT_SPARSE_ACCUMULATE_WENT_NEGATIVE,
+  DEPRECATED_PERSISTENT_SPARSE_ACCUMULATE_OVERFLOW,
+  PERSISTENT_SPARSE_ACCUMULATE_OVERFLOW,
   MAX_NEGATIVE_SAMPLE_REASONS
 };
 
@@ -118,7 +122,32 @@ PersistentSampleMap::~PersistentSampleMap() {
 }
 
 void PersistentSampleMap::Accumulate(Sample value, Count count) {
+#if 0  // TODO(bcwhite) Re-enable efficient version after crbug.com/682680.
   *GetOrCreateSampleCountStorage(value) += count;
+#else
+  NegativeSampleReason reason = MAX_NEGATIVE_SAMPLE_REASONS;
+  Count* local_count_ptr = GetOrCreateSampleCountStorage(value);
+  if (count < 0) {
+    reason = PERSISTENT_SPARSE_ACCUMULATE_NEGATIVE_COUNT;
+    if (*local_count_ptr < -count)
+      reason = PERSISTENT_SPARSE_ACCUMULATE_WENT_NEGATIVE;
+    *local_count_ptr += count;
+  } else {
+    Sample old_value = *local_count_ptr;
+    Sample new_value = old_value + count;
+    *local_count_ptr = new_value;
+    if ((new_value >= 0) != (old_value >= 0))
+      reason = PERSISTENT_SPARSE_ACCUMULATE_OVERFLOW;
+  }
+  if (reason != MAX_NEGATIVE_SAMPLE_REASONS) {
+    UMA_HISTOGRAM_ENUMERATION("UMA.NegativeSamples.Reason", reason,
+                              MAX_NEGATIVE_SAMPLE_REASONS);
+    UMA_HISTOGRAM_CUSTOM_COUNTS("UMA.NegativeSamples.Increment", count, 1,
+                                1 << 30, 100);
+    UMA_HISTOGRAM_SPARSE_SLOWLY("UMA.NegativeSamples.Histogram",
+                                static_cast<int32_t>(id()));
+  }
+#endif
   IncreaseSumAndCount(strict_cast<int64_t>(count) * value, count);
 }
 
@@ -195,48 +224,8 @@ bool PersistentSampleMap::AddSubtractImpl(SampleCountIterator* iter,
       continue;
     if (strict_cast<int64_t>(min) + 1 != max)
       return false;  // SparseHistogram only supports bucket with size 1.
-
-#if 0  // TODO(bcwhite) Re-enable efficient version after crbug.com/682680.
     *GetOrCreateSampleCountStorage(min) +=
         (op == HistogramSamples::ADD) ? count : -count;
-#else
-    NegativeSampleReason reason = MAX_NEGATIVE_SAMPLE_REASONS;
-    if (op == HistogramSamples::ADD) {
-      // Add should generally be adding only positive values.
-      Count* local_count_ptr = GetOrCreateSampleCountStorage(min);
-      if (count < 0) {
-        reason = PERSISTENT_SPARSE_ADDED_NEGATIVE_COUNT;
-        if (*local_count_ptr < -count) {
-          reason = PERSISTENT_SPARSE_ADD_WENT_NEGATIVE;
-          *local_count_ptr = 0;
-        }
-      } else {
-        *local_count_ptr += count;
-        if (*local_count_ptr < 0)
-          reason = PERSISTENT_SPARSE_ADD_OVERFLOW;
-      }
-    } else {
-      // Subtract is used only for determining deltas when reporting which
-      // means that it's in the "logged" iterator. It should have an active
-      // sample record and thus there is no need to try to create one.
-      Count* local_count_ptr = GetSampleCountStorage(min);
-      if (local_count_ptr == nullptr) {
-        reason = PERSISTENT_SPARSE_HAVE_LOGGED_BUT_NOT_SAMPLE;
-      } else {
-        if (*local_count_ptr < count) {
-          reason = PERSISTENT_SPARSE_SAMPLE_LESS_THAN_LOGGED;
-          *local_count_ptr = 0;
-        } else {
-          *local_count_ptr -= count;
-        }
-      }
-    }
-    if (reason != MAX_NEGATIVE_SAMPLE_REASONS) {
-      NOTREACHED();
-      UMA_HISTOGRAM_ENUMERATION("UMA.NegativeSamples.Reason", reason,
-                                MAX_NEGATIVE_SAMPLE_REASONS);
-    }
-#endif
   }
   return true;
 }

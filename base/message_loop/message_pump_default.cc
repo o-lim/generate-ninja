@@ -4,11 +4,16 @@
 
 #include "base/message_loop/message_pump_default.h"
 
+#include "base/auto_reset.h"
 #include "base/logging.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 
 #if defined(OS_MACOSX)
+#include <mach/thread_policy.h>
+
+#include "base/mac/mach_logging.h"
+#include "base/mac/scoped_mach_port.h"
 #include "base/mac/scoped_nsautorelease_pool.h"
 #endif
 
@@ -19,11 +24,10 @@ MessagePumpDefault::MessagePumpDefault()
       event_(WaitableEvent::ResetPolicy::AUTOMATIC,
              WaitableEvent::InitialState::NOT_SIGNALED) {}
 
-MessagePumpDefault::~MessagePumpDefault() {
-}
+MessagePumpDefault::~MessagePumpDefault() {}
 
 void MessagePumpDefault::Run(Delegate* delegate) {
-  DCHECK(keep_running_) << "Quit must have been called outside of Run!";
+  AutoReset<bool> auto_reset_keep_running(&keep_running_, true);
 
   for (;;) {
 #if defined(OS_MACOSX)
@@ -61,8 +65,6 @@ void MessagePumpDefault::Run(Delegate* delegate) {
     // Since event_ is auto-reset, we don't need to do anything special here
     // other than service each delegate method.
   }
-
-  keep_running_ = true;
 }
 
 void MessagePumpDefault::Quit() {
@@ -82,5 +84,20 @@ void MessagePumpDefault::ScheduleDelayedWork(
   // record of how long to sleep when we do sleep.
   delayed_work_time_ = delayed_work_time;
 }
+
+#if defined(OS_MACOSX)
+void MessagePumpDefault::SetTimerSlack(TimerSlack timer_slack) {
+  thread_latency_qos_policy_data_t policy{};
+  policy.thread_latency_qos_tier = timer_slack == TIMER_SLACK_MAXIMUM
+                                       ? LATENCY_QOS_TIER_5
+                                       : LATENCY_QOS_TIER_UNSPECIFIED;
+  mac::ScopedMachSendRight thread_port(mach_thread_self());
+  kern_return_t kr =
+      thread_policy_set(thread_port.get(), THREAD_LATENCY_QOS_POLICY,
+                        reinterpret_cast<thread_policy_t>(&policy),
+                        THREAD_LATENCY_QOS_POLICY_COUNT);
+  MACH_DVLOG_IF(1, kr != KERN_SUCCESS, kr) << "thread_policy_set";
+}
+#endif
 
 }  // namespace base

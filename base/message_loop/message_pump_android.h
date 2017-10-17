@@ -47,14 +47,13 @@ class BASE_EXPORT MessagePumpForUI : public MessagePump {
   void Abort() { should_abort_ = true; }
   bool ShouldAbort() const { return should_abort_; }
 
-  static bool RegisterBindings(JNIEnv* env);
-
  private:
   JNIEnv* StartInternal();
 
-  RunLoop* run_loop_;
+  RunLoop* run_loop_ = nullptr;
   base::android::ScopedJavaGlobalRef<jobject> system_message_handler_obj_;
-  bool should_abort_;
+  bool should_abort_ = false;
+  bool quit_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(MessagePumpForUI);
 };

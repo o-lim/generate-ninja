@@ -4,8 +4,6 @@
 
 #include "base/test/scoped_mock_time_message_loop_task_runner.h"
 
-#include <deque>
-
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
@@ -34,7 +32,7 @@ ScopedMockTimeMessageLoopTaskRunner::ScopedMockTimeMessageLoopTaskRunner()
 }
 
 ScopedMockTimeMessageLoopTaskRunner::~ScopedMockTimeMessageLoopTaskRunner() {
-  DCHECK(previous_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(previous_task_runner_->RunsTasksInCurrentSequence());
   DCHECK_EQ(task_runner_, ThreadTaskRunnerHandle::Get());
   for (auto& pending_task : task_runner_->TakePendingTasks()) {
     // TODO(tzik): Remove RunOnceClosure once TaskRunner migrates from Closure

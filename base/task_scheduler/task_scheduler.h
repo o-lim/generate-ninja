@@ -10,6 +10,7 @@
 
 #include "base/base_export.h"
 #include "base/callback.h"
+#include "base/gtest_prod_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
@@ -25,13 +26,16 @@ namespace gin {
 class V8Platform;
 }
 
-namespace tracked_objects {
-class Location;
-}
+namespace content {
+// Can't use the FRIEND_TEST_ALL_PREFIXES macro because the test is in a
+// different namespace.
+class BrowserMainLoopTest_CreateThreadsInSingleProcess_Test;
+}  // namespace content
 
 namespace base {
 
 class HistogramBase;
+class Location;
 
 // Interface for a task scheduler and static methods to manage the instance used
 // by the post_task.h API.
@@ -56,10 +60,10 @@ class BASE_EXPORT TaskScheduler {
             foreground_blocking_worker_pool_params_in);
     ~InitParams();
 
-    const SchedulerWorkerPoolParams background_worker_pool_params;
-    const SchedulerWorkerPoolParams background_blocking_worker_pool_params;
-    const SchedulerWorkerPoolParams foreground_worker_pool_params;
-    const SchedulerWorkerPoolParams foreground_blocking_worker_pool_params;
+    SchedulerWorkerPoolParams background_worker_pool_params;
+    SchedulerWorkerPoolParams background_blocking_worker_pool_params;
+    SchedulerWorkerPoolParams foreground_worker_pool_params;
+    SchedulerWorkerPoolParams foreground_blocking_worker_pool_params;
   };
 
   // Destroying a TaskScheduler is not allowed in production; it is always
@@ -73,11 +77,10 @@ class BASE_EXPORT TaskScheduler {
 
   // Posts |task| with a |delay| and specific |traits|. |delay| can be zero.
   // For one off tasks that don't require a TaskRunner.
-  virtual void PostDelayedTaskWithTraits(
-      const tracked_objects::Location& from_here,
-      const TaskTraits& traits,
-      OnceClosure task,
-      TimeDelta delay) = 0;
+  virtual void PostDelayedTaskWithTraits(const Location& from_here,
+                                         const TaskTraits& traits,
+                                         OnceClosure task,
+                                         TimeDelta delay) = 0;
 
   // Returns a TaskRunner whose PostTask invocations result in scheduling tasks
   // using |traits|. Tasks may run in any order and in parallel.
@@ -162,6 +165,10 @@ class BASE_EXPORT TaskScheduler {
   // afterwards. CHECKs on failure. For tests, prefer
   // base::test::ScopedTaskEnvironment (ensures isolation).
   static void CreateAndStartWithDefaultParams(StringPiece name);
+
+  // Same as CreateAndStartWithDefaultParams() but allows callers to split the
+  // Create() and StartWithDefaultParams() calls.
+  void StartWithDefaultParams();
 #endif  // !defined(OS_NACL)
 
   // Creates a ready to start task scheduler. |name| is used to label threads
@@ -173,7 +180,7 @@ class BASE_EXPORT TaskScheduler {
   static void Create(StringPiece name);
 
   // Registers |task_scheduler| to handle tasks posted through the post_task.h
-  // API for this process. For tests, prefer base::test::ScopedTaskScheduler
+  // API for this process. For tests, prefer base::test::ScopedTaskEnvironment
   // (ensures isolation).
   static void SetInstance(std::unique_ptr<TaskScheduler> task_scheduler);
 
@@ -192,16 +199,18 @@ class BASE_EXPORT TaskScheduler {
 
  private:
   friend class gin::V8Platform;
+  friend class content::BrowserMainLoopTest_CreateThreadsInSingleProcess_Test;
 
-  // Returns the maximum number of non-single-threaded tasks posted with
-  // |traits| that can run concurrently in this TaskScheduler.
+  // Returns the maximum number of non-single-threaded non-blocked tasks posted
+  // with |traits| that can run concurrently in this TaskScheduler.
   //
   // Do not use this method. To process n items, post n tasks that each process
-  // 1 item rather than GetMaxConcurrentTasksWithTraitsDeprecated() tasks that
-  // each process n/GetMaxConcurrentTasksWithTraitsDeprecated() items.
+  // 1 item rather than GetMaxConcurrentNonBlockedTasksWithTraitsDeprecated()
+  // tasks that each process
+  // n/GetMaxConcurrentNonBlockedTasksWithTraitsDeprecated() items.
   //
   // TODO(fdoray): Remove this method. https://crbug.com/687264
-  virtual int GetMaxConcurrentTasksWithTraitsDeprecated(
+  virtual int GetMaxConcurrentNonBlockedTasksWithTraitsDeprecated(
       const TaskTraits& traits) const = 0;
 };
 

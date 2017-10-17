@@ -9,9 +9,7 @@
 #include "tools/gn/scheduler.h"
 
 Config::Config(const Settings* settings, const Label& label)
-    : Item(settings, label),
-      resolved_(false) {
-}
+    : Item(settings, label), resolved_(false) {}
 
 Config::~Config() {
 }

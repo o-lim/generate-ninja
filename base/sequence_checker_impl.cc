@@ -19,7 +19,7 @@ class SequenceCheckerImpl::Core {
         sequenced_worker_pool_token_(
             SequencedWorkerPool::GetSequenceTokenForCurrentThread()) {
     // SequencedWorkerPool doesn't use SequenceToken and code outside of
-    // SequenceWorkerPool doesn't set a SequencedWorkerPool token.
+    // SequencedWorkerPool doesn't set a SequencedWorkerPool token.
     DCHECK(!sequence_token_.IsValid() ||
            !sequenced_worker_pool_token_.IsValid());
   }
@@ -51,13 +51,13 @@ class SequenceCheckerImpl::Core {
   ThreadCheckerImpl thread_checker_;
 };
 
-SequenceCheckerImpl::SequenceCheckerImpl() : core_(MakeUnique<Core>()) {}
+SequenceCheckerImpl::SequenceCheckerImpl() : core_(std::make_unique<Core>()) {}
 SequenceCheckerImpl::~SequenceCheckerImpl() = default;
 
 bool SequenceCheckerImpl::CalledOnValidSequence() const {
   AutoLock auto_lock(lock_);
   if (!core_)
-    core_ = MakeUnique<Core>();
+    core_ = std::make_unique<Core>();
   return core_->CalledOnValidSequence();
 }
 

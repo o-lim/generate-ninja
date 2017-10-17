@@ -1130,7 +1130,7 @@ xmlNanoHTTPConnectHost(const char *host, int port)
  * extraction code. it work on Linux, if it work on your platform
  * and one want to enable it, send me the defined(foobar) needed
  */
-#if defined(HAVE_NETDB_H) && defined(HOST_NOT_FOUND) && defined(linux)
+#if defined(HAVE_NETDB_H) && defined(HOST_NOT_FOUND) && defined(__linux__)
 	    const char *h_err_txt = "";
 
 	    switch (h_errno) {
@@ -1534,7 +1534,8 @@ retry:
 	xmlGenericError(xmlGenericErrorContext,
 		"\nRedirect to: %s\n", ctxt->location);
 #endif
-	while ( xmlNanoHTTPRecv(ctxt) > 0 ) ;
+	while ( xmlNanoHTTPRecv(ctxt) > 0 )
+            ;
         if (nbRedirects < XML_NANO_HTTP_MAX_REDIR) {
 	    nbRedirects++;
 	    if (redirURL != NULL)

@@ -76,7 +76,7 @@ class PosixSpawnFileActions {
 void RestoreDefaultExceptionHandler() {
   // This function is tailored to remove the Breakpad exception handler.
   // exception_mask matches s_exception_mask in
-  // breakpad/src/client/mac/handler/exception_handler.cc
+  // third_party/breakpad/breakpad/src/client/mac/handler/exception_handler.cc
   const exception_mask_t exception_mask = EXC_MASK_BAD_ACCESS |
                                           EXC_MASK_BAD_INSTRUCTION |
                                           EXC_MASK_ARITHMETIC |
@@ -112,21 +112,19 @@ Process LaunchProcessPosixSpawn(const std::vector<std::string>& argv,
   // open stdin to /dev/null and inherit stdout and stderr.
   bool inherit_stdout = true, inherit_stderr = true;
   bool null_stdin = true;
-  if (options.fds_to_remap) {
-    for (const auto& dup2_pair : *options.fds_to_remap) {
-      if (dup2_pair.second == STDIN_FILENO) {
-        null_stdin = false;
-      } else if (dup2_pair.second == STDOUT_FILENO) {
-        inherit_stdout = false;
-      } else if (dup2_pair.second == STDERR_FILENO) {
-        inherit_stderr = false;
-      }
+  for (const auto& dup2_pair : options.fds_to_remap) {
+    if (dup2_pair.second == STDIN_FILENO) {
+      null_stdin = false;
+    } else if (dup2_pair.second == STDOUT_FILENO) {
+      inherit_stdout = false;
+    } else if (dup2_pair.second == STDERR_FILENO) {
+      inherit_stderr = false;
+    }
 
-      if (dup2_pair.first == dup2_pair.second) {
-        file_actions.Inherit(dup2_pair.second);
-      } else {
-        file_actions.Dup2(dup2_pair.first, dup2_pair.second);
-      }
+    if (dup2_pair.first == dup2_pair.second) {
+      file_actions.Inherit(dup2_pair.second);
+    } else {
+      file_actions.Dup2(dup2_pair.first, dup2_pair.second);
     }
   }
 
@@ -140,11 +138,11 @@ Process LaunchProcessPosixSpawn(const std::vector<std::string>& argv,
     file_actions.Inherit(STDERR_FILENO);
   }
 
-  std::unique_ptr<char* []> argv_cstr(new char*[argv.size() + 1]);
-  for (size_t i = 0; i < argv.size(); i++) {
-    argv_cstr[i] = const_cast<char*>(argv[i].c_str());
-  }
-  argv_cstr[argv.size()] = nullptr;
+  std::vector<char*> argv_cstr;
+  argv_cstr.reserve(argv.size() + 1);
+  for (const auto& arg : argv)
+    argv_cstr.push_back(const_cast<char*>(arg.c_str()));
+  argv_cstr.push_back(nullptr);
 
   std::unique_ptr<char* []> owned_environ;
   char** new_environ = options.clear_environ ? nullptr : *_NSGetEnviron();

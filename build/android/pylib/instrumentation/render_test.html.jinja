@@ -14,6 +14,7 @@
   </script>
 </head>
 <body>
+  <a href="https://cs.chromium.org/search/?q={{ test_name }}&m=100&type=cs">Link to Golden</a>
   <table>
     <thead>
       <tr>
@@ -25,8 +26,12 @@
     <tbody style="vertical-align: top">
       <tr onclick="toggleZoom()">
         <td><img src="{{ failure_link }}" style="width: 100%" /></td>
+        {% if golden_link %}
         <td><img src="{{ golden_link }}" style="width: 100%" /></td>
         <td><img src="{{ diff_link }}" style="width: 100%" /></td>
+        {% else %}
+        <td>No Golden Image.</td>
+        {% endif %}
       </tr>
     </tbody>
   </table>

@@ -13,7 +13,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/errno.h>
 #include <sys/mman.h>
 #include <sys/param.h>
 #include <sys/stat.h>
@@ -22,6 +21,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "base/containers/stack.h"
 #include "base/environment.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
@@ -177,7 +177,46 @@ bool DetermineDevShmExecutable() {
   }
   return result;
 }
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_AIX)
+
+bool AdvanceEnumeratorWithStat(FileEnumerator* traversal,
+                               FilePath* out_next_path,
+                               struct stat* out_next_stat) {
+  DCHECK(out_next_path);
+  DCHECK(out_next_stat);
+  *out_next_path = traversal->Next();
+  if (out_next_path->empty())
+    return false;
+
+  *out_next_stat = traversal->GetInfo().stat();
+  return true;
+}
+
+bool CopyFileContents(File* infile, File* outfile) {
+  static constexpr size_t kBufferSize = 32768;
+  std::vector<char> buffer(kBufferSize);
+
+  for (;;) {
+    ssize_t bytes_read = infile->ReadAtCurrentPos(buffer.data(), buffer.size());
+    if (bytes_read < 0)
+      return false;
+    if (bytes_read == 0)
+      return true;
+    // Allow for partial writes
+    ssize_t bytes_written_per_read = 0;
+    do {
+      ssize_t bytes_written_partial = outfile->WriteAtCurrentPos(
+          &buffer[bytes_written_per_read], bytes_read - bytes_written_per_read);
+      if (bytes_written_partial < 0)
+        return false;
+
+      bytes_written_per_read += bytes_written_partial;
+    } while (bytes_written_per_read < bytes_read);
+  }
+
+  NOTREACHED();
+  return false;
+}
 #endif  // !defined(OS_NACL_NONSFI)
 
 #if !defined(OS_MACOSX)
@@ -212,11 +251,9 @@ bool DeleteFile(const FilePath& path, bool recursive) {
   ThreadRestrictions::AssertIOAllowed();
   const char* path_str = path.value().c_str();
   stat_wrapper_t file_info;
-  int test = CallLstat(path_str, &file_info);
-  if (test != 0) {
+  if (CallLstat(path_str, &file_info) != 0) {
     // The Windows version defines this condition as success.
-    bool ret = (errno == ENOENT || errno == ENOTDIR);
-    return ret;
+    return (errno == ENOENT || errno == ENOTDIR);
   }
   if (!S_ISDIR(file_info.st_mode))
     return (unlink(path_str) == 0);
@@ -224,7 +261,7 @@ bool DeleteFile(const FilePath& path, bool recursive) {
     return (rmdir(path_str) == 0);
 
   bool success = true;
-  std::stack<std::string> directories;
+  base::stack<std::string> directories;
   directories.push(path.value());
   FileEnumerator traversal(path, true,
       FileEnumerator::FILES | FileEnumerator::DIRECTORIES |
@@ -297,14 +334,12 @@ bool CopyDirectory(const FilePath& from_path,
   struct stat from_stat;
   FilePath current = from_path;
   if (stat(from_path.value().c_str(), &from_stat) < 0) {
-    DLOG(ERROR) << "CopyDirectory() couldn't stat source directory: "
-                << from_path.value() << " errno = " << errno;
+    DPLOG(ERROR) << "CopyDirectory() couldn't stat source directory: "
+                 << from_path.value();
     return false;
   }
-  struct stat to_path_stat;
   FilePath from_path_base = from_path;
-  if (recursive && stat(to_path.value().c_str(), &to_path_stat) == 0 &&
-      S_ISDIR(to_path_stat.st_mode)) {
+  if (recursive && DirectoryExists(to_path)) {
     // If the destination already exists and is a directory, then the
     // top level of source needs to be copied.
     from_path_base = from_path.DirName();
@@ -315,44 +350,81 @@ bool CopyDirectory(const FilePath& from_path,
   // TODO(maruel): This is not necessary anymore.
   DCHECK(recursive || S_ISDIR(from_stat.st_mode));
 
-  bool success = true;
-  while (success && !current.empty()) {
+  do {
     // current is the source path, including from_path, so append
     // the suffix after from_path to to_path to create the target_path.
     FilePath target_path(to_path);
-    if (from_path_base != current) {
-      if (!from_path_base.AppendRelativePath(current, &target_path)) {
-        success = false;
-        break;
-      }
+    if (from_path_base != current &&
+        !from_path_base.AppendRelativePath(current, &target_path)) {
+      return false;
     }
 
     if (S_ISDIR(from_stat.st_mode)) {
       if (mkdir(target_path.value().c_str(),
-                (from_stat.st_mode & 01777) | S_IRUSR | S_IXUSR | S_IWUSR) !=
-              0 &&
-          errno != EEXIST) {
-        DLOG(ERROR) << "CopyDirectory() couldn't create directory: "
-                    << target_path.value() << " errno = " << errno;
-        success = false;
+                (from_stat.st_mode & 01777) | S_IRUSR | S_IXUSR | S_IWUSR) ==
+              0 ||
+          errno == EEXIST) {
+        continue;
       }
-    } else if (S_ISREG(from_stat.st_mode)) {
-      if (!CopyFile(current, target_path)) {
-        DLOG(ERROR) << "CopyDirectory() couldn't create file: "
-                    << target_path.value();
-        success = false;
-      }
-    } else {
-      DLOG(WARNING) << "CopyDirectory() skipping non-regular file: "
-                    << current.value();
+
+      DPLOG(ERROR) << "CopyDirectory() couldn't create directory: "
+                   << target_path.value();
+      return false;
     }
 
-    current = traversal.Next();
-    if (!current.empty())
-      from_stat = traversal.GetInfo().stat();
-  }
+    if (!S_ISREG(from_stat.st_mode)) {
+      DLOG(WARNING) << "CopyDirectory() skipping non-regular file: "
+                    << current.value();
+      continue;
+    }
 
-  return success;
+    // Add O_NONBLOCK so we can't block opening a pipe.
+    base::File infile(open(current.value().c_str(), O_RDONLY | O_NONBLOCK));
+    if (!infile.IsValid()) {
+      DPLOG(ERROR) << "CopyDirectory() couldn't open file: " << current.value();
+      return false;
+    }
+
+    struct stat stat_at_use;
+    if (fstat(infile.GetPlatformFile(), &stat_at_use) < 0) {
+      DPLOG(ERROR) << "CopyDirectory() couldn't stat file: " << current.value();
+      return false;
+    }
+
+    if (!S_ISREG(stat_at_use.st_mode)) {
+      DLOG(WARNING) << "CopyDirectory() skipping non-regular file: "
+                    << current.value();
+      continue;
+    }
+
+    // Each platform has different default file opening modes for CopyFile which
+    // we want to replicate here. On OS X, we use copyfile(3) which takes the
+    // source file's permissions into account. On the other platforms, we just
+    // use the base::File constructor. On Chrome OS, base::File uses a different
+    // set of permissions than it does on other POSIX platforms.
+#if defined(OS_MACOSX)
+    int mode = 0600 | (stat_at_use.st_mode & 0177);
+#elif defined(OS_CHROMEOS)
+    int mode = 0644;
+#else
+    int mode = 0600;
+#endif
+    base::File outfile(
+        open(target_path.value().c_str(),
+             O_WRONLY | O_CREAT | O_TRUNC | O_NONBLOCK, mode));
+    if (!outfile.IsValid()) {
+      DPLOG(ERROR) << "CopyDirectory() couldn't create file: "
+                   << target_path.value();
+      return false;
+    }
+
+    if (!CopyFileContents(&infile, &outfile)) {
+      DLOG(ERROR) << "CopyDirectory() couldn't copy file: " << current.value();
+      return false;
+    }
+  } while (AdvanceEnumeratorWithStat(&traversal, &current, &from_stat));
+
+  return true;
 }
 #endif  // !defined(OS_NACL_NONSFI)
 
@@ -425,9 +497,9 @@ bool PathIsWritable(const FilePath& path) {
 bool DirectoryExists(const FilePath& path) {
   ThreadRestrictions::AssertIOAllowed();
   stat_wrapper_t file_info;
-  if (CallStat(path.value().c_str(), &file_info) == 0)
-    return S_ISDIR(file_info.st_mode);
-  return false;
+  if (CallStat(path.value().c_str(), &file_info) != 0)
+    return false;
+  return S_ISDIR(file_info.st_mode);
 }
 
 bool ReadFromFD(int fd, char* buffer, size_t bytes) {
@@ -443,6 +515,8 @@ bool ReadFromFD(int fd, char* buffer, size_t bytes) {
 }
 
 #if !defined(OS_NACL_NONSFI)
+
+#if !defined(OS_FUCHSIA)
 bool CreateSymbolicLink(const FilePath& target_path,
                         const FilePath& symlink_path) {
   DCHECK(!symlink_path.empty());
@@ -518,6 +592,8 @@ bool ExecutableExistsInPath(Environment* env,
   }
   return false;
 }
+
+#endif  // !OS_FUCHSIA
 
 #if !defined(OS_MACOSX)
 // This is implemented in file_util_mac.mm for Mac.
@@ -672,9 +748,7 @@ bool NormalizeFilePath(const FilePath& path, FilePath* normalized_path) {
 
   // To be consistant with windows, fail if |real_path_result| is a
   // directory.
-  stat_wrapper_t file_info;
-  if (CallStat(real_path_result.value().c_str(), &file_info) != 0 ||
-      S_ISDIR(file_info.st_mode))
+  if (DirectoryExists(real_path_result))
     return false;
 
   *normalized_path = real_path_result;
@@ -689,11 +763,7 @@ bool IsLink(const FilePath& file_path) {
   // least be a 'followable' link.
   if (CallLstat(file_path.value().c_str(), &st) != 0)
     return false;
-
-  if (S_ISLNK(st.st_mode))
-    return true;
-  else
-    return false;
+  return S_ISLNK(st.st_mode);
 }
 
 bool GetFileInfo(const FilePath& file_path, File::Info* results) {
@@ -818,7 +888,6 @@ bool AppendToFile(const FilePath& filename, const char* data, int size) {
   return ret;
 }
 
-// Gets the current working directory for the process.
 bool GetCurrentDirectory(FilePath* dir) {
   // getcwd can return ENOENT, which implies it checks against the disk.
   ThreadRestrictions::AssertIOAllowed();
@@ -832,11 +901,9 @@ bool GetCurrentDirectory(FilePath* dir) {
   return true;
 }
 
-// Sets the current working directory for the process.
 bool SetCurrentDirectory(const FilePath& path) {
   ThreadRestrictions::AssertIOAllowed();
-  int ret = chdir(path.value().c_str());
-  return !ret;
+  return chdir(path.value().c_str()) == 0;
 }
 
 bool VerifyPathControlledByUser(const FilePath& base,
@@ -953,32 +1020,7 @@ bool CopyFile(const FilePath& from_path, const FilePath& to_path) {
   if (!outfile.IsValid())
     return false;
 
-  const size_t kBufferSize = 32768;
-  std::vector<char> buffer(kBufferSize);
-  bool result = true;
-
-  while (result) {
-    ssize_t bytes_read = infile.ReadAtCurrentPos(&buffer[0], buffer.size());
-    if (bytes_read < 0) {
-      result = false;
-      break;
-    }
-    if (bytes_read == 0)
-      break;
-    // Allow for partial writes
-    ssize_t bytes_written_per_read = 0;
-    do {
-      ssize_t bytes_written_partial = outfile.WriteAtCurrentPos(
-          &buffer[bytes_written_per_read], bytes_read - bytes_written_per_read);
-      if (bytes_written_partial < 0) {
-        result = false;
-        break;
-      }
-      bytes_written_per_read += bytes_written_partial;
-    } while (bytes_written_per_read < bytes_read);
-  }
-
-  return result;
+  return CopyFileContents(&infile, &outfile);
 }
 #endif  // !defined(OS_MACOSX)
 

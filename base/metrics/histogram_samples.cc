@@ -104,13 +104,19 @@ bool HistogramSamples::AtomicSingleSample::Accumulate(
     return true;
 
   // Convert the parameters to 16-bit variables because it's all 16-bit below.
-  if (count < std::numeric_limits<uint16_t>::min() ||
+  // To support decrements/subtractions, divide the |count| into sign/value and
+  // do the proper operation below. The alternative is to change the single-
+  // sample's count to be a signed integer (int16_t) and just add an int16_t
+  // |count16| but that is somewhat wasteful given that the single-sample is
+  // never expected to have a count less than zero.
+  if (count < -std::numeric_limits<uint16_t>::max() ||
       count > std::numeric_limits<uint16_t>::max() ||
       bucket > std::numeric_limits<uint16_t>::max()) {
     return false;
   }
+  bool count_is_negative = count < 0;
+  uint16_t count16 = static_cast<uint16_t>(count_is_negative ? -count : count);
   uint16_t bucket16 = static_cast<uint16_t>(bucket);
-  uint16_t count16 = static_cast<uint16_t>(count);
 
   // A local, unshared copy of the single-sample is necessary so the parts
   // can be manipulated without worrying about atomicity.
@@ -135,7 +141,10 @@ bool HistogramSamples::AtomicSingleSample::Accumulate(
 
     // Update count, making sure that it doesn't overflow.
     CheckedNumeric<uint16_t> new_count(single_sample.as_parts.count);
-    new_count += count16;
+    if (count_is_negative)
+      new_count -= count16;
+    else
+      new_count += count16;
     if (!new_count.AssignIfValid(&single_sample.as_parts.count))
       return false;
 
@@ -164,17 +173,6 @@ HistogramSamples::LocalMetadata::LocalMetadata() {
   memset(this, 0, sizeof(*this));
 }
 
-// Don't try to delegate behavior to the constructor below that accepts a
-// Matadata pointer by passing &local_meta_. Such cannot be reliably passed
-// because it has not yet been constructed -- no member variables have; the
-// class itself is in the middle of being constructed. Using it to
-// initialize meta_ is okay because the object now exists and local_meta_
-// is before meta_ in the construction order.
-HistogramSamples::HistogramSamples(uint64_t id)
-    : meta_(&local_meta_) {
-  meta_->id = id;
-}
-
 HistogramSamples::HistogramSamples(uint64_t id, Metadata* meta)
     : meta_(meta) {
   DCHECK(meta_->id == 0 || meta_->id == id);
@@ -185,6 +183,8 @@ HistogramSamples::HistogramSamples(uint64_t id, Metadata* meta)
     meta_->id = id;
 }
 
+// This mustn't do anything with |meta_|. It was passed to the ctor and may
+// be invalid by the time this dtor gets called.
 HistogramSamples::~HistogramSamples() {}
 
 void HistogramSamples::Add(const HistogramSamples& other) {
@@ -214,11 +214,9 @@ void HistogramSamples::Subtract(const HistogramSamples& other) {
   DCHECK(success);
 }
 
-bool HistogramSamples::Serialize(Pickle* pickle) const {
-  if (!pickle->WriteInt64(sum()))
-    return false;
-  if (!pickle->WriteInt(redundant_count()))
-    return false;
+void HistogramSamples::Serialize(Pickle* pickle) const {
+  pickle->WriteInt64(sum());
+  pickle->WriteInt(redundant_count());
 
   HistogramBase::Sample min;
   int64_t max;
@@ -226,12 +224,10 @@ bool HistogramSamples::Serialize(Pickle* pickle) const {
   for (std::unique_ptr<SampleCountIterator> it = Iterator(); !it->Done();
        it->Next()) {
     it->Get(&min, &max, &count);
-    if (!pickle->WriteInt(min) || !pickle->WriteInt64(max) ||
-        !pickle->WriteInt(count)) {
-      return false;
-    }
+    pickle->WriteInt(min);
+    pickle->WriteInt64(max);
+    pickle->WriteInt(count);
   }
-  return true;
 }
 
 bool HistogramSamples::AccumulateSingleSample(HistogramBase::Sample value,

@@ -34,10 +34,9 @@ TEST(NinjaBuildWriter, TwoTargets) {
 
   // Make a secondary toolchain that references a pool.
   Label other_toolchain_label(SourceDir("//other/"), "toolchain");
-  Pool other_pool(setup.settings(),
-                    Label(SourceDir("//other/"), "pool",
-                          other_toolchain_label.dir(),
-                          other_toolchain_label.name()));
+  Pool other_pool(setup.settings(), Label(SourceDir("//other/"), "pool",
+                                          other_toolchain_label.dir(),
+                                          other_toolchain_label.name()));
   other_pool.set_depth(42);
   Toolchain other_toolchain(setup.settings(), other_toolchain_label);
   TestWithScope::SetupToolchain(&other_toolchain);

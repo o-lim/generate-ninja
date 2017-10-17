@@ -14,6 +14,12 @@
 #include "base/logging.h"
 #include "build/build_config.h"
 
+#if defined(OS_MACOSX)
+#include <malloc/malloc.h>
+#else
+#include <malloc.h>
+#endif
+
 namespace base {
 
 int64_t TimeValToMicroseconds(const struct timeval& tv) {
@@ -32,6 +38,8 @@ static const rlim_t kSystemDefaultMaxFds = 256;
 #elif defined(OS_SOLARIS)
 static const rlim_t kSystemDefaultMaxFds = 8192;
 #elif defined(OS_FREEBSD)
+static const rlim_t kSystemDefaultMaxFds = 8192;
+#elif defined(OS_FUCHSIA)
 static const rlim_t kSystemDefaultMaxFds = 8192;
 #elif defined(OS_NETBSD)
 static const rlim_t kSystemDefaultMaxFds = 1024;
@@ -79,6 +87,24 @@ void SetFdLimit(unsigned int max_descriptors) {
 
 size_t GetPageSize() {
   return getpagesize();
+}
+
+size_t ProcessMetrics::GetMallocUsage() {
+#if defined(OS_MACOSX) || defined(OS_IOS)
+  malloc_statistics_t stats = {0};
+  malloc_zone_statistics(nullptr, &stats);
+  return stats.size_in_use;
+#elif defined(OS_LINUX) || defined(OS_ANDROID)
+  struct mallinfo minfo = mallinfo();
+#if defined(USE_TCMALLOC)
+  return minfo.uordblks;
+#else
+  return minfo.hblkhd + minfo.arena;
+#endif
+#elif defined(OS_FUCHSIA)
+  // TODO(fuchsia): Not currently exposed. https://crbug.com/735087.
+  return 0;
+#endif
 }
 
 }  // namespace base

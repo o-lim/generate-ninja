@@ -43,6 +43,8 @@ if (is_mac) {
     args += [
       "--sdk",
       mac_sdk_path,
+      "--include",
+      rebase_path("../compat/mac", root_build_dir),
     ]
   }
 }
@@ -83,6 +85,8 @@ static_library("util") {
     "misc/initialization_state.h",
     "misc/initialization_state_dcheck.cc",
     "misc/initialization_state_dcheck.h",
+    "misc/lexing.cc",
+    "misc/lexing.h",
     "misc/metrics.cc",
     "misc/metrics.h",
     "misc/paths.h",
@@ -92,6 +96,8 @@ static_library("util") {
     "misc/pdb_structures.h",
     "misc/random_string.cc",
     "misc/random_string.h",
+    "misc/reinterpret_bytes.cc",
+    "misc/reinterpret_bytes.h",
     "misc/scoped_forbid_return.cc",
     "misc/scoped_forbid_return.h",
     "misc/symbolic_constants_common.h",
@@ -104,7 +110,6 @@ static_library("util") {
     "net/http_body.h",
     "net/http_body_gzip.cc",
     "net/http_body_gzip.h",
-    "net/http_headers.cc",
     "net/http_headers.h",
     "net/http_multipart_builder.cc",
     "net/http_multipart_builder.h",

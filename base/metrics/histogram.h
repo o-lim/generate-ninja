@@ -173,11 +173,11 @@ class BASE_EXPORT Histogram : public HistogramBase {
   //----------------------------------------------------------------------------
   // Accessors for factory construction, serialization and testing.
   //----------------------------------------------------------------------------
-  Sample declared_min() const { return declared_min_; }
-  Sample declared_max() const { return declared_max_; }
+  const BucketRanges* bucket_ranges() const;
+  Sample declared_min() const;
+  Sample declared_max() const;
   virtual Sample ranges(uint32_t i) const;
   virtual uint32_t bucket_count() const;
-  const BucketRanges* bucket_ranges() const { return bucket_ranges_; }
 
   // This function validates histogram construction arguments. It returns false
   // if some of the arguments are bad but also corrects them so they should
@@ -206,6 +206,15 @@ class BASE_EXPORT Histogram : public HistogramBase {
   bool AddSamplesFromPickle(base::PickleIterator* iter) override;
   void WriteHTMLGraph(std::string* output) const override;
   void WriteAscii(std::string* output) const override;
+
+  // Validates the histogram contents. If |crash_if_invalid| is true and the
+  // histogram is invalid, this will trigger a CHECK. Otherwise, it will return
+  // a bool indicating if the histogram is valid. |corrupted_count| is extra
+  // information the caller can provide about the number of corrupt histograms
+  // if available.
+  // TODO(bcwhite): Remove this after crbug/736675.
+  bool ValidateHistogramContents(bool crash_if_invalid,
+                                 int identifier) const override;
 
  protected:
   // This class, defined entirely within the .cc file, contains all the
@@ -238,7 +247,7 @@ class BASE_EXPORT Histogram : public HistogramBase {
             HistogramSamples::Metadata* logged_meta);
 
   // HistogramBase implementation:
-  bool SerializeInfoImpl(base::Pickle* pickle) const override;
+  void SerializeInfoImpl(base::Pickle* pickle) const override;
 
   // Method to override to skip the display of the i'th bucket if it's empty.
   virtual bool PrintEmptyBucket(uint32_t index) const;
@@ -302,21 +311,24 @@ class BASE_EXPORT Histogram : public HistogramBase {
                              int64_t* sum,
                              ListValue* buckets) const override;
 
-  // Does not own this object. Should get from StatisticsRecorder.
-  const BucketRanges* bucket_ranges_;
-
-  Sample declared_min_;  // Less than this goes into the first bucket.
-  Sample declared_max_;  // Over this goes into the last bucket.
+  // This is a dummy field placed where corruption is frequently seen on
+  // current Android builds. The hope is that it will mitigate the problem
+  // sufficiently to continue with the M61 beta branch while investigation
+  // into the true problem continues.
+  // TODO(bcwhite): Remove this once crbug/736675 is fixed.
+  const uintptr_t dummy_;
 
   // Samples that have not yet been logged with SnapshotDelta().
-  std::unique_ptr<HistogramSamples> unlogged_samples_;
+  std::unique_ptr<SampleVectorBase> unlogged_samples_;
 
   // Accumulation of all samples that have been logged with SnapshotDelta().
-  std::unique_ptr<HistogramSamples> logged_samples_;
+  std::unique_ptr<SampleVectorBase> logged_samples_;
 
+#if DCHECK_IS_ON()  // Don't waste memory if it won't be used.
   // Flag to indicate if PrepareFinalDelta has been previously called. It is
   // used to DCHECK that a final delta is not created multiple times.
   mutable bool final_delta_created_ = false;
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(Histogram);
 };
@@ -529,7 +541,7 @@ class BASE_EXPORT CustomHistogram : public Histogram {
                   HistogramSamples::Metadata* logged_meta);
 
   // HistogramBase implementation:
-  bool SerializeInfoImpl(base::Pickle* pickle) const override;
+  void SerializeInfoImpl(base::Pickle* pickle) const override;
 
   double GetBucketSize(Count current, uint32_t i) const override;
 

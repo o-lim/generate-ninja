@@ -26,6 +26,7 @@ import android.os.Build;
 import android.os.PowerManager;
 import android.os.Process;
 import android.os.StatFs;
+import android.os.StrictMode;
 import android.os.UserManager;
 import android.provider.Settings;
 import android.text.Html;
@@ -35,6 +36,7 @@ import android.view.ViewGroup.MarginLayoutParams;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodSubtype;
+import android.view.textclassifier.TextClassifier;
 import android.widget.TextView;
 
 import java.io.File;
@@ -426,16 +428,19 @@ public class ApiCompatibilityUtils {
      * @see android.view.Window#setStatusBarColor(int color).
      */
     public static void setStatusBarColor(Window window, int statusBarColor) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            // If both system bars are black, we can remove these from our layout,
-            // removing or shrinking the SurfaceFlinger overlay required for our views.
-            if (statusBarColor == Color.BLACK && window.getNavigationBarColor() == Color.BLACK) {
-                window.clearFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-            } else {
-                window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-            }
-            window.setStatusBarColor(statusBarColor);
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return;
+
+        // If both system bars are black, we can remove these from our layout,
+        // removing or shrinking the SurfaceFlinger overlay required for our views.
+        // This benefits battery usage on L and M.  However, this no longer provides a battery
+        // benefit as of N and starts to cause flicker bugs on O, so don't bother on O and up.
+        if (!BuildInfo.isAtLeastO() && statusBarColor == Color.BLACK
+                && window.getNavigationBarColor() == Color.BLACK) {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+        } else {
+            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
         }
+        window.setStatusBarColor(statusBarColor);
     }
 
     /**
@@ -443,10 +448,15 @@ public class ApiCompatibilityUtils {
      */
     @SuppressWarnings("deprecation")
     public static Drawable getDrawable(Resources res, int id) throws NotFoundException {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            return res.getDrawable(id, null);
-        } else {
-            return res.getDrawable(id);
+        StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                return res.getDrawable(id, null);
+            } else {
+                return res.getDrawable(id);
+            }
+        } finally {
+            StrictMode.setThreadPolicy(oldPolicy);
         }
     }
 
@@ -663,11 +673,33 @@ public class ApiCompatibilityUtils {
     }
 
     /**
+     * @param activity The {@link Activity} to check.
+     * @return Whether or not {@code activity} is currently in Android N+ multi-window mode.
+     */
+    public static boolean isInMultiWindowMode(Activity activity) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+            return false;
+        }
+        return activity.isInMultiWindowMode();
+    }
+
+    /**
      *  Null-safe equivalent of {@code a.equals(b)}.
      *
      *  @see Objects#equals(Object, Object)
      */
     public static boolean objectEquals(Object a, Object b) {
         return (a == null) ? (b == null) : a.equals(b);
+    }
+
+    /**
+     * Disables the Smart Select {@link TextClassifier} for the given {@link TextView} instance.
+     * @param textView The {@link TextView} that should have its classifier disabled.
+     */
+    @TargetApi(Build.VERSION_CODES.O)
+    public static void disableSmartSelectionTextClassifier(TextView textView) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+
+        textView.setTextClassifier(TextClassifier.NO_OP);
     }
 }

@@ -803,8 +803,8 @@ TYPED_TEST(BindVariantsTest, FunctionTypeSupport) {
   EXPECT_EQ(&no_ref, std::move(normal_non_refcounted_cb).Run());
 
   ClosureType method_cb = TypeParam::Bind(&HasRef::VoidMethod0, &has_ref);
-  ClosureType method_refptr_cb = TypeParam::Bind(&HasRef::VoidMethod0,
-                                                 make_scoped_refptr(&has_ref));
+  ClosureType method_refptr_cb =
+      TypeParam::Bind(&HasRef::VoidMethod0, WrapRefCounted(&has_ref));
   ClosureType const_method_nonconst_obj_cb =
       TypeParam::Bind(&HasRef::VoidConstMethod0, &has_ref);
   ClosureType const_method_const_obj_cb =
@@ -846,7 +846,7 @@ TYPED_TEST(BindVariantsTest, ReturnValues) {
       .WillOnce(Return(41337))
       .WillOnce(Return(51337));
   EXPECT_CALL(has_ref, UniquePtrMethod0())
-      .WillOnce(Return(ByMove(MakeUnique<int>(42))));
+      .WillOnce(Return(ByMove(std::make_unique<int>(42))));
 
   CallbackType<TypeParam, int()> normal_cb = TypeParam::Bind(&IntFunc0);
   CallbackType<TypeParam, int()> method_cb =
@@ -1370,8 +1370,9 @@ TEST_F(BindTest, OnceCallback) {
 
   cb = std::move(cb2);
 
-  OnceCallback<void(int)> cb4 = BindOnce(
-      &VoidPolymorphic<std::unique_ptr<int>, int>::Run, MakeUnique<int>(0));
+  OnceCallback<void(int)> cb4 =
+      BindOnce(&VoidPolymorphic<std::unique_ptr<int>, int>::Run,
+               std::make_unique<int>(0));
   BindOnce(std::move(cb4), 1).Run();
 }
 

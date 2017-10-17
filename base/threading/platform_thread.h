@@ -20,6 +20,8 @@
 #include <windows.h>
 #elif defined(OS_MACOSX)
 #include <mach/mach_types.h>
+#elif defined(OS_FUCHSIA)
+#include <zircon/types.h>
 #elif defined(OS_POSIX)
 #include <pthread.h>
 #include <unistd.h>
@@ -32,6 +34,8 @@ namespace base {
 typedef DWORD PlatformThreadId;
 #elif defined(OS_MACOSX)
 typedef mach_port_t PlatformThreadId;
+#elif defined(OS_FUCHSIA)
+typedef zx_handle_t PlatformThreadId;
 #elif defined(OS_POSIX)
 typedef pid_t PlatformThreadId;
 #endif
@@ -200,10 +204,16 @@ class BASE_EXPORT PlatformThread {
   // priority of the current thread.
   static bool CanIncreaseCurrentThreadPriority();
 
-  // Toggles the current thread's priority at runtime. A thread may not be able
-  // to raise its priority back up after lowering it if the process does not
-  // have a proper permission, e.g. CAP_SYS_NICE on Linux. A thread may not be
-  // able to lower its priority back down after raising it to REALTIME_AUDIO.
+  // Toggles the current thread's priority at runtime.
+  //
+  // A thread may not be able to raise its priority back up after lowering it if
+  // the process does not have a proper permission, e.g. CAP_SYS_NICE on Linux.
+  // A thread may not be able to lower its priority back down after raising it
+  // to REALTIME_AUDIO.
+  //
+  // This function must not be called from the main thread on Mac. This is to
+  // avoid performance regressions (https://crbug.com/601270).
+  //
   // Since changing other threads' priority is not permitted in favor of
   // security, this interface is restricted to change only the current thread
   // priority (https://crbug.com/399473).

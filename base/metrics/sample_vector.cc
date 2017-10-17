@@ -24,12 +24,6 @@ typedef HistogramBase::Count Count;
 typedef HistogramBase::Sample Sample;
 
 SampleVectorBase::SampleVectorBase(uint64_t id,
-                                   const BucketRanges* bucket_ranges)
-    : HistogramSamples(id), bucket_ranges_(bucket_ranges) {
-  CHECK_GE(bucket_ranges_->bucket_count(), 1u);
-}
-
-SampleVectorBase::SampleVectorBase(uint64_t id,
                                    Metadata* meta,
                                    const BucketRanges* bucket_ranges)
     : HistogramSamples(id, meta), bucket_ranges_(bucket_ranges) {
@@ -110,19 +104,19 @@ std::unique_ptr<SampleCountIterator> SampleVectorBase::Iterator() const {
   // Handle the single-sample case.
   SingleSample sample = single_sample().Load();
   if (sample.count != 0) {
-    return MakeUnique<SingleSampleIterator>(
+    return std::make_unique<SingleSampleIterator>(
         bucket_ranges_->range(sample.bucket),
         bucket_ranges_->range(sample.bucket + 1), sample.count, sample.bucket);
   }
 
   // Handle the multi-sample case.
   if (counts() || MountExistingCountsStorage()) {
-    return MakeUnique<SampleVectorIterator>(counts(), counts_size(),
-                                            bucket_ranges_);
+    return std::make_unique<SampleVectorIterator>(counts(), counts_size(),
+                                                  bucket_ranges_);
   }
 
   // And the no-value case.
-  return MakeUnique<SampleVectorIterator>(nullptr, 0, bucket_ranges_);
+  return std::make_unique<SampleVectorIterator>(nullptr, 0, bucket_ranges_);
 }
 
 bool SampleVectorBase::AddSubtractImpl(SampleCountIterator* iter,
@@ -272,7 +266,7 @@ void SampleVectorBase::MountCountsStorageAndMoveSingleSample() {
       // Point |counts_| to the newly created storage. This is done while
       // locked to prevent possible concurrent calls to CreateCountsStorage
       // but, between that call and here, other threads could notice the
-      // existance of the storage and race with this to set_counts(). That's
+      // existence of the storage and race with this to set_counts(). That's
       // okay because (a) it's atomic and (b) it always writes the same value.
       set_counts(counts);
     }
@@ -286,9 +280,11 @@ SampleVector::SampleVector(const BucketRanges* bucket_ranges)
     : SampleVector(0, bucket_ranges) {}
 
 SampleVector::SampleVector(uint64_t id, const BucketRanges* bucket_ranges)
-    : SampleVectorBase(id, bucket_ranges) {}
+    : SampleVectorBase(id, new LocalMetadata(), bucket_ranges) {}
 
-SampleVector::~SampleVector() {}
+SampleVector::~SampleVector() {
+  delete static_cast<LocalMetadata*>(meta());
+}
 
 bool SampleVector::MountExistingCountsStorage() const {
   // There is never any existing storage other than what is already in use.
@@ -340,7 +336,9 @@ bool PersistentSampleVector::MountExistingCountsStorage() const {
   // Mount the counts array in position.
   set_counts(
       static_cast<HistogramBase::AtomicCount*>(persistent_counts_.Get()));
-  return true;
+
+  // The above shouldn't fail but can if the data is corrupt or incomplete.
+  return counts() != nullptr;
 }
 
 HistogramBase::AtomicCount*
@@ -364,7 +362,7 @@ SampleVectorIterator::SampleVectorIterator(
       counts_size_(counts->size()),
       bucket_ranges_(bucket_ranges),
       index_(0) {
-  CHECK_GE(bucket_ranges_->bucket_count(), counts_size_);
+  DCHECK_GE(bucket_ranges_->bucket_count(), counts_size_);
   SkipEmptyBuckets();
 }
 
@@ -376,7 +374,7 @@ SampleVectorIterator::SampleVectorIterator(
       counts_size_(counts_size),
       bucket_ranges_(bucket_ranges),
       index_(0) {
-  CHECK_GE(bucket_ranges_->bucket_count(), counts_size_);
+  DCHECK_GE(bucket_ranges_->bucket_count(), counts_size_);
   SkipEmptyBuckets();
 }
 

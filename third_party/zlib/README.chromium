@@ -22,7 +22,4 @@ Local Modifications:
    imported.
  - The contents of the google directory are original Chromium-specific
    additions.
- - google.patch contains changes from the upstream version, mostly related to
-   the build.
- - Intel SIMD optimisations from https://github.com/jtkukunas/zlib/ have been
-   integrated. These changes are reflected in simd.patch.
+ - Plus the changes in 'patches' folder.

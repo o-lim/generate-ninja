@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/chrome_build.gni")
+import("//build/config/chromecast_build.gni")
 import("//build/toolchain/toolchain.gni")
 
 declare_args() {
@@ -55,7 +56,7 @@ declare_args() {
   #
   # TODO(pcc): Remove this flag if/when CFI is enabled in all official builds.
   is_cfi = target_os == "linux" && !is_chromeos && target_cpu == "x64" &&
-           is_official_build && allow_posix_link_time_opt
+           is_official_build
 
   # Enable checks for bad casts: derived cast and unrelated cast.
   # TODO(krasin): remove this, when we're ready to add these checks by default.
@@ -67,9 +68,12 @@ declare_args() {
   # https://crbug.com/701919
   use_cfi_icall = false
 
-  # By default, Control Flow Integrity will crash the program if it detects a
-  # violation. Set this to true to print detailed diagnostics instead.
+  # Print detailed diagnostics when Control Flow Integrity detects a violation.
   use_cfi_diag = false
+
+  # Let Control Flow Integrity continue execution instead of crashing when
+  # printing diagnostics (use_cfi_diag = true).
+  use_cfi_recover = false
 
   # Compile for fuzzing with LLVM LibFuzzer.
   # See http://www.chromium.org/developers/testing/libfuzzer
@@ -122,7 +126,7 @@ if (current_toolchain != default_toolchain) {
   sanitizer_coverage_flags = ""
   use_afl = false
   use_cfi_diag = false
-  use_custom_libcxx = false
+  use_cfi_recover = false
   use_drfuzz = false
   use_libfuzzer = false
   use_prebuilt_instrumented_libraries = false
@@ -134,13 +138,6 @@ if (current_toolchain != default_toolchain) {
 # declare_args block. User overrides are only applied at the end of a
 # declare_args block.
 declare_args() {
-  # Use libc++ (buildtools/third_party/libc++ and
-  # buildtools/third_party/libc++abi) instead of stdlibc++ as standard library.
-  # This is intended to be used for instrumented builds.
-  use_custom_libcxx =
-      (is_asan && is_linux && !is_chromeos) || is_tsan || is_msan || is_ubsan ||
-      is_ubsan_security || use_libfuzzer || use_afl
-
   # Enable -fsanitize-coverage.
   use_sanitizer_coverage =
       use_libfuzzer || use_afl || sanitizer_coverage_flags != ""
@@ -157,12 +154,23 @@ if ((use_afl || use_libfuzzer) && sanitizer_coverage_flags == "") {
   sanitizer_coverage_flags = "trace-pc-guard,indirect-calls"
 }
 
+# Whether we are linking against a sanitizer runtime library. Among other
+# things, this changes the default symbol level and other settings in order to
+# prepare to create stack traces "live" using the sanitizer runtime.
 using_sanitizer =
     is_asan || is_lsan || is_tsan || is_msan || is_ubsan || is_ubsan_null ||
-    is_ubsan_vptr || is_ubsan_security || use_sanitizer_coverage
+    is_ubsan_vptr || is_ubsan_security || use_sanitizer_coverage || use_cfi_diag
+
+# Whether we are doing a fuzzer build. Normally this should be checked instead
+# of checking "use_libfuzzer || use_afl" because often developers forget to
+# check for "use_afl".
+use_fuzzing_engine = use_libfuzzer || use_afl
 
 assert(!using_sanitizer || is_clang,
        "Sanitizers (is_*san) require setting is_clang = true in 'gn args'")
+
+assert(!is_cfi || is_clang,
+       "is_cfi requires setting is_clang = true in 'gn args'")
 
 prebuilt_instrumented_libraries_available =
     is_msan && (msan_track_origins == 0 || msan_track_origins == 2)
@@ -201,3 +209,20 @@ assert(!is_msan || (is_linux && current_cpu == "x64"),
 # allocation functions is hard on Windows and not yet implemented in LLVM.
 assert(!is_win || !is_debug || !is_asan,
        "ASan on Windows doesn't work in debug (set is_debug=false).")
+
+# Make sure that if we recover on detection (i.e. not crash), diagnostics are
+# printed.
+assert(!use_cfi_recover || use_cfi_diag,
+       "Only use CFI recovery together with diagnostics.")
+
+# TODO(crbug.com/753445): the use_sanitizer_coverage arg is currently
+# not supported by the Chromium mac_clang_x64 toolchain on iOS distribution.
+# The coverage works with iOS toolchain but it is broken when the mac
+# toolchain is used as a secondary one on iOS distribution. E.g., it should be
+# possible to build the "net" target for iOS with the sanitizer coverage
+# enabled.
+assert(
+    !(use_sanitizer_coverage && is_mac && target_os == "ios"),
+    "crbug.com/753445: use_sanitizer_coverage=true is not supported by the " +
+        "Chromium mac_clang_x64 toolchain on iOS distribution. Please set " +
+        "the argument value to false.")

@@ -23,7 +23,11 @@ assert(is_win)
 tool_wrapper_path = rebase_path("tool_wrapper.py", root_build_dir)
 
 if (use_goma) {
-  goma_prefix = "$goma_dir/gomacc.exe "
+  if (host_os == "win") {
+    goma_prefix = "$goma_dir/gomacc.exe "
+  } else {
+    goma_prefix = "$goma_dir/gomacc "
+  }
 } else {
   goma_prefix = ""
 }
@@ -116,6 +120,10 @@ template("msvc_toolchain") {
       # archives and understands bitcode (for lto builds).
       lib = "$prefix/$lld_link /lib /llvmlibthin"
       link = "$prefix/$lld_link"
+      if (host_os != "win") {
+        # See comment adding --rsp-quoting to $cl above for more information.
+        link = "$link --rsp-quoting=posix"
+      }
     } else {
       lib = "lib.exe"
       link = "link.exe"
@@ -135,6 +143,13 @@ template("msvc_toolchain") {
       sys_include_flags = ""
     }
 
+    clflags = ""
+
+    # Pass /FC flag to the compiler if needed.
+    if (msvc_use_absolute_paths) {
+      clflags += "/FC "
+    }
+
     tool("cc") {
       rspfile = "{{output}}.rsp"
       precompiled_header_type = "msvc"
@@ -143,7 +158,7 @@ template("msvc_toolchain") {
       # Label names may have spaces in them so the pdbname must be quoted. The
       # source and output don't need to be quoted because GN knows they're a
       # full file name and will quote automatically when necessary.
-      command = "$env_wrapper$cl /nologo /showIncludes /FC @$rspfile /c {{source}} /Fo{{output}} /Fd\"$pdbname\""
+      command = "$env_wrapper$cl /nologo /showIncludes ${clflags} @$rspfile /c {{source}} /Fo{{output}} /Fd\"$pdbname\""
       depsformat = "msvc"
       description = "CC {{output}}"
       outputs = [
@@ -160,7 +175,7 @@ template("msvc_toolchain") {
       pdbname = "{{target_out_dir}}/{{label_name}}_cc.pdb"
 
       # See comment in CC tool about quoting.
-      command = "$env_wrapper$cl /nologo /showIncludes /FC @$rspfile /c {{source}} /Fo{{output}} /Fd\"$pdbname\""
+      command = "$env_wrapper$cl /nologo /showIncludes ${clflags} @$rspfile /c {{source}} /Fo{{output}} /Fd\"$pdbname\""
       depsformat = "msvc"
       description = "CXX {{output}}"
       outputs = [
@@ -349,7 +364,7 @@ if (target_cpu == "x86") {
     }
   }
 
-  msvc_toolchain("clang_x86") {
+  msvc_toolchain("win_clang_x86") {
     environment = "environment.x86"
     prefix = rebase_path("$clang_base_path/bin", root_build_dir)
     cl = "${goma_prefix}$prefix/${clang_cl}"
@@ -386,7 +401,7 @@ template("win_x64_toolchains") {
     }
   }
 
-  msvc_toolchain("clang_" + target_name) {
+  msvc_toolchain("win_clang_" + target_name) {
     environment = "environment.x64"
     prefix = rebase_path("$clang_base_path/bin", root_build_dir)
     cl = "${goma_prefix}$prefix/${clang_cl}"

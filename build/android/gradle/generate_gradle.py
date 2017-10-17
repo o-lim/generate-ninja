@@ -44,6 +44,7 @@ _DEFAULT_TARGETS = [
     # because it has resources as deps of android_apk() rather than using an
     #  android_library() intermediate target.
     # '//android_webview:system_webview_apk',
+    '//android_webview/test/embedded_test_server:aw_net_test_support_apk',
     '//android_webview/test:webview_instrumentation_apk',
     '//android_webview/test:webview_instrumentation_test_apk',
     '//base:base_junit_tests',
@@ -54,6 +55,12 @@ _DEFAULT_TARGETS = [
     '//chrome/android:chrome_sync_shell_test_apk',
     '//content/public/android:content_junit_tests',
     '//content/shell/android:content_shell_apk',
+]
+
+_EXCLUDED_PREBUILT_JARS = [
+    # Android Studio already provides Desugar runtime.
+    # Including it would cause linking error because of a duplicate class.
+    'lib.java/third_party/bazel/desugar/Desugar-runtime.jar'
 ]
 
 
@@ -210,7 +217,7 @@ class _ProjectEntry(object):
 
   def JavaFiles(self):
     if self._java_files is None:
-      java_sources_file = self.Gradle().get('java_sources_file')
+      java_sources_file = self.DepsInfo().get('java_sources_file')
       java_files = []
       if java_sources_file:
         java_sources_file = _RebasePath(java_sources_file)
@@ -222,7 +229,8 @@ class _ProjectEntry(object):
     return [p for p in self.JavaFiles() if not p.startswith('..')]
 
   def PrebuiltJars(self):
-    return self.Gradle().get('dependent_prebuilt_jars', [])
+    all_jars = self.Gradle().get('dependent_prebuilt_jars', [])
+    return [i for i in all_jars if i not in _EXCLUDED_PREBUILT_JARS]
 
   def AllEntries(self):
     """Returns a list of all entries that the current entry depends on.
@@ -245,12 +253,13 @@ class _ProjectEntry(object):
 class _ProjectContextGenerator(object):
   """Helper class to generate gradle build files"""
   def __init__(self, project_dir, build_vars, use_gradle_process_resources,
-      jinja_processor, split_projects):
+      jinja_processor, split_projects, canary):
     self.project_dir = project_dir
     self.build_vars = build_vars
     self.use_gradle_process_resources = use_gradle_process_resources
     self.jinja_processor = jinja_processor
     self.split_projects = split_projects
+    self.canary = canary
     self.processed_java_dirs = set()
     self.processed_prebuilts = set()
     self.processed_res_dirs = set()
@@ -363,7 +372,7 @@ class _ProjectContextGenerator(object):
     res_dirs.add(
         os.path.join(self.EntryOutputDir(root_entry), _RES_SUBDIR))
     variables['res_dirs'] = self._Relativize(root_entry, res_dirs)
-    android_manifest = root_entry.Gradle().get('android_manifest')
+    android_manifest = root_entry.DepsInfo().get('android_manifest')
     if not android_manifest:
       android_manifest = self._GenCustomManifest(root_entry)
     variables['android_manifest'] = self._Relativize(
@@ -503,6 +512,7 @@ def _GenerateBaseVars(generator, build_vars, source_properties):
       'android-%s' % build_vars['android_sdk_version'])
   variables['use_gradle_process_resources'] = (
       generator.use_gradle_process_resources)
+  variables['canary'] = generator.canary
   return variables
 
 
@@ -592,9 +602,9 @@ def _GenerateModuleAll(gradle_output_dir, generator, build_vars,
       os.path.join(gradle_output_dir, _MODULE_ALL, _GRADLE_BUILD_FILE), data)
 
 
-def _GenerateRootGradle(jinja_processor):
+def _GenerateRootGradle(jinja_processor, canary):
   """Returns the data for the root project's build.gradle."""
-  return jinja_processor.Render(_TemplatePath('root'))
+  return jinja_processor.Render(_TemplatePath('root'), {'canary': canary})
 
 
 def _GenerateSettingsGradle(project_entries, add_all_module):
@@ -712,6 +722,10 @@ def main():
                       action='store_true',
                       help='Split projects by their gn deps rather than '
                            'combining all the dependencies of each target')
+  parser.add_argument('--canary',
+                      action='store_true',
+                      help='Generate a project that is compatible with '
+                           'Android Studio 3.0 Canary.')
   args = parser.parse_args()
   if args.output_directory:
     constants.SetOutputDirectory(args.output_directory)
@@ -732,7 +746,8 @@ def main():
       _RebasePath(os.path.join(build_vars['android_sdk_build_tools'],
                                'source.properties')))
   generator = _ProjectContextGenerator(_gradle_output_dir, build_vars,
-      args.use_gradle_process_resources, jinja_processor, args.split_projects)
+      args.use_gradle_process_resources, jinja_processor, args.split_projects,
+      args.canary)
   logging.warning('Creating project at: %s', generator.project_dir)
 
   if args.all:
@@ -800,7 +815,7 @@ def main():
         source_properties, jinja_processor)
 
   _WriteFile(os.path.join(generator.project_dir, _GRADLE_BUILD_FILE),
-             _GenerateRootGradle(jinja_processor))
+             _GenerateRootGradle(jinja_processor, args.canary))
 
   _WriteFile(os.path.join(generator.project_dir, 'settings.gradle'),
              _GenerateSettingsGradle(project_entries, add_all_module))
@@ -818,7 +833,9 @@ def main():
     _ExtractZips(generator.project_dir, zip_tuples)
 
   logging.warning('Project created!')
-  logging.warning('Generated projects work with Android Studio 2.3')
+  logging.warning('Generated projects work with %s',
+                  'Android Studio 3.0 Beta 2' if args.canary
+                      else 'Android Studio 2.3')
   logging.warning('For more tips: https://chromium.googlesource.com/chromium'
                   '/src.git/+/master/docs/android_studio.md')
 

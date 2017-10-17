@@ -4,7 +4,6 @@
 
 #include "base/android/library_loader/library_loader_hooks.h"
 
-#include "base/android/command_line_android.h"
 #include "base/android/jni_string.h"
 #include "base/android/library_loader/library_load_from_apk_status_codes.h"
 #include "base/android/library_loader/library_prefetcher.h"
@@ -124,9 +123,10 @@ static void RecordChromiumAndroidLinkerBrowserHistogram(
                             MAX_BROWSER_HISTOGRAM_CODE);
 
   // Record the device support for loading a library directly from the APK file.
-  UMA_HISTOGRAM_ENUMERATION("ChromiumAndroidLinker.LibraryLoadFromApkStatus",
-                            library_load_from_apk_status,
-                            LIBRARY_LOAD_FROM_APK_STATUS_CODES_MAX);
+  UMA_HISTOGRAM_ENUMERATION(
+      "ChromiumAndroidLinker.LibraryLoadFromApkStatus",
+      static_cast<LibraryLoadFromApkStatusCodes>(library_load_from_apk_status),
+      LIBRARY_LOAD_FROM_APK_STATUS_CODES_MAX);
 
   // Record how long it took to load the shared libraries.
   UMA_HISTOGRAM_TIMES("ChromiumAndroidLinker.BrowserLoadTime",
@@ -164,13 +164,6 @@ void SetLibraryLoadedHook(LibraryLoadedHook* func) {
   g_registration_callback = func;
 }
 
-static void InitCommandLine(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jcaller,
-    const JavaParamRef<jobjectArray>& init_command_line) {
-  InitNativeCommandLineFromJavaArray(env, init_command_line);
-}
-
 static jboolean LibraryLoaded(JNIEnv* env,
                               const JavaParamRef<jobject>& jcaller) {
   if (g_native_initialization_hook && !g_native_initialization_hook()) {
@@ -199,10 +192,6 @@ static jint PercentageOfResidentNativeLibraryCode(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz) {
   return NativeLibraryPrefetcher::PercentageOfResidentNativeLibraryCode();
-}
-
-bool RegisterLibraryLoaderEntryHook(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 void SetVersionNumber(const char* version_number) {

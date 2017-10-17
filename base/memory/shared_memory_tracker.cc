@@ -5,17 +5,12 @@
 #include "base/memory/shared_memory_tracker.h"
 
 #include "base/memory/shared_memory.h"
-#include "base/strings/stringprintf.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/trace_event/memory_allocator_dump_guid.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/process_memory_dump.h"
 
 namespace base {
-
-SharedMemoryTracker::Usage::Usage() = default;
-
-SharedMemoryTracker::Usage::Usage(const Usage& rhs) = default;
-
-SharedMemoryTracker::Usage::~Usage() = default;
 
 // static
 SharedMemoryTracker* SharedMemoryTracker::GetInstance() {
@@ -23,61 +18,84 @@ SharedMemoryTracker* SharedMemoryTracker::GetInstance() {
   return instance;
 }
 
+// static
+std::string SharedMemoryTracker::GetDumpNameForTracing(
+    const UnguessableToken& id) {
+  DCHECK(!id.is_empty());
+  return "shared_memory/" + id.ToString();
+}
+
+// static
+trace_event::MemoryAllocatorDumpGuid
+SharedMemoryTracker::GetGlobalDumpIdForTracing(const UnguessableToken& id) {
+  std::string dump_name = GetDumpNameForTracing(id);
+  return trace_event::MemoryAllocatorDumpGuid(dump_name);
+}
+
+// static
+const trace_event::MemoryAllocatorDump*
+SharedMemoryTracker::GetOrCreateSharedMemoryDump(
+    const SharedMemory* shared_memory,
+    trace_event::ProcessMemoryDump* pmd) {
+  const std::string dump_name =
+      GetDumpNameForTracing(shared_memory->mapped_id());
+  trace_event::MemoryAllocatorDump* local_dump =
+      pmd->GetAllocatorDump(dump_name);
+  if (local_dump)
+    return local_dump;
+
+  size_t virtual_size = shared_memory->mapped_size();
+  // If resident size is not available, a virtual size is used as fallback.
+  size_t size = virtual_size;
+#if defined(COUNT_RESIDENT_BYTES_SUPPORTED)
+  base::Optional<size_t> resident_size =
+      trace_event::ProcessMemoryDump::CountResidentBytesInSharedMemory(
+          *shared_memory);
+  if (resident_size.has_value())
+    size = resident_size.value();
+#endif
+
+  local_dump = pmd->CreateAllocatorDump(dump_name);
+  local_dump->AddScalar(trace_event::MemoryAllocatorDump::kNameSize,
+                        trace_event::MemoryAllocatorDump::kUnitsBytes, size);
+  local_dump->AddScalar("virtual_size",
+                        trace_event::MemoryAllocatorDump::kUnitsBytes,
+                        virtual_size);
+  auto global_dump_guid = GetGlobalDumpIdForTracing(shared_memory->mapped_id());
+  trace_event::MemoryAllocatorDump* global_dump =
+      pmd->CreateSharedGlobalAllocatorDump(global_dump_guid);
+  global_dump->AddScalar(trace_event::MemoryAllocatorDump::kNameSize,
+                         trace_event::MemoryAllocatorDump::kUnitsBytes, size);
+
+  // The edges will be overriden by the clients with correct importance.
+  pmd->AddOverridableOwnershipEdge(local_dump->guid(), global_dump->guid(),
+                                   0 /* importance */);
+  return local_dump;
+}
+
 void SharedMemoryTracker::IncrementMemoryUsage(
     const SharedMemory& shared_memory) {
-  Usage usage;
-  // |shared_memory|'s unique ID must be generated here and it'd be too late at
-  // OnMemoryDump. An ID is generated with a SharedMemoryHandle, but the handle
-  // might already be closed at that time. Now IncrementMemoryUsage is called
-  // just after mmap and the handle must live then. See the discussion at
-  // crbug.com/604726#c30.
-  SharedMemory::UniqueId id;
-  if (!shared_memory.GetUniqueId(&id))
-    return;
-  usage.unique_id = id;
-  usage.size = shared_memory.mapped_size();
   AutoLock hold(usages_lock_);
-  usages_[&shared_memory] = usage;
+  DCHECK(usages_.find(&shared_memory) == usages_.end());
+  usages_[&shared_memory] = shared_memory.mapped_size();
 }
 
 void SharedMemoryTracker::DecrementMemoryUsage(
     const SharedMemory& shared_memory) {
   AutoLock hold(usages_lock_);
+  DCHECK(usages_.find(&shared_memory) != usages_.end());
   usages_.erase(&shared_memory);
 }
 
 bool SharedMemoryTracker::OnMemoryDump(const trace_event::MemoryDumpArgs& args,
                                        trace_event::ProcessMemoryDump* pmd) {
-  std::unordered_map<SharedMemory::UniqueId, size_t, SharedMemory::UniqueIdHash>
-      sizes;
   {
     AutoLock hold(usages_lock_);
-    for (const auto& usage : usages_)
-      sizes[usage.second.unique_id] += usage.second.size;
-  }
-  for (auto& size : sizes) {
-    const SharedMemory::UniqueId& id = size.first;
-    std::string dump_name = StringPrintf("%s/%lld.%lld", "shared_memory",
-                                         static_cast<long long>(id.first),
-                                         static_cast<long long>(id.second));
-    auto guid = trace_event::MemoryAllocatorDumpGuid(dump_name);
-    trace_event::MemoryAllocatorDump* local_dump =
-        pmd->CreateAllocatorDump(dump_name);
-    // TODO(hajimehoshi): The size is not resident size but virtual size so far.
-    // Fix this to record resident size.
-    local_dump->AddScalar(trace_event::MemoryAllocatorDump::kNameSize,
-                          trace_event::MemoryAllocatorDump::kUnitsBytes,
-                          size.second);
-    trace_event::MemoryAllocatorDump* global_dump =
-        pmd->CreateSharedGlobalAllocatorDump(guid);
-    global_dump->AddScalar(trace_event::MemoryAllocatorDump::kNameSize,
-                           trace_event::MemoryAllocatorDump::kUnitsBytes,
-                           size.second);
-    // TOOD(hajimehoshi): Detect which the shared memory comes from browser,
-    // renderer or GPU process.
-    // TODO(hajimehoshi): Shared memory reported by GPU and discardable is
-    // currently double-counted. Add ownership edges to avoid this.
-    pmd->AddOwnershipEdge(local_dump->guid(), global_dump->guid());
+    for (const auto& usage : usages_) {
+      const trace_event::MemoryAllocatorDump* dump =
+          GetOrCreateSharedMemoryDump(usage.first, pmd);
+      DCHECK(dump);
+    }
   }
   return true;
 }

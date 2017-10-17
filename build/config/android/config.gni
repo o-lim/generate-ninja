@@ -43,15 +43,16 @@ if (is_android) {
 
   if (!defined(default_android_sdk_root)) {
     default_android_sdk_root = "//third_party/android_tools/sdk"
-    default_android_sdk_version = "25"
-    default_android_sdk_build_tools_version = "25.0.2"
+    default_android_sdk_version = "26"
+    default_android_sdk_build_tools_version = "26.0.2"
+    default_android_sdk_tools_version_suffix = "-25.3.2"
   }
 
   if (!defined(default_lint_android_sdk_root)) {
     # Purposefully repeated so that downstream can change
     # default_android_sdk_root without changing lint version.
     default_lint_android_sdk_root = "//third_party/android_tools/sdk"
-    default_lint_android_sdk_version = "25"
+    default_lint_android_sdk_version = "26"
   }
 
   if (!defined(default_extras_android_sdk_root)) {
@@ -68,26 +69,22 @@ if (is_android) {
     default_android_keystore_password = "chromium"
   }
 
-  # TODO(paulmiller): Remove; superseded by google_play_services_package.
-  if (!defined(google_play_services_library)) {
-    google_play_services_library =
-        "//third_party/android_tools:google_play_services_default_java"
-  }
-
-  # TODO(paulmiller): Remove; superseded by google_play_services_package.
-  if (!defined(google_play_services_resources)) {
-    google_play_services_resources =
-        "//third_party/android_tools:google_play_services_default_resources"
-  }
-
   # google_play_services_package contains the path where individual client
   # targets (e.g. google_play_services_base_java) are located.
   if (!defined(google_play_services_package)) {
     google_play_services_package = "//third_party/android_tools"
   }
 
+  if (!defined(android_support_library_package)) {
+    android_support_library_package = "//third_party/android_tools/support"
+  }
+
+  if (!defined(system_webview_apk_target)) {
+    system_webview_apk_target = "//android_webview:system_webview_apk"
+  }
+
   webview_public_framework_jar =
-      "//third_party/android_platform/webview/frameworks_7.1.1_r28.jar"
+      "//third_party/android_system_sdk/android_system.jar"
   if (!defined(webview_framework_jar)) {
     webview_framework_jar = webview_public_framework_jar
   }
@@ -100,6 +97,7 @@ if (is_android) {
     android_sdk_root = default_android_sdk_root
     android_sdk_version = default_android_sdk_version
     android_sdk_build_tools_version = default_android_sdk_build_tools_version
+    android_sdk_tools_version_suffix = default_android_sdk_tools_version_suffix
 
     lint_android_sdk_root = default_lint_android_sdk_root
     lint_android_sdk_version = default_lint_android_sdk_version
@@ -107,10 +105,10 @@ if (is_android) {
     # Libc++ library directory. Override to use a custom libc++ binary.
     android_libcpp_lib_dir = ""
 
-    # Android versionCode for android_apk()s that don't expclitly set one.
+    # Android versionCode for android_apk()s that don't explicitly set one.
     android_default_version_code = "1"
 
-    # Android versionName for android_apk()s that don't expclitly set one.
+    # Android versionName for android_apk()s that don't explicitly set one.
     android_default_version_name = "Developer Build"
 
     # The path to the keystore to use for signing builds.
@@ -136,8 +134,11 @@ if (is_android) {
     # off will enable proguard.
     is_java_debug = is_debug
 
-    # Set to true to enable the Errorprone compiler
-    use_errorprone_java_compiler = false
+    # Mark APKs as android:debuggable="true".
+    debuggable_apks = !is_official_build
+
+    # Set to false to disable the Errorprone compiler
+    use_errorprone_java_compiler = true
 
     # Enables EMMA Java code coverage. Instruments classes during build to
     # produce .ec files during runtime
@@ -163,19 +164,25 @@ if (is_android) {
     # abi in 64-bit Monochrome and WebView.
     build_apk_secondary_abi = true
 
-    # Enables java8 language features (via retrolambda).
-    # work-in-progress (http://crbug.com/642600)
-    use_java8 = false
-
     # Build incremental targets whenever possible.
     # Ex. with this arg set to true, the chrome_public_apk target result in
     # chrome_public_apk_incremental being built.
     incremental_apk_by_default = false
+
+    # When true, updates all android_aar_prebuilt() .info files during gn gen.
+    # Refer to android_aar_prebuilt() for more details.
+    update_android_aar_prebuilts = false
   }
 
   # We need a second declare_args block to make sure we are using the overridden
   # value of the arguments set above.
   declare_args() {
+    if (defined(default_android_sdk_platform_version)) {
+      android_sdk_platform_version = default_android_sdk_platform_version
+    } else {
+      android_sdk_platform_version = android_sdk_version
+    }
+
     # Speed up dexing using dx --incremental.
     enable_incremental_dx = is_java_debug
   }
@@ -185,6 +192,9 @@ if (is_android) {
   # byte-for-byte identical output.
   assert(!(enable_incremental_dx && !is_java_debug))
   assert(!(enable_incremental_javac && !is_java_debug))
+
+  # Path to where selected build variables are written to.
+  android_build_vars = "$root_build_dir/build_vars.txt"
 
   # Host stuff -----------------------------------------------------------------
 
@@ -214,7 +224,8 @@ if (is_android) {
   # than just the current one) since these are needed by the Android toolchain
   # file to define toolchains for all possible targets in one pass.
 
-  android_sdk = "${android_sdk_root}/platforms/android-${android_sdk_version}"
+  android_sdk =
+      "${android_sdk_root}/platforms/android-${android_sdk_platform_version}"
 
   # Path to the Android NDK and SDK.
   android_ndk_include_dir = "$android_ndk_root/usr/include"
@@ -357,13 +368,8 @@ if (is_android) {
   }
 
   if (defined(android_secondary_abi_cpu)) {
-    if (is_clang) {
-      android_secondary_abi_toolchain =
-          "//build/toolchain/android:android_clang_${android_secondary_abi_cpu}"
-    } else {
-      android_secondary_abi_toolchain =
-          "//build/toolchain/android:android_${android_secondary_abi_cpu}"
-    }
+    android_secondary_abi_toolchain =
+        "//build/toolchain/android:android_clang_${android_secondary_abi_cpu}"
   }
 }
 

@@ -8,6 +8,7 @@
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/ninja_action_target_writer.h"
+#include "tools/gn/pool.h"
 #include "tools/gn/substitution_list.h"
 #include "tools/gn/target.h"
 #include "tools/gn/test_with_scope.h"
@@ -74,8 +75,8 @@ TEST(NinjaActionTargetWriter, ActionNoSources) {
 }
 
 
-// Tests an action with no sources and console = true
-TEST(NinjaActionTargetWriter, ActionNoSourcesConsole) {
+// Tests an action with no sources and pool
+TEST(NinjaActionTargetWriter, ActionNoSourcesPool) {
   Err err;
   TestWithScope setup;
 
@@ -87,7 +88,12 @@ TEST(NinjaActionTargetWriter, ActionNoSourcesConsole) {
 
   target.action_values().outputs() =
       SubstitutionList::MakeForTest("//out/Debug/foo.out");
-  target.action_values().set_console(true);
+
+  Pool pool(setup.settings(),
+            Label(SourceDir("//foo/"), "pool", setup.toolchain()->label().dir(),
+                  setup.toolchain()->label().name()));
+  pool.set_depth(5);
+  target.action_values().set_pool(LabelPtrPair<Pool>(&pool));
 
   target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
@@ -108,7 +114,7 @@ TEST(NinjaActionTargetWriter, ActionNoSourcesConsole) {
           "../../foo/included.txt\n"
       "\n"
       "build foo.out: __foo_bar___rule | obj/foo/bar.inputdeps.stamp\n"
-      "  pool = console\n"
+      "  pool = foo_pool\n"
       "\n"
       "build obj/foo/bar.stamp: stamp foo.out\n";
   EXPECT_EQ(expected, out.str());

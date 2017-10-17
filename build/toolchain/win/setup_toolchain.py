@@ -50,7 +50,7 @@ def _ExtractImportantEnvironment(output_of_set):
           # path. Add the path to this python here so that if it's not in the
           # path when ninja is run later, python will still be found.
           setting = os.path.dirname(sys.executable) + os.pathsep + setting
-        env[var.upper()] = setting
+        env[var.upper()] = setting.lower()
         break
   if sys.platform in ('win32', 'cygwin'):
     for required in ('SYSTEMROOT', 'TEMP', 'TMP'):
@@ -139,10 +139,11 @@ def _LoadToolchainEnv(cpu, sdk_dir):
         raise Exception('%s is missing - make sure VC++ tools are installed.' %
                         script_path)
       script_path = other_path
-    # Chromium requires the 10.0.14393.0 SDK. Previous versions don't have all
-    # of the required declarations, and 10.0.15063.0 is buggy.
+    # Chromium requires the 10.0.15063.468 SDK - previous versions don't have
+    # all of the required declarations and 10.0.16299.0 has some
+    # incompatibilities (crbug.com/773476).
     args = [script_path, 'amd64_x86' if cpu == 'x86' else 'amd64',
-            '10.0.14393.0']
+            '10.0.15063.0']
     variables = _LoadEnvFromBat(args)
   return _ExtractImportantEnvironment(variables)
 

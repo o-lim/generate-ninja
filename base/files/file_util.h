@@ -95,11 +95,26 @@ BASE_EXPORT bool ReplaceFile(const FilePath& from_path,
                              const FilePath& to_path,
                              File::Error* error);
 
-// Copies a single file. Use CopyDirectory to copy directories.
+// Copies a single file. Use CopyDirectory() to copy directories.
 // This function fails if either path contains traversal components ('..').
+// This function also fails if |to_path| is a directory.
 //
-// This function keeps the metadata on Windows. The read only bit on Windows is
-// not kept.
+// On POSIX, if |to_path| is a symlink, CopyFile() will follow the symlink. This
+// may have security implications. Use with care.
+//
+// If |to_path| already exists and is a regular file, it will be overwritten,
+// though its permissions will stay the same.
+//
+// If |to_path| does not exist, it will be created. The new file's permissions
+// varies per platform:
+//
+// - This function keeps the metadata on Windows. The read only bit is not kept.
+// - On Mac and iOS, |to_path| retains |from_path|'s permissions, except user
+//   read/write permissions are always set.
+// - On Linux and Android, |to_path| has user read/write permissions only. i.e.
+//   Always 0600.
+// - On ChromeOS, |to_path| has user read/write permissions and group/others
+//   read permissions. i.e. Always 0644.
 BASE_EXPORT bool CopyFile(const FilePath& from_path, const FilePath& to_path);
 
 // Copies the given path, and optionally all subdirectories and their contents
@@ -108,8 +123,7 @@ BASE_EXPORT bool CopyFile(const FilePath& from_path, const FilePath& to_path);
 // If there are files existing under to_path, always overwrite. Returns true
 // if successful, false otherwise. Wildcards on the names are not supported.
 //
-// This function calls into CopyFile() so the same behavior w.r.t. metadata
-// applies.
+// This function has the same metadata behavior as CopyFile().
 //
 // If you only need to copy a file use CopyFile, it's faster.
 BASE_EXPORT bool CopyDirectory(const FilePath& from_path,
@@ -165,6 +179,10 @@ BASE_EXPORT bool ReadFileToStringWithMaxSize(const FilePath& path,
 // Returns true iff |bytes| bytes have been successfully read from |fd|.
 BASE_EXPORT bool ReadFromFD(int fd, char* buffer, size_t bytes);
 
+// The following functions use POSIX functionality that isn't supported by
+// Fuchsia.
+#if !defined(OS_FUCHSIA)
+
 // Creates a symbolic link at |symlink| pointing to |target|.  Returns
 // false on failure.
 BASE_EXPORT bool CreateSymbolicLink(const FilePath& target,
@@ -205,6 +223,7 @@ BASE_EXPORT bool SetPosixFilePermissions(const FilePath& path, int mode);
 BASE_EXPORT bool ExecutableExistsInPath(Environment* env,
                                         const FilePath::StringType& executable);
 
+#endif  // !OS_FUCHSIA
 #endif  // OS_POSIX
 
 // Returns true if the given directory is empty

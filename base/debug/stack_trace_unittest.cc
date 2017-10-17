@@ -153,7 +153,7 @@ TEST_F(StackTraceTest, DebugPrintBacktrace) {
 }
 #endif  // !defined(__UCLIBC__)
 
-#if defined(OS_POSIX) && !defined(OS_ANDROID)
+#if defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
 #if !defined(OS_IOS)
 static char* newArray() {
   // Clang warns about the mismatched new[]/delete if they occur in the same
@@ -172,11 +172,11 @@ MULTIPROCESS_TEST_MAIN(MismatchedMallocChildProcess) {
 // and e.g. mismatched new[]/delete would cause a hang because
 // of re-entering malloc.
 TEST_F(StackTraceTest, AsyncSignalUnsafeSignalHandlerHang) {
-  SpawnChildResult spawn_result = SpawnChild("MismatchedMallocChildProcess");
-  ASSERT_TRUE(spawn_result.process.IsValid());
+  Process child = SpawnChild("MismatchedMallocChildProcess");
+  ASSERT_TRUE(child.IsValid());
   int exit_code;
-  ASSERT_TRUE(spawn_result.process.WaitForExitWithTimeout(
-      TestTimeouts::action_timeout(), &exit_code));
+  ASSERT_TRUE(
+      child.WaitForExitWithTimeout(TestTimeouts::action_timeout(), &exit_code));
 }
 #endif  // !defined(OS_IOS)
 
@@ -253,7 +253,7 @@ TEST_F(StackTraceTest, itoa_r) {
   EXPECT_EQ("0688", itoa_r_wrapper(0x688, 128, 16, 4));
   EXPECT_EQ("00688", itoa_r_wrapper(0x688, 128, 16, 5));
 }
-#endif  // defined(OS_POSIX) && !defined(OS_ANDROID)
+#endif  // defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
 
 #if BUILDFLAG(CAN_UNWIND_WITH_FRAME_POINTERS)
 

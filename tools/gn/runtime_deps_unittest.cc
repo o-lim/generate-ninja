@@ -4,8 +4,7 @@
 
 #include <stddef.h>
 
-#include <algorithm>
-
+#include "base/stl_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/runtime_deps.h"
 #include "tools/gn/scheduler.h"
@@ -91,29 +90,25 @@ TEST(RuntimeDeps, Libs) {
   EXPECT_TRUE(MakePair("./main", &main) == result[0]);
 
   // The rest of the ordering is undefined. First the data files.
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../stat.dat", &stat)) !=
-              result.end()) << GetVectorDescription(result);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../shared.dat", &shared)) !=
-              result.end()) << GetVectorDescription(result);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../loadable.dat", &loadable)) !=
-              result.end()) << GetVectorDescription(result);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../set.dat", &set)) !=
-              result.end()) << GetVectorDescription(result);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../main.dat", &main)) !=
-              result.end()) << GetVectorDescription(result);
+  EXPECT_TRUE(base::ContainsValue(result, MakePair("../../stat.dat", &stat)))
+      << GetVectorDescription(result);
+  EXPECT_TRUE(
+      base::ContainsValue(result, MakePair("../../shared.dat", &shared)))
+      << GetVectorDescription(result);
+  EXPECT_TRUE(
+      base::ContainsValue(result, MakePair("../../loadable.dat", &loadable)))
+      << GetVectorDescription(result);
+  EXPECT_TRUE(base::ContainsValue(result, MakePair("../../set.dat", &set)))
+      << GetVectorDescription(result);
+  EXPECT_TRUE(base::ContainsValue(result, MakePair("../../main.dat", &main)))
+      << GetVectorDescription(result);
 
   // Check the static library and loadable module.
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("./libshared.so", &shared)) !=
-              result.end()) << GetVectorDescription(result);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("./libloadable.so", &loadable)) !=
-              result.end()) << GetVectorDescription(result);
+  EXPECT_TRUE(base::ContainsValue(result, MakePair("./libshared.so", &shared)))
+      << GetVectorDescription(result);
+  EXPECT_TRUE(
+      base::ContainsValue(result, MakePair("./libloadable.so", &loadable)))
+      << GetVectorDescription(result);
 }
 
 // Tests that executables that aren't listed as data deps aren't included in
@@ -163,12 +158,51 @@ TEST(RuntimeDeps, ExeDataDep) {
   EXPECT_TRUE(MakePair("./main", &main) == result[0]);
 
   // The rest of the ordering is undefined.
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("./datadep", &datadep)) !=
-              result.end()) << GetVectorDescription(result);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../final_in.dat", &final_in)) !=
-              result.end()) << GetVectorDescription(result);
+  EXPECT_TRUE(base::ContainsValue(result, MakePair("./datadep", &datadep)))
+      << GetVectorDescription(result);
+  EXPECT_TRUE(
+      base::ContainsValue(result, MakePair("../../final_in.dat", &final_in)))
+      << GetVectorDescription(result);
+}
+
+TEST(RuntimeDeps, ActionSharedLib) {
+  TestWithScope setup;
+  Err err;
+
+  // Dependency hierarchy: main(exe) -> action -> datadep(shared library)
+  //                                           -> dep(shared library)
+  // Datadep should be included, dep should not be.
+
+  Target dep(setup.settings(), Label(SourceDir("//"), "dep"));
+  InitTargetWithType(setup, &dep, Target::SHARED_LIBRARY);
+  ASSERT_TRUE(dep.OnResolved(&err));
+
+  Target datadep(setup.settings(), Label(SourceDir("//"), "datadep"));
+  InitTargetWithType(setup, &datadep, Target::SHARED_LIBRARY);
+  ASSERT_TRUE(datadep.OnResolved(&err));
+
+  Target action(setup.settings(), Label(SourceDir("//"), "action"));
+  InitTargetWithType(setup, &action, Target::ACTION);
+  action.private_deps().push_back(LabelTargetPair(&dep));
+  action.data_deps().push_back(LabelTargetPair(&datadep));
+  action.action_values().outputs() =
+      SubstitutionList::MakeForTest("//action.output");
+  ASSERT_TRUE(action.OnResolved(&err));
+
+  Target main(setup.settings(), Label(SourceDir("//"), "main"));
+  InitTargetWithType(setup, &main, Target::EXECUTABLE);
+  main.private_deps().push_back(LabelTargetPair(&action));
+  ASSERT_TRUE(main.OnResolved(&err));
+
+  std::vector<std::pair<OutputFile, const Target*>> result =
+      ComputeRuntimeDeps(&main);
+
+  // The result should have deps of main and data_dep.
+  ASSERT_EQ(2u, result.size()) << GetVectorDescription(result);
+
+  // The first one should always be the main exe.
+  EXPECT_TRUE(MakePair("./main", &main) == result[0]);
+  EXPECT_TRUE(MakePair("./libdatadep.so", &datadep) == result[1]);
 }
 
 // Tests that action and copy outputs are considered if they're data deps, but
@@ -232,24 +266,23 @@ TEST(RuntimeDeps, ActionOutputs) {
   EXPECT_TRUE(MakePair("./main", &main) == result[0]);
 
   // The rest of the ordering is undefined.
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../datadep.data", &datadep)) !=
-              result.end()) << GetVectorDescription(result);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../datadep_copy.data", &datadep_copy)) !=
-              result.end()) << GetVectorDescription(result);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../datadep.output", &datadep)) !=
-              result.end()) << GetVectorDescription(result);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../datadep_copy.output", &datadep_copy)) !=
-              result.end()) << GetVectorDescription(result);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../dep.data", &dep)) !=
-              result.end()) << GetVectorDescription(result);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../dep_copy/data/", &dep_copy)) !=
-              result.end()) << GetVectorDescription(result);
+  EXPECT_TRUE(
+      base::ContainsValue(result, MakePair("../../datadep.data", &datadep)))
+      << GetVectorDescription(result);
+  EXPECT_TRUE(base::ContainsValue(
+      result, MakePair("../../datadep_copy.data", &datadep_copy)))
+      << GetVectorDescription(result);
+  EXPECT_TRUE(
+      base::ContainsValue(result, MakePair("../../datadep.output", &datadep)))
+      << GetVectorDescription(result);
+  EXPECT_TRUE(base::ContainsValue(
+      result, MakePair("../../datadep_copy.output", &datadep_copy)))
+      << GetVectorDescription(result);
+  EXPECT_TRUE(base::ContainsValue(result, MakePair("../../dep.data", &dep)))
+      << GetVectorDescription(result);
+  EXPECT_TRUE(
+      base::ContainsValue(result, MakePair("../../dep_copy/data/", &dep_copy)))
+      << GetVectorDescription(result);
 
   // Explicitly asking for the runtime deps of an action target only includes
   // the data and not all outputs.
@@ -317,10 +350,12 @@ TEST(RuntimeDeps, CreateBundle) {
 
   Target bundle(setup.settings(), Label(source_dir, "bundle"));
   InitTargetWithType(setup, &bundle, Target::CREATE_BUNDLE);
-  const std::string root_dir(build_dir + "Bundle.framework/Versions/A/");
+  const std::string root_dir(build_dir + "Bundle.framework/");
+  const std::string contents_dir(root_dir + "Versions/A/");
   bundle.bundle_data().root_dir() = SourceDir(root_dir);
-  bundle.bundle_data().resources_dir() = SourceDir(root_dir + "Resources");
-  bundle.bundle_data().executable_dir() = SourceDir(root_dir + "MacOS");
+  bundle.bundle_data().contents_dir() = SourceDir(contents_dir);
+  bundle.bundle_data().resources_dir() = SourceDir(contents_dir + "Resources");
+  bundle.bundle_data().executable_dir() = SourceDir(contents_dir + "MacOS");
   bundle.private_deps().push_back(LabelTargetPair(&dylib_data));
   bundle.private_deps().push_back(LabelTargetPair(&module_data));
   bundle.data_deps().push_back(LabelTargetPair(&data_dep));
@@ -344,19 +379,16 @@ TEST(RuntimeDeps, CreateBundle) {
   // The rest of the ordering is undefined.
 
   // The framework bundle's internal dependencies should not be incldued.
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("Bundle.framework/", &bundle)) !=
-              result.end()) << GetVectorDescription(result);
+  EXPECT_TRUE(
+      base::ContainsValue(result, MakePair("Bundle.framework/", &bundle)))
+      << GetVectorDescription(result);
   // But direct data and data dependencies should be.
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("./datadep", &data_dep)) !=
-              result.end()) << GetVectorDescription(result);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../dd.data", &data_dep)) !=
-              result.end()) << GetVectorDescription(result);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../b.data", &bundle)) !=
-              result.end()) << GetVectorDescription(result);
+  EXPECT_TRUE(base::ContainsValue(result, MakePair("./datadep", &data_dep)))
+      << GetVectorDescription(result);
+  EXPECT_TRUE(base::ContainsValue(result, MakePair("../../dd.data", &data_dep)))
+      << GetVectorDescription(result);
+  EXPECT_TRUE(base::ContainsValue(result, MakePair("../../b.data", &bundle)))
+      << GetVectorDescription(result);
 }
 
 // Tests that a dependency duplicated in regular and data deps is processed
@@ -380,9 +412,9 @@ TEST(RuntimeDeps, Dupe) {
   // The results should be the executable and the copy output.
   std::vector<std::pair<OutputFile, const Target*>> result =
       ComputeRuntimeDeps(&target);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../action.output", &action)) !=
-              result.end()) << GetVectorDescription(result);
+  EXPECT_TRUE(
+      base::ContainsValue(result, MakePair("../../action.output", &action)))
+      << GetVectorDescription(result);
 }
 
 // Tests that actions can't have output substitutions.

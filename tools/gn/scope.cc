@@ -44,24 +44,21 @@ Scope::Scope(const Settings* settings)
       mutable_containing_(nullptr),
       settings_(settings),
       mode_flags_(0),
-      item_collector_(nullptr) {
-}
+      item_collector_(nullptr) {}
 
 Scope::Scope(Scope* parent)
     : const_containing_(nullptr),
       mutable_containing_(parent),
       settings_(parent->settings()),
       mode_flags_(0),
-      item_collector_(nullptr) {
-}
+      item_collector_(nullptr) {}
 
 Scope::Scope(const Scope* parent)
     : const_containing_(parent),
       mutable_containing_(nullptr),
       settings_(parent->settings()),
       mode_flags_(0),
-      item_collector_(nullptr) {
-}
+      item_collector_(nullptr) {}
 
 Scope::~Scope() {
 }
@@ -217,6 +214,16 @@ void Scope::MarkUsed(const base::StringPiece& ident) {
 void Scope::MarkAllUsed() {
   for (auto& cur : values_)
     cur.second.used = true;
+}
+
+void Scope::MarkAllUsed(const std::set<std::string>& excluded_values) {
+  for (auto& cur : values_) {
+    if (!excluded_values.empty() &&
+        excluded_values.find(cur.first.as_string()) != excluded_values.end()) {
+      continue;  // Skip this excluded value.
+    }
+    cur.second.used = true;
+  }
 }
 
 void Scope::MarkUnused(const base::StringPiece& ident) {

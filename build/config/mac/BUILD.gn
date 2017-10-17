@@ -37,9 +37,6 @@ config("compiler") {
   # an Objective C struct won't be called, which is very bad.
   cflags_objcc = [ "-fobjc-call-cxx-cdtors" ]
 
-  cflags_c = [ "-std=c99" ]
-  cflags_objc = cflags_c
-
   ldflags = common_mac_flags
 
   if (save_unstripped_output) {
@@ -54,7 +51,7 @@ config("compiler") {
 config("runtime_library") {
   common_flags = [
     "-isysroot",
-    sysroot,
+    rebase_path(sysroot, root_build_dir),
     "-mmacosx-version-min=$mac_deployment_target",
   ]
 
@@ -83,12 +80,6 @@ config("mac_dynamic_flags") {
       "-Wl,-rpath,@loader_path/../../..",
     ]
   }
-}
-
-# On Mac, this is used only for executables.
-config("mac_executable_flags") {
-  # Remove this when targeting >=10.7 since it is the default in that config.
-  ldflags = [ "-Wl,-pie" ]  # Position independent.
 }
 
 # The ldflags referenced below are handled by

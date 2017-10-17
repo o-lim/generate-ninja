@@ -80,6 +80,7 @@
 #include "base/strings/string_piece.h"
 #include "base/synchronization/lock.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 
 namespace base {
 
@@ -570,9 +571,9 @@ class BASE_EXPORT FieldTrialList {
   // list of handles to be inherited.
   static void AppendFieldTrialHandleIfNeeded(
       base::HandlesToInheritVector* handles);
-#endif
-
-#if defined(OS_POSIX) && !defined(OS_NACL)
+#elif defined(OS_FUCHSIA)
+  // TODO(fuchsia): Implement shared-memory configuration (crbug.com/752368).
+#elif defined(OS_POSIX) && !defined(OS_NACL)
   // On POSIX, we also need to explicitly pass down this file descriptor that
   // should be shared with the child process. Returns an invalid handle if it
   // was not initialized properly.
@@ -638,6 +639,9 @@ class BASE_EXPORT FieldTrialList {
   GetAllFieldTrialsFromPersistentAllocator(
       PersistentMemoryAllocator const& allocator);
 
+  // Returns true if a global field trial list is set. Only used for testing.
+  static bool IsGlobalSetForTesting();
+
  private:
   // Allow tests to access our innards for testing purposes.
   FRIEND_TEST_ALL_PREFIXES(FieldTrialListTest, InstantiateAllocator);
@@ -655,7 +659,7 @@ class BASE_EXPORT FieldTrialList {
   // underlying OS resource - that must be done by the Process launcher.
   static std::string SerializeSharedMemoryHandleMetadata(
       const SharedMemoryHandle& shm);
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(OS_FUCHSIA)
   static SharedMemoryHandle DeserializeSharedMemoryHandleMetadata(
       const std::string& switch_value);
 #elif defined(OS_POSIX) && !defined(OS_NACL)
@@ -664,15 +668,13 @@ class BASE_EXPORT FieldTrialList {
       const std::string& switch_value);
 #endif
 
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(OS_FUCHSIA)
   // Takes in |handle_switch| from the command line which represents the shared
   // memory handle for field trials, parses it, and creates the field trials.
   // Returns true on success, false on failure.
   // |switch_value| also contains the serialized GUID.
   static bool CreateTrialsFromSwitchValue(const std::string& switch_value);
-#endif
-
-#if defined(OS_POSIX) && !defined(OS_NACL)
+#elif defined(OS_POSIX) && !defined(OS_NACL)
   // On POSIX systems that use the zygote, we look up the correct fd that backs
   // the shared memory segment containing the field trials by looking it up via
   // an fd key in GlobalDescriptors. Returns true on success, false on failure.

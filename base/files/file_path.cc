@@ -492,7 +492,7 @@ FilePath FilePath::Append(StringPieceType component) const {
 
   DCHECK(!IsPathAbsolute(appended));
 
-  if (path_.compare(kCurrentDirectory) == 0) {
+  if (path_.compare(kCurrentDirectory) == 0 && !appended.empty()) {
     // Append normally doesn't do any normalization, but as a special case,
     // when appending to kCurrentDirectory, just return a new path for the
     // component argument.  Appending component to kCurrentDirectory would
@@ -669,14 +669,6 @@ FilePath FilePath::FromUTF16Unsafe(StringPiece16 utf16) {
   return FilePath(utf16);
 }
 #endif
-
-void FilePath::GetSizeForPickle(PickleSizer* sizer) const {
-#if defined(OS_WIN)
-  sizer->AddString16(path_);
-#else
-  sizer->AddString(path_);
-#endif
-}
 
 void FilePath::WriteToPickle(Pickle* pickle) const {
 #if defined(OS_WIN)

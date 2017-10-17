@@ -30,7 +30,7 @@ bool ReturnsValidPath(int dir_type) {
   // Some paths might not exist on some platforms in which case confirming
   // |result| is true and !path.empty() is the best we can do.
   bool check_path_exists = true;
-#if defined(OS_POSIX)
+#if defined(OS_POSIX) && !defined(OS_FUCHSIA)
   // If chromium has never been started on this account, the cache path may not
   // exist.
   if (dir_type == DIR_CACHE)
@@ -41,13 +41,6 @@ bool ReturnsValidPath(int dir_type) {
   // but it doesn't exist.
   if (dir_type == DIR_USER_DESKTOP)
     check_path_exists = false;
-#endif
-#if defined(OS_WIN)
-  if (dir_type == DIR_TASKBAR_PINS) {
-    // There is no pinned-to-taskbar shortcuts prior to Win7.
-    if (base::win::GetVersion() < base::win::VERSION_WIN7)
-      check_path_exists = false;
-  }
 #endif
 #if defined(OS_MACOSX)
   if (dir_type != DIR_EXE && dir_type != DIR_MODULE &&
@@ -91,7 +84,10 @@ TEST_F(PathServiceTest, Get) {
       continue;  // Android doesn't implement these.
 #elif defined(OS_IOS)
     if (key == DIR_USER_DESKTOP)
-      continue;  // iOS doesn't implement DIR_USER_DESKTOP;
+      continue;  // iOS doesn't implement DIR_USER_DESKTOP.
+#elif defined(OS_FUCHSIA)
+    if (key == DIR_USER_DESKTOP)
+      continue;  // Fuchsia doesn't implement DIR_USER_DESKTOP.
 #endif
     EXPECT_PRED1(ReturnsValidPath, key);
   }
@@ -115,7 +111,7 @@ TEST_F(PathServiceTest, Get) {
        ++key) {
     EXPECT_PRED1(ReturnsValidPath, key);
   }
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) && !defined(OS_FUCHSIA)
   for (int key = PATH_POSIX_START + 1; key < PATH_POSIX_END;
        ++key) {
     EXPECT_PRED1(ReturnsValidPath, key);

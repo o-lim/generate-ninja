@@ -137,7 +137,6 @@ namespace base {
 
 class Pickle;
 class PickleIterator;
-class PickleSizer;
 
 // An abstraction to isolate users from the differences between native
 // pathnames on different platforms.
@@ -239,7 +238,8 @@ class BASE_EXPORT FilePath {
   // named by this object, stripping away the file component.  If this object
   // only contains one component, returns a FilePath identifying
   // kCurrentDirectory.  If this object already refers to the root directory,
-  // returns a FilePath identifying the root directory.
+  // returns a FilePath identifying the root directory. Please note that this
+  // doesn't resolve directory navigation, e.g. the result for "../a" is "..".
   FilePath DirName() const WARN_UNUSED_RESULT;
 
   // Returns a FilePath corresponding to the last path component of this
@@ -384,7 +384,6 @@ class BASE_EXPORT FilePath {
   // Similar to FromUTF8Unsafe, but accepts UTF-16 instead.
   static FilePath FromUTF16Unsafe(StringPiece16 utf16);
 
-  void GetSizeForPickle(PickleSizer* sizer) const;
   void WriteToPickle(Pickle* pickle) const;
   bool ReadFromPickle(PickleIterator* iter);
 
@@ -451,13 +450,8 @@ class BASE_EXPORT FilePath {
   StringType path_;
 };
 
-// This is required by googletest to print a readable output on test failures.
-// This is declared here for use in gtest-based unit tests but is defined in
-// the test_support_base target. Depend on that to use this in your unit test.
-// This should not be used in production code - call ToString() instead.
-void PrintTo(const FilePath& path, std::ostream* out);
-
-std::ostream& operator<<(std::ostream& out, const FilePath& file_path);
+BASE_EXPORT std::ostream& operator<<(std::ostream& out,
+                                     const FilePath& file_path);
 
 }  // namespace base
 

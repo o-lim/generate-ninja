@@ -133,58 +133,50 @@ int JSONParser::error_column() const {
 JSONParser::StringBuilder::StringBuilder() : StringBuilder(nullptr) {}
 
 JSONParser::StringBuilder::StringBuilder(const char* pos)
-    : pos_(pos), length_(0), has_string_(false) {}
+    : pos_(pos), length_(0) {}
 
 JSONParser::StringBuilder::~StringBuilder() {
-  if (has_string_)
-    string_.Destroy();
 }
 
-void JSONParser::StringBuilder::operator=(StringBuilder&& other) {
-  pos_ = other.pos_;
-  length_ = other.length_;
-  has_string_ = other.has_string_;
-  if (has_string_)
-    string_.InitFromMove(std::move(other.string_));
-}
+JSONParser::StringBuilder& JSONParser::StringBuilder::operator=(
+    StringBuilder&& other) = default;
 
 void JSONParser::StringBuilder::Append(const char& c) {
   DCHECK_GE(c, 0);
   DCHECK_LT(static_cast<unsigned char>(c), 128);
 
-  if (has_string_)
+  if (string_)
     string_->push_back(c);
   else
     ++length_;
 }
 
 void JSONParser::StringBuilder::AppendString(const char* str, size_t len) {
-  DCHECK(has_string_);
+  DCHECK(string_);
   string_->append(str, len);
 }
 
 void JSONParser::StringBuilder::Convert() {
-  if (has_string_)
+  if (string_)
     return;
 
-  has_string_ = true;
-  string_.Init(pos_, length_);
+  string_.emplace(pos_, length_);
 }
 
 StringPiece JSONParser::StringBuilder::AsStringPiece() {
-  if (has_string_)
-    return StringPiece(*string_);
+  if (string_)
+    return *string_;
   return StringPiece(pos_, length_);
 }
 
 const std::string& JSONParser::StringBuilder::AsString() {
-  if (!has_string_)
+  if (!string_)
     Convert();
   return *string_;
 }
 
 std::string JSONParser::StringBuilder::DestructiveAsString() {
-  if (has_string_)
+  if (string_)
     return std::move(*string_);
   return std::string(pos_, length_);
 }
@@ -397,7 +389,7 @@ std::unique_ptr<Value> JSONParser::ConsumeDictionary() {
     }
   }
 
-  return MakeUnique<Value>(
+  return std::make_unique<Value>(
       Value::DictStorage(std::move(dict_storage), KEEP_LAST_OF_DUPES));
 }
 
@@ -449,7 +441,7 @@ std::unique_ptr<Value> JSONParser::ConsumeString() {
   if (!ConsumeStringRaw(&string))
     return nullptr;
 
-  return base::MakeUnique<Value>(string.DestructiveAsString());
+  return std::make_unique<Value>(string.DestructiveAsString());
 }
 
 bool JSONParser::ConsumeStringRaw(StringBuilder* out) {
@@ -667,8 +659,13 @@ bool JSONParser::DecodeUTF16(std::string* dest_string) {
   } else {
     // Not a surrogate.
     DCHECK(CBU16_IS_SINGLE(code_unit16_high));
-    if (!IsValidCharacter(code_unit16_high))
-      return false;
+    if (!IsValidCharacter(code_unit16_high)) {
+      if ((options_ & JSON_REPLACE_INVALID_CHARACTERS) == 0) {
+        return false;
+      }
+      dest_string->append(kUnicodeReplacementString);
+      return true;
+    }
 
     CBU8_APPEND_UNSAFE(code_unit8, offset, code_unit16_high);
   }
@@ -761,12 +758,12 @@ std::unique_ptr<Value> JSONParser::ConsumeNumber() {
 
   int num_int;
   if (StringToInt(num_string, &num_int))
-    return base::MakeUnique<Value>(num_int);
+    return std::make_unique<Value>(num_int);
 
   double num_double;
   if (StringToDouble(num_string.as_string(), &num_double) &&
       std::isfinite(num_double)) {
-    return base::MakeUnique<Value>(num_double);
+    return std::make_unique<Value>(num_double);
   }
 
   return nullptr;
@@ -807,7 +804,7 @@ std::unique_ptr<Value> JSONParser::ConsumeLiteral() {
         return nullptr;
       }
       NextNChars(kTrueLen - 1);
-      return base::MakeUnique<Value>(true);
+      return std::make_unique<Value>(true);
     }
     case 'f': {
       const char kFalseLiteral[] = "false";
@@ -818,7 +815,7 @@ std::unique_ptr<Value> JSONParser::ConsumeLiteral() {
         return nullptr;
       }
       NextNChars(kFalseLen - 1);
-      return base::MakeUnique<Value>(false);
+      return std::make_unique<Value>(false);
     }
     case 'n': {
       const char kNullLiteral[] = "null";
@@ -829,7 +826,7 @@ std::unique_ptr<Value> JSONParser::ConsumeLiteral() {
         return nullptr;
       }
       NextNChars(kNullLen - 1);
-      return MakeUnique<Value>();
+      return std::make_unique<Value>();
     }
     default:
       ReportError(JSONReader::JSON_UNEXPECTED_TOKEN, 1);

@@ -4,6 +4,8 @@
 
 #include "base/metrics/persistent_histogram_allocator.h"
 
+#include "base/files/file.h"
+#include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -52,7 +54,7 @@ class PersistentHistogramAllocatorTest : public testing::Test {
   DISALLOW_COPY_AND_ASSIGN(PersistentHistogramAllocatorTest);
 };
 
-TEST_F(PersistentHistogramAllocatorTest, CreateAndIterateTest) {
+TEST_F(PersistentHistogramAllocatorTest, CreateAndIterate) {
   PersistentMemoryAllocator::MemoryInfo meminfo0;
   allocator_->GetMemoryInfo(&meminfo0);
 
@@ -102,8 +104,9 @@ TEST_F(PersistentHistogramAllocatorTest, CreateAndIterateTest) {
 
   // Create a second allocator and have it access the memory of the first.
   std::unique_ptr<HistogramBase> recovered;
-  PersistentHistogramAllocator recovery(MakeUnique<PersistentMemoryAllocator>(
-      allocator_memory_.get(), kAllocatorMemorySize, 0, 0, "", false));
+  PersistentHistogramAllocator recovery(
+      std::make_unique<PersistentMemoryAllocator>(
+          allocator_memory_.get(), kAllocatorMemorySize, 0, 0, "", false));
   PersistentHistogramAllocator::Iterator histogram_iter(&recovery);
 
   recovered = histogram_iter.GetNext();
@@ -126,7 +129,7 @@ TEST_F(PersistentHistogramAllocatorTest, CreateAndIterateTest) {
   EXPECT_FALSE(recovered);
 }
 
-TEST_F(PersistentHistogramAllocatorTest, CreateWithFileTest) {
+TEST_F(PersistentHistogramAllocatorTest, CreateWithFile) {
   const char temp_name[] = "CreateWithFileTest";
   ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
@@ -155,7 +158,29 @@ TEST_F(PersistentHistogramAllocatorTest, CreateWithFileTest) {
   GlobalHistogramAllocator::ReleaseForTesting();
 }
 
-TEST_F(PersistentHistogramAllocatorTest, StatisticsRecorderMergeTest) {
+TEST_F(PersistentHistogramAllocatorTest, CreateSpareFile) {
+  const char temp_name[] = "CreateSpareFileTest.pma";
+  ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  FilePath temp_file = temp_dir.GetPath().AppendASCII(temp_name);
+  const size_t temp_size = 64 << 10;  // 64 KiB
+
+  ASSERT_TRUE(GlobalHistogramAllocator::CreateSpareFile(temp_file, temp_size));
+
+  File file(temp_file, File::FLAG_OPEN | File::FLAG_READ);
+  ASSERT_TRUE(file.IsValid());
+  EXPECT_EQ(static_cast<int64_t>(temp_size), file.GetLength());
+
+  char buffer[256];
+  for (size_t pos = 0; pos < temp_size; pos += sizeof(buffer)) {
+    ASSERT_EQ(static_cast<int>(sizeof(buffer)),
+              file.ReadAtCurrentPos(buffer, sizeof(buffer)));
+    for (size_t i = 0; i < sizeof(buffer); ++i)
+      EXPECT_EQ(0, buffer[i]);
+  }
+}
+
+TEST_F(PersistentHistogramAllocatorTest, StatisticsRecorderMerge) {
   const char LinearHistogramName[] = "SRTLinearHistogram";
   const char SparseHistogramName[] = "SRTSparseHistogram";
   const size_t starting_sr_count = StatisticsRecorder::GetHistogramCount();
@@ -204,9 +229,10 @@ TEST_F(PersistentHistogramAllocatorTest, StatisticsRecorderMergeTest) {
   GlobalHistogramAllocator::Set(std::move(old_allocator));
 
   // Create a "recovery" allocator using the same memory as the local one.
-  PersistentHistogramAllocator recovery1(MakeUnique<PersistentMemoryAllocator>(
-      const_cast<void*>(new_allocator->memory_allocator()->data()),
-      new_allocator->memory_allocator()->size(), 0, 0, "", false));
+  PersistentHistogramAllocator recovery1(
+      std::make_unique<PersistentMemoryAllocator>(
+          const_cast<void*>(new_allocator->memory_allocator()->data()),
+          new_allocator->memory_allocator()->size(), 0, 0, "", false));
   PersistentHistogramAllocator::Iterator histogram_iter1(&recovery1);
 
   // Get the histograms that were created locally (and forgotten) and merge
@@ -250,9 +276,10 @@ TEST_F(PersistentHistogramAllocatorTest, StatisticsRecorderMergeTest) {
   histogram2->Add(7);
 
   // Do another merge.
-  PersistentHistogramAllocator recovery2(MakeUnique<PersistentMemoryAllocator>(
-      const_cast<void*>(new_allocator->memory_allocator()->data()),
-      new_allocator->memory_allocator()->size(), 0, 0, "", false));
+  PersistentHistogramAllocator recovery2(
+      std::make_unique<PersistentMemoryAllocator>(
+          const_cast<void*>(new_allocator->memory_allocator()->data()),
+          new_allocator->memory_allocator()->size(), 0, 0, "", false));
   PersistentHistogramAllocator::Iterator histogram_iter2(&recovery2);
   while (true) {
     recovered = histogram_iter2.GetNext();

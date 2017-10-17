@@ -15,6 +15,7 @@
 #include <string>
 
 #include "base/atomicops.h"
+#include "base/debug/debugging_flags.h"
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "base/trace_event/common/trace_event_common.h"
@@ -50,7 +51,7 @@
 //     TRACE_ID_WITH_SCOPE("BlinkResourceID", resourceID));
 //
 // Also, it is possible to prepend the ID with another number, like the process
-// ID. This is useful in creatin IDs that are unique among all processes. To do
+// ID. This is useful in creating IDs that are unique among all processes. To do
 // that, pass two numbers after the scope string instead of one. For example,
 //
 // TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(
@@ -182,6 +183,16 @@
 //     base::trace_event::TraceEventHandle id)
 #define TRACE_EVENT_API_UPDATE_TRACE_EVENT_DURATION \
     base::trace_event::TraceLog::GetInstance()->UpdateTraceEventDuration
+
+// Set the duration field of a COMPLETE trace event.
+// void TRACE_EVENT_API_UPDATE_TRACE_EVENT_DURATION_EXPLICIT(
+//     const unsigned char* category_group_enabled,
+//     const char* name,
+//     base::trace_event::TraceEventHandle id,
+//     const TimeTicks& now,
+//     const ThreadTicks* thread_now)
+#define TRACE_EVENT_API_UPDATE_TRACE_EVENT_DURATION_EXPLICIT \
+  base::trace_event::TraceLog::GetInstance()->UpdateTraceEventDurationExplicit
 
 // Adds a metadata event to the trace log. The |AppendValueAsTraceFormat| method
 // on the convertable value will be called at flush time.
@@ -339,6 +350,32 @@
     }                                                                    \
   } while (0)
 
+// Implementation detail: internal macro to create static category and add
+// event if the category is enabled.
+#define INTERNAL_TRACE_EVENT_ADD_WITH_ID_TID_AND_TIMESTAMPS(                \
+    category_group, name, id, thread_id, begin_timestamp, end_timestamp,    \
+    thread_end_timestamp, flags, ...)                                       \
+  do {                                                                      \
+    INTERNAL_TRACE_EVENT_GET_CATEGORY_INFO(category_group);                 \
+    if (INTERNAL_TRACE_EVENT_CATEGORY_GROUP_ENABLED()) {                    \
+      trace_event_internal::TraceID trace_event_trace_id((id));             \
+      unsigned int trace_event_flags =                                      \
+          flags | trace_event_trace_id.id_flags();                          \
+      const unsigned char* uid_category_group_enabled =                     \
+          INTERNAL_TRACE_EVENT_UID(category_group_enabled);                 \
+      auto handle =                                                         \
+          trace_event_internal::AddTraceEventWithThreadIdAndTimestamp(      \
+              TRACE_EVENT_PHASE_COMPLETE, uid_category_group_enabled, name, \
+              trace_event_trace_id.scope(), trace_event_trace_id.raw_id(),  \
+              thread_id, begin_timestamp,                                   \
+              trace_event_flags | TRACE_EVENT_FLAG_EXPLICIT_TIMESTAMP,      \
+              trace_event_internal::kNoId, ##__VA_ARGS__);                  \
+      TRACE_EVENT_API_UPDATE_TRACE_EVENT_DURATION_EXPLICIT(                 \
+          uid_category_group_enabled, name, handle, end_timestamp,          \
+          thread_end_timestamp);                                            \
+    }                                                                       \
+  } while (0)
+
 // The linked ID will not be mangled.
 #define INTERNAL_TRACE_EVENT_ADD_LINK_IDS(category_group, name, id1, id2) \
   do {                                                                    \
@@ -390,14 +427,29 @@
   INTERNAL_TRACE_EVENT_UID(ScopedContext)                                  \
   INTERNAL_TRACE_EVENT_UID(scoped_context)(context);
 
+#if BUILDFLAG(ENABLE_LOCATION_SOURCE)
+
 // Implementation detail: internal macro to trace a task execution with the
 // location where it was posted from.
+//
+// This implementation is for when location sources are available.
 #define INTERNAL_TRACE_TASK_EXECUTION(run_function, task)                 \
   TRACE_EVENT2("toplevel", run_function, "src_file",                      \
                (task).posted_from.file_name(), "src_func",                \
                (task).posted_from.function_name());                       \
   TRACE_HEAP_PROFILER_API_SCOPED_TASK_EXECUTION INTERNAL_TRACE_EVENT_UID( \
       task_event)((task).posted_from.file_name());
+
+#else
+
+// TODO(http://crbug.com760702) remove file name and just pass the program
+// counter to the heap profiler macro.
+#define INTERNAL_TRACE_TASK_EXECUTION(run_function, task)                      \
+  TRACE_EVENT1("toplevel", run_function, "src", (task).posted_from.ToString()) \
+  TRACE_HEAP_PROFILER_API_SCOPED_TASK_EXECUTION INTERNAL_TRACE_EVENT_UID(      \
+      task_event)((task).posted_from.file_name());
+
+#endif
 
 namespace trace_event_internal {
 
@@ -415,6 +467,9 @@ class BASE_EXPORT TraceID {
   // Can be combined with WithScope.
   class LocalId {
    public:
+    explicit LocalId(const void* raw_id)
+        : raw_id_(static_cast<unsigned long long>(
+              reinterpret_cast<uintptr_t>(raw_id))) {}
     explicit LocalId(unsigned long long raw_id) : raw_id_(raw_id) {}
     unsigned long long raw_id() const { return raw_id_; }
    private:

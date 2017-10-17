@@ -100,8 +100,8 @@ bool SharedMemory::Create(const SharedMemoryCreateOptions& options) {
 
   FilePath path;
   if (options.name_deprecated == NULL || options.name_deprecated->empty()) {
-    bool result = CreateAnonymousSharedMemory(options, &fp, &readonly_fd, &path,
-                                              &last_error_);
+    bool result =
+        CreateAnonymousSharedMemory(options, &fp, &readonly_fd, &path);
     if (!result)
       return false;
   } else {
@@ -192,9 +192,8 @@ bool SharedMemory::Create(const SharedMemoryCreateOptions& options) {
 
   int mapped_file = -1;
   int readonly_mapped_file = -1;
-  bool result =
-      PrepareMapFile(std::move(fp), std::move(readonly_fd), &mapped_file,
-                     &readonly_mapped_file, &last_error_);
+  bool result = PrepareMapFile(std::move(fp), std::move(readonly_fd),
+                               &mapped_file, &readonly_mapped_file);
   shm_ = SharedMemoryHandle(base::FileDescriptor(mapped_file, false),
                             options.size, UnguessableToken::Create());
   readonly_shm_ =
@@ -234,9 +233,8 @@ bool SharedMemory::Open(const std::string& name, bool read_only) {
   }
   int mapped_file = -1;
   int readonly_mapped_file = -1;
-  bool result =
-      PrepareMapFile(std::move(fp), std::move(readonly_fd), &mapped_file,
-                     &readonly_mapped_file, &last_error_);
+  bool result = PrepareMapFile(std::move(fp), std::move(readonly_fd),
+                               &mapped_file, &readonly_mapped_file);
   // This form of sharing shared memory is deprecated. https://crbug.com/345734.
   // However, we can't get rid of it without a significant refactor because its
   // used to communicate between two versions of the same service process, very
@@ -283,6 +281,7 @@ bool SharedMemory::MapAt(off_t offset, size_t bytes) {
   bool mmap_succeeded = memory_ != (void*)-1 && memory_ != NULL;
   if (mmap_succeeded) {
     mapped_size_ = bytes;
+    mapped_id_ = shm_.GetGUID();
     DCHECK_EQ(0U,
               reinterpret_cast<uintptr_t>(memory_) &
                   (SharedMemory::MAP_MINIMUM_ALIGNMENT - 1));
@@ -298,10 +297,11 @@ bool SharedMemory::Unmap() {
   if (memory_ == NULL)
     return false;
 
-  munmap(memory_, mapped_size_);
   SharedMemoryTracker::GetInstance()->DecrementMemoryUsage(*this);
+  munmap(memory_, mapped_size_);
   memory_ = NULL;
   mapped_size_ = 0;
+  mapped_id_ = UnguessableToken();
   return true;
 }
 
@@ -357,25 +357,6 @@ bool SharedMemory::FilePathForMemoryName(const std::string& mem_name,
 SharedMemoryHandle SharedMemory::GetReadOnlyHandle() {
   CHECK(readonly_shm_.IsValid());
   return readonly_shm_.Duplicate();
-}
-
-bool SharedMemory::GetUniqueId(SharedMemory::UniqueId* id) const {
-  // This function is called just after mmap. fstat is a system call that might
-  // cause I/O. It's safe to call fstat here because mmap for shared memory is
-  // called in two cases:
-  // 1) To handle file-mapped memory
-  // 2) To handle annonymous shared memory
-  // In 1), I/O is already permitted. In 2), the backend is on page cache and
-  // fstat doesn't cause I/O access to the disk. See the discussion at
-  // crbug.com/604726#c41.
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
-  struct stat file_stat;
-  if (HANDLE_EINTR(
-          ::fstat(static_cast<int>(handle().GetHandle()), &file_stat)) != 0)
-    return false;
-  id->first = file_stat.st_dev;
-  id->second = file_stat.st_ino;
-  return true;
 }
 
 }  // namespace base

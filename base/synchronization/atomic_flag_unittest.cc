@@ -89,7 +89,8 @@ TEST(AtomicFlagTest, ReadFromDifferentThread) {
 
   // Use |reset_flag| to confirm that the above completed (which the rest of
   // this test assumes).
-  ASSERT_TRUE(reset_flag.IsSet());
+  while (!reset_flag.IsSet())
+    PlatformThread::YieldCurrentThread();
 
   tested_flag.UnsafeResetForTesting();
   EXPECT_FALSE(tested_flag.IsSet());
@@ -116,12 +117,17 @@ TEST(AtomicFlagTest, SetOnDifferentSequenceDeathTest) {
   // Checks that Set() can't be called from another sequence after being called
   // on this one. AtomicFlag should die on a DCHECK if Set() is called again
   // from another sequence.
+
+  // Note: flag must be declared before the Thread so that its destructor runs
+  // later. Otherwise there's a race between destructing flag and running
+  // ExpectSetFlagDeath.
+  AtomicFlag flag;
+
   ::testing::FLAGS_gtest_death_test_style = "threadsafe";
   Thread t("AtomicFlagTest.SetOnDifferentThreadDeathTest");
   ASSERT_TRUE(t.Start());
   EXPECT_TRUE(t.WaitUntilThreadStarted());
 
-  AtomicFlag flag;
   flag.Set();
   t.task_runner()->PostTask(FROM_HERE, BindOnce(&ExpectSetFlagDeath, &flag));
 }

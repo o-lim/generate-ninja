@@ -11,8 +11,11 @@
 #include "base/atomicops.h"
 #include "base/bits.h"
 #include "base/logging.h"
+#include "base/memory/shared_memory_tracker.h"
 #include "base/numerics/safe_math.h"
 #include "base/process/process_metrics.h"
+#include "base/trace_event/memory_allocator_dump.h"
+#include "base/trace_event/process_memory_dump.h"
 #include "build/build_config.h"
 
 #if defined(OS_POSIX) && !defined(OS_NACL)
@@ -22,6 +25,10 @@
 
 #if defined(OS_ANDROID)
 #include "third_party/ashmem/ashmem.h"
+#endif
+
+#if defined(OS_WIN)
+#include "base/win/windows_version.h"
 #endif
 
 namespace base {
@@ -99,6 +106,39 @@ size_t AlignToPageSize(size_t size) {
   return bits::Align(size, base::GetPageSize());
 }
 
+// LockPages/UnlockPages are platform-native discardable page management
+// helper functions. Both expect |offset| to be specified relative to the
+// base address at which |memory| is mapped, and that |offset| and |length|
+// are page-aligned by the caller.
+
+// Returns SUCCESS on platforms which do not support discardable pages.
+DiscardableSharedMemory::LockResult LockPages(const SharedMemory& memory,
+                                              size_t offset,
+                                              size_t length) {
+#if defined(OS_ANDROID)
+  SharedMemoryHandle handle = memory.handle();
+  if (handle.IsValid()) {
+    int pin_result = ashmem_pin_region(handle.GetHandle(), offset, length);
+    if (pin_result == ASHMEM_WAS_PURGED)
+      return DiscardableSharedMemory::PURGED;
+    if (pin_result < 0)
+      return DiscardableSharedMemory::FAILED;
+  }
+#endif
+  return DiscardableSharedMemory::SUCCESS;
+}
+
+// UnlockPages() is a no-op on platforms not supporting discardable pages.
+void UnlockPages(const SharedMemory& memory, size_t offset, size_t length) {
+#if defined(OS_ANDROID)
+  SharedMemoryHandle handle = memory.handle();
+  if (handle.IsValid()) {
+    int unpin_result = ashmem_unpin_region(handle.GetHandle(), offset, length);
+    DCHECK_EQ(0, unpin_result);
+  }
+#endif
+}
+
 }  // namespace
 
 DiscardableSharedMemory::DiscardableSharedMemory()
@@ -160,6 +200,10 @@ bool DiscardableSharedMemory::Unmap() {
   if (!shared_memory_.Unmap())
     return false;
 
+  locked_page_count_ = 0;
+#if DCHECK_IS_ON()
+  locked_pages_.clear();
+#endif
   mapped_size_ = 0;
   return true;
 }
@@ -221,19 +265,9 @@ DiscardableSharedMemory::LockResult DiscardableSharedMemory::Lock(
   if (!length)
       return PURGED;
 
-// Pin pages if supported.
-#if defined(OS_ANDROID)
-  SharedMemoryHandle handle = shared_memory_.handle();
-  if (handle.IsValid()) {
-    if (ashmem_pin_region(handle.GetHandle(),
-                          AlignToPageSize(sizeof(SharedState)) + offset,
-                          length)) {
-      return PURGED;
-    }
-  }
-#endif
-
-  return SUCCESS;
+  // Ensure that the platform won't discard the required pages.
+  return LockPages(shared_memory_,
+                   AlignToPageSize(sizeof(SharedState)) + offset, length);
 }
 
 void DiscardableSharedMemory::Unlock(size_t offset, size_t length) {
@@ -243,23 +277,16 @@ void DiscardableSharedMemory::Unlock(size_t offset, size_t length) {
   // Calls to this function must be synchronized properly.
   DFAKE_SCOPED_LOCK(thread_collision_warner_);
 
-  // Zero for length means "everything onward".
+  // Passing zero for |length| means "everything onward". Note that |length| may
+  // still be zero after this calculation, e.g. if |mapped_size_| is zero.
   if (!length)
     length = AlignToPageSize(mapped_size_) - offset;
 
   DCHECK(shared_memory_.memory());
 
-// Unpin pages if supported.
-#if defined(OS_ANDROID)
-  SharedMemoryHandle handle = shared_memory_.handle();
-  if (handle.IsValid()) {
-    if (ashmem_unpin_region(handle.GetHandle(),
-                            AlignToPageSize(sizeof(SharedState)) + offset,
-                            length)) {
-      DPLOG(ERROR) << "ashmem_unpin_region() failed";
-    }
-  }
-#endif
+  // Allow the pages to be discarded by the platform, if supported.
+  UnlockPages(shared_memory_, AlignToPageSize(sizeof(SharedState)) + offset,
+              length);
 
   size_t start = offset / base::GetPageSize();
   size_t end = start + length / base::GetPageSize();
@@ -363,12 +390,24 @@ bool DiscardableSharedMemory::Purge(Time current_time) {
     DPLOG(ERROR) << "madvise() failed";
   }
 #elif defined(OS_WIN)
-  // MEM_DECOMMIT the purged pages to release the physical storage,
-  // either in memory or in the paging file on disk.  Pages remain RESERVED.
-  if (!VirtualFree(reinterpret_cast<char*>(shared_memory_.memory()) +
-                       AlignToPageSize(sizeof(SharedState)),
-                   AlignToPageSize(mapped_size_), MEM_DECOMMIT)) {
-    DPLOG(ERROR) << "VirtualFree() MEM_DECOMMIT failed in Purge()";
+  if (base::win::GetVersion() >= base::win::VERSION_WIN8_1) {
+    // Discard the purged pages, which releases the physical storage (resident
+    // memory, compressed or swapped), but leaves them reserved & committed.
+    // This does not free commit for use by other applications, but allows the
+    // system to avoid compressing/swapping these pages to free physical memory.
+    static const auto discard_virtual_memory =
+        reinterpret_cast<decltype(&::DiscardVirtualMemory)>(GetProcAddress(
+            GetModuleHandle(L"kernel32.dll"), "DiscardVirtualMemory"));
+    if (discard_virtual_memory) {
+      DWORD discard_result = discard_virtual_memory(
+          reinterpret_cast<char*>(shared_memory_.memory()) +
+              AlignToPageSize(sizeof(SharedState)),
+          AlignToPageSize(mapped_size_));
+      if (discard_result != ERROR_SUCCESS) {
+        DLOG(DCHECK) << "DiscardVirtualMemory() failed in Purge(): "
+                     << logging::SystemErrorCodeToString(discard_result);
+      }
+    }
   }
 #endif
 
@@ -397,6 +436,41 @@ bool DiscardableSharedMemory::IsMemoryLocked() const {
 
 void DiscardableSharedMemory::Close() {
   shared_memory_.Close();
+}
+
+void DiscardableSharedMemory::CreateSharedMemoryOwnershipEdge(
+    trace_event::MemoryAllocatorDump* local_segment_dump,
+    trace_event::ProcessMemoryDump* pmd,
+    bool is_owned) const {
+  auto* shared_memory_dump =
+      SharedMemoryTracker::GetOrCreateSharedMemoryDump(&shared_memory_, pmd);
+  // TODO(ssid): Clean this by a new api to inherit size of parent dump once the
+  // we send the full PMD and calculate sizes inside chrome, crbug.com/704203.
+  size_t resident_size = shared_memory_dump->GetSizeInternal();
+  local_segment_dump->AddScalar(trace_event::MemoryAllocatorDump::kNameSize,
+                                trace_event::MemoryAllocatorDump::kUnitsBytes,
+                                resident_size);
+
+  // By creating an edge with a higher |importance| (w.r.t non-owned dumps)
+  // the tracing UI will account the effective size of the segment to the
+  // client instead of manager.
+  // TODO(ssid): Define better constants in MemoryAllocatorDump for importance
+  // values, crbug.com/754793.
+  const int kImportance = is_owned ? 2 : 0;
+  auto shared_memory_guid = shared_memory_.mapped_id();
+  local_segment_dump->AddString("id", "hash", shared_memory_guid.ToString());
+
+  // Owned discardable segments which are allocated by client process, could
+  // have been cleared by the discardable manager. So, the segment need not
+  // exist in memory and weak dumps are created to indicate the UI that the dump
+  // should exist only if the manager also created the global dump edge.
+  if (is_owned) {
+    pmd->CreateWeakSharedMemoryOwnershipEdge(local_segment_dump->guid(),
+                                             shared_memory_guid, kImportance);
+  } else {
+    pmd->CreateSharedMemoryOwnershipEdge(local_segment_dump->guid(),
+                                         shared_memory_guid, kImportance);
+  }
 }
 
 Time DiscardableSharedMemory::Now() const {

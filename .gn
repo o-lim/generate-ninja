@@ -28,9 +28,15 @@ secondary_source = "//build/secondary/"
 # repo should define a flag that toggles on a behavior that implements the
 # additional logic required by Chrome to set the variables.
 default_args = {
+  # TODO(brettw) bug 684096: Chrome on iOS does not build v8, so "gn gen" prints
+  # a warning that "Build argument has no effect". When adding a v8 variable, it
+  # also needs to be defined to src/ios/BUILD.gn (respectively removed from both
+  # location when it is removed).
+
   v8_extra_library_files = [
     # Dependencies used by the extra libraries. Putting them here causes them
     # to be executed first during snapshot creation.
+    "//third_party/WebKit/Source/core/streams/CommonOperations.js",
     "//third_party/WebKit/Source/core/streams/CommonStrings.js",
     "//third_party/WebKit/Source/core/streams/SimpleQueue.js",
 
@@ -43,6 +49,10 @@ default_args = {
   v8_experimental_extra_library_files = []
   v8_enable_gdbjit = false
   v8_imminent_deprecation_warnings = false
+
+  # TODO(jochen): Remove this. http://crbug.com/v8/5830,
+  # http://crbug.com/728583.
+  v8_check_microtasks_scopes_consistency = false
 }
 
 # These are the targets to check headers for by default. The files in targets
@@ -54,16 +64,18 @@ check_targets = [
   "//ash/*",
   "//base/*",
   "//blink/*",
-  "//breakpad/*",
   "//build/*",
   "//cc/*",
 
   #"//chrome/*",  # Epic number of errors.
   "//chrome/app/*",
+  "//chrome/app_shim/*",
+  "//chrome/browser/chromeos/*",
   "//chrome/browser/extensions/*",
   "//chrome/browser/ui/*",
   "//chrome/common/*",
   "//chrome/installer/*",
+  "//chrome/profiling",
   "//chrome/third_party/mozilla_security_manager/*",
   "//chrome/tools/*",
   "//chrome/utility/*",
@@ -100,26 +112,8 @@ check_targets = [
   #"//jingle/*",
   "//mash/*",
 
-  #"//media/*",  # Lots of errors.
-  #"//media/base/*",
-  #"//media/capture/*",
-  "//media/cast/*",
-  "//media:media",
-  "//media:shared_memory_support",
-  "//media:media_unittests",
-  "//media:audio_unittests",
-  "//media:media_perftests",
-  "//media/audio/*",
-  "//media/blink/*",
-  "//media/cdm/*",
-  "//media/ffmpeg/*",
-  "//media/gpu/*",
-  "//media/midi/*",
-  "//media/mojo/*",
-  "//media/remoting/*",
-  "//media/test/*",
-
-  "mojo/*",
+  "//media/*",
+  "//mojo/*",
 
   #"//native_client/*",
   "//net/*",
@@ -133,7 +127,6 @@ check_targets = [
   "//rlz/*",
 
   #"//sandbox/*",  # Medium-hard.
-  "//sdch/*",
   "//services/*",
   "//skia/*",
   "//sql/*",
@@ -141,6 +134,7 @@ check_targets = [
   "//testing/*",
 
   #"//third_party/*",  # May not ever want this.
+  "//third_party/breakpad/*",
   "//third_party/brotli/*",
   "//third_party/hunspell/*",
   "//third_party/leveldatabase/*",
@@ -151,41 +145,7 @@ check_targets = [
   "//third_party/WebKit/*",
   "//tools/*",
 
-  #"//ui/*",  # Work left on Chromeos w/ use_ozone. Some parts of UI that work:
-  "//ui/accessibility/*",
-  "//ui/android/*",
-  "//ui/app_list/*",
-  "//ui/arc/*",
-  "//ui/aura/*",
-  "//ui/aura_extra/*",
-  "//ui/base/*",
-  "//ui/chromeos/*",
-  "//ui/compositor/*",
-  "//ui/content_accelerators/*",
-  "//ui/display/*",
-  "//ui/events/*",
-  "//ui/file_manager/*",
-  "//ui/gfx/*",
-  "//ui/gl/*",
-  "//ui/keyboard/*",
-  "//ui/latency_info/*",
-  "//ui/login/*",
-  "//ui/message_center/*",
-  "//ui/mojo/*",
-  "//ui/native_theme/*",
-  "//ui/ozone/*",
-  "//ui/platform_window/*",
-  "//ui/resources/*",
-  "//ui/shell_dialogs/*",
-  "//ui/snapshot/*",
-  "//ui/strings/*",
-  "//ui/surface/*",
-  "//ui/touch_selection/*",
-  "//ui/views/*",
-  "//ui/views_content_client/*",
-  "//ui/web_dialogs/*",
-  "//ui/webui/*",
-  "//ui/wm/*",
+  "//ui/*",
   "//url/*",
   "//v8/*",
   "//win8/*",

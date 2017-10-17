@@ -89,6 +89,7 @@ TEST_F(FilePathTest, DirName) {
     { FPL("{:"),            FPL(".") },
     { FPL("\xB3:"),         FPL(".") },
     { FPL("\xC5:"),         FPL(".") },
+    { FPL("/aa/../bb/cc"),  FPL("/aa/../bb")},
 #if defined(OS_WIN)
     { FPL("\x0143:"),       FPL(".") },
 #endif  // OS_WIN
@@ -128,6 +129,7 @@ TEST_F(FilePathTest, DirName) {
     { FPL("\\\\aa\\bb"),    FPL("\\\\aa") },
     { FPL("\\\\aa\\"),      FPL("\\\\") },
     { FPL("\\\\aa"),        FPL("\\\\") },
+    { FPL("aa\\..\\bb\\c"), FPL("aa\\..\\bb")},
 #if defined(FILE_PATH_USES_DRIVE_LETTERS)
     { FPL("c:\\"),          FPL("c:\\") },
     { FPL("c:\\\\"),        FPL("c:\\\\") },
@@ -239,6 +241,7 @@ TEST_F(FilePathTest, Append) {
   const struct BinaryTestData cases[] = {
     { { FPL(""),           FPL("cc") }, FPL("cc") },
     { { FPL("."),          FPL("ff") }, FPL("ff") },
+    { { FPL("."),          FPL("") },   FPL(".") },
     { { FPL("/"),          FPL("cc") }, FPL("/cc") },
     { { FPL("/aa"),        FPL("") },   FPL("/aa") },
     { { FPL("/aa/"),       FPL("") },   FPL("/aa") },
@@ -1286,12 +1289,11 @@ TEST_F(FilePathTest, ContentUriTest) {
 }
 #endif
 
-// Test the PrintTo overload for FilePath (used when a test fails to compare two
-// FilePaths).
-TEST_F(FilePathTest, PrintTo) {
+// Test the operator<<(ostream, FilePath).
+TEST_F(FilePathTest, PrintToOstream) {
   std::stringstream ss;
   FilePath fp(FPL("foo"));
-  base::PrintTo(fp, &ss);
+  ss << fp;
   EXPECT_EQ("foo", ss.str());
 }
 

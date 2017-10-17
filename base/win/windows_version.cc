@@ -14,8 +14,16 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/registry.h"
 
-#if !defined(__clang__) && _MSC_FULL_VER < 190024213
-#error VS 2015 Update 3 with Cumulative Servicing Release or higher is required
+#if !defined(__clang__) && _MSC_FULL_VER < 191125507
+#error VS 2017 Update 3.2 or higher is required
+#endif
+
+#if !defined(NTDDI_WIN10_RS2)
+// Windows 10 Creators Update SDK is required to build Chrome. It is important
+// to install the 10.0.15063.468 version, released June 2017, because earlier
+// versions had bugs and could not build Chrome. See this link for details:
+// https://developercommunity.visualstudio.com/content/problem/42961/15063-sdk-is-broken-bitsh-indirectly-references-no.html
+#error Creators Update SDK (10.0.15063.468) required.
 #endif
 
 namespace {
@@ -180,9 +188,24 @@ OSInfo::OSInfo()
         break;
       case PRODUCT_PROFESSIONAL:
       case PRODUCT_ULTIMATE:
-      case PRODUCT_ENTERPRISE:
-      case PRODUCT_BUSINESS:
         version_type_ = SUITE_PROFESSIONAL;
+        break;
+      case PRODUCT_ENTERPRISE:
+      case PRODUCT_ENTERPRISE_E:
+      case PRODUCT_ENTERPRISE_EVALUATION:
+      case PRODUCT_ENTERPRISE_N:
+      case PRODUCT_ENTERPRISE_N_EVALUATION:
+      case PRODUCT_ENTERPRISE_S:
+      case PRODUCT_ENTERPRISE_S_EVALUATION:
+      case PRODUCT_ENTERPRISE_S_N:
+      case PRODUCT_ENTERPRISE_S_N_EVALUATION:
+      case PRODUCT_BUSINESS:
+      case PRODUCT_BUSINESS_N:
+        version_type_ = SUITE_ENTERPRISE;
+        break;
+      case PRODUCT_EDUCATION:
+      case PRODUCT_EDUCATION_N:
+        version_type_ = SUITE_EDUCATION;
         break;
       case PRODUCT_HOME_BASIC:
       case PRODUCT_HOME_PREMIUM:

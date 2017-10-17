@@ -8,8 +8,7 @@
 #include "tools/gn/settings.h"
 
 Item::Item(const Settings* settings, const Label& label)
-    : settings_(settings), label_(label), defined_from_(nullptr) {
-}
+    : settings_(settings), label_(label), defined_from_(nullptr) {}
 
 Item::~Item() {
 }

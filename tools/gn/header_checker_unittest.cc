@@ -172,8 +172,9 @@ TEST_F(HeaderCheckerTest, CheckInclude) {
 
   // Add a target in the other toolchain with a header in it that is not
   // connected to any targets in the main toolchain.
-  Target otc(&other_settings, Label(SourceDir("//p/"), "otc",
-             other_toolchain.label().dir(), other_toolchain.label().name()));
+  Target otc(&other_settings,
+             Label(SourceDir("//p/"), "otc", other_toolchain.label().dir(),
+                   other_toolchain.label().name()));
   otc.set_output_type(Target::SOURCE_SET);
   Err err;
   EXPECT_TRUE(otc.SetToolchain(&other_toolchain, &err));

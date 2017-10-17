@@ -73,11 +73,14 @@ void MemoryDumpScheduler::StartInternal(MemoryDumpScheduler::Config config) {
   light_dump_rate_ = light_dump_period_ms / min_period_ms;
   heavy_dump_rate_ = heavy_dump_period_ms / min_period_ms;
 
-  // Trigger the first dump after |period_ms_| and not as soon as timer starts.
+  // Trigger the first dump after 200ms.
+  // TODO(lalitm): this is a tempoarary hack to delay the first scheduled dump
+  // so that the child processes get tracing enabled notification via IPC.
+  // See crbug.com/770151.
   SequencedTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
       BindOnce(&MemoryDumpScheduler::Tick, Unretained(this), ++generation_),
-      TimeDelta::FromMilliseconds(period_ms_));
+      TimeDelta::FromMilliseconds(200));
 }
 
 void MemoryDumpScheduler::StopInternal() {
@@ -90,12 +93,6 @@ void MemoryDumpScheduler::Tick(uint32_t expected_generation) {
   if (period_ms_ == 0 || generation_ != expected_generation)
     return;
 
-  SequencedTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE,
-      BindOnce(&MemoryDumpScheduler::Tick, Unretained(this),
-               expected_generation),
-      TimeDelta::FromMilliseconds(period_ms_));
-
   MemoryDumpLevelOfDetail level_of_detail = MemoryDumpLevelOfDetail::BACKGROUND;
   if (light_dump_rate_ > 0 && tick_count_ % light_dump_rate_ == 0)
     level_of_detail = MemoryDumpLevelOfDetail::LIGHT;
@@ -104,6 +101,12 @@ void MemoryDumpScheduler::Tick(uint32_t expected_generation) {
   tick_count_++;
 
   callback_.Run(level_of_detail);
+
+  SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE,
+      BindOnce(&MemoryDumpScheduler::Tick, Unretained(this),
+               expected_generation),
+      TimeDelta::FromMilliseconds(period_ms_));
 }
 
 MemoryDumpScheduler::Config::Config() {}

@@ -17,6 +17,10 @@
 #include "base/process/memory.h"
 #include "base/sys_info.h"
 
+#if defined(OS_WIN)
+#include <windows.h>
+#endif
+
 namespace base {
 namespace {
 
@@ -32,6 +36,11 @@ typedef NTSTATUS(WINAPI* NTQUERYSYSTEMINFORMATION)(
 }  // namespace
 
 ProcessMetrics::~ProcessMetrics() { }
+
+size_t GetMaxFds() {
+  // Windows is only limited by the amount of physical memory.
+  return std::numeric_limits<size_t>::max();
+}
 
 // static
 std::unique_ptr<ProcessMetrics> ProcessMetrics::CreateProcessMetrics(
@@ -275,7 +284,7 @@ static uint64_t FileTimeToUTC(const FILETIME& ftime) {
   return li.QuadPart;
 }
 
-double ProcessMetrics::GetCPUUsage() {
+double ProcessMetrics::GetPlatformIndependentCPUUsage() {
   FILETIME creation_time;
   FILETIME exit_time;
   FILETIME kernel_time;
@@ -288,9 +297,7 @@ double ProcessMetrics::GetCPUUsage() {
     // not yet received the notification.
     return 0;
   }
-  int64_t system_time =
-      (FileTimeToUTC(kernel_time) + FileTimeToUTC(user_time)) /
-      processor_count_;
+  int64_t system_time = FileTimeToUTC(kernel_time) + FileTimeToUTC(user_time);
   TimeTicks time = TimeTicks::Now();
 
   if (last_system_time_ == 0) {
@@ -311,15 +318,14 @@ double ProcessMetrics::GetCPUUsage() {
   last_system_time_ = system_time;
   last_cpu_time_ = time;
 
-  return static_cast<double>(system_time_delta * 100.0) / time_delta;
+  return static_cast<double>(system_time_delta * 100) / time_delta;
 }
 
 bool ProcessMetrics::GetIOCounters(IoCounters* io_counters) const {
   return GetProcessIoCounters(process_.Get(), io_counters) != FALSE;
 }
 
-ProcessMetrics::ProcessMetrics(ProcessHandle process)
-    : processor_count_(SysInfo::NumberOfProcessors()), last_system_time_(0) {
+ProcessMetrics::ProcessMetrics(ProcessHandle process) : last_system_time_(0) {
   if (process) {
     HANDLE duplicate_handle;
     BOOL result = ::DuplicateHandle(::GetCurrentProcess(), process,
@@ -365,6 +371,12 @@ bool GetSystemMemoryInfo(SystemMemoryInfoKB* meminfo) {
   meminfo->swap_free = mem_status.ullAvailPageFile / 1024;
 
   return true;
+}
+
+size_t ProcessMetrics::GetMallocUsage() {
+  // Unsupported as getting malloc usage on Windows requires iterating through
+  // the heap which is slow and crashes.
+  return 0;
 }
 
 }  // namespace base

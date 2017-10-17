@@ -15,13 +15,26 @@ import os
 import sys
 
 
+# Path to //src
+SRC = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+
+
 def IsRealDepotTools(path):
-  return os.path.isfile(os.path.join(path, 'gclient.py'))
+  expanded_path = os.path.expanduser(path)
+  return os.path.isfile(os.path.join(expanded_path, 'gclient.py'))
 
 
 def add_depot_tools_to_path():
   """Search for depot_tools and add it to sys.path."""
-  # First look if depot_tools is already in PYTHONPATH.
+  # First, check if we have a DEPS'd in "depot_tools".
+  deps_depot_tools = os.path.join(SRC, 'third_party', 'depot_tools')
+  if IsRealDepotTools(deps_depot_tools):
+    # Put the pinned version at the start of the sys.path, in case there
+    # are other non-pinned versions already on the sys.path.
+    sys.path.insert(0, deps_depot_tools)
+    return deps_depot_tools
+
+  # Then look if depot_tools is already in PYTHONPATH.
   for i in sys.path:
     if i.rstrip(os.sep).endswith('depot_tools') and IsRealDepotTools(i):
       return i

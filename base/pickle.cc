@@ -12,6 +12,7 @@
 #include "base/bits.h"
 #include "base/macros.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/numerics/safe_math.h"
 #include "build/build_config.h"
 
 namespace base {
@@ -74,11 +75,10 @@ inline const char* PickleIterator::GetReadPointerAndAdvance(
     int num_elements,
     size_t size_element) {
   // Check for int32_t overflow.
-  int64_t num_bytes = static_cast<int64_t>(num_elements) * size_element;
-  int num_bytes32 = static_cast<int>(num_bytes);
-  if (num_bytes != static_cast<int64_t>(num_bytes32))
+  int num_bytes;
+  if (!CheckMul(num_elements, size_element).AssignIfValid(&num_bytes))
     return NULL;
-  return GetReadPointerAndAdvance(num_bytes32);
+  return GetReadPointerAndAdvance(num_bytes);
 }
 
 bool PickleIterator::ReadBool(bool* result) {
@@ -207,44 +207,6 @@ bool PickleIterator::ReadBytes(const char** data, int length) {
   return true;
 }
 
-PickleSizer::PickleSizer() {}
-
-PickleSizer::~PickleSizer() {}
-
-void PickleSizer::AddString(const StringPiece& value) {
-  AddInt();
-  AddBytes(static_cast<int>(value.size()));
-}
-
-void PickleSizer::AddString16(const StringPiece16& value) {
-  AddInt();
-  AddBytes(static_cast<int>(value.size() * sizeof(char16)));
-}
-
-void PickleSizer::AddData(int length) {
-  CHECK_GE(length, 0);
-  AddInt();
-  AddBytes(length);
-}
-
-void PickleSizer::AddBytes(int length) {
-  payload_size_ += bits::Align(length, sizeof(uint32_t));
-}
-
-void PickleSizer::AddAttachment() {
-  // From IPC::Message::WriteAttachment
-  AddInt();
-}
-
-template <size_t length> void PickleSizer::AddBytesStatic() {
-  DCHECK_LE(length, static_cast<size_t>(std::numeric_limits<int>::max()));
-  AddBytes(length);
-}
-
-template void PickleSizer::AddBytesStatic<2>();
-template void PickleSizer::AddBytesStatic<4>();
-template void PickleSizer::AddBytesStatic<8>();
-
 Pickle::Attachment::Attachment() {}
 
 Pickle::Attachment::~Attachment() {}
@@ -326,28 +288,24 @@ Pickle& Pickle::operator=(const Pickle& other) {
   return *this;
 }
 
-bool Pickle::WriteString(const StringPiece& value) {
-  if (!WriteInt(static_cast<int>(value.size())))
-    return false;
-
-  return WriteBytes(value.data(), static_cast<int>(value.size()));
+void Pickle::WriteString(const StringPiece& value) {
+  WriteInt(static_cast<int>(value.size()));
+  WriteBytes(value.data(), static_cast<int>(value.size()));
 }
 
-bool Pickle::WriteString16(const StringPiece16& value) {
-  if (!WriteInt(static_cast<int>(value.size())))
-    return false;
-
-  return WriteBytes(value.data(),
-                    static_cast<int>(value.size()) * sizeof(char16));
+void Pickle::WriteString16(const StringPiece16& value) {
+  WriteInt(static_cast<int>(value.size()));
+  WriteBytes(value.data(), static_cast<int>(value.size()) * sizeof(char16));
 }
 
-bool Pickle::WriteData(const char* data, int length) {
-  return length >= 0 && WriteInt(length) && WriteBytes(data, length);
+void Pickle::WriteData(const char* data, int length) {
+  DCHECK_GE(length, 0);
+  WriteInt(length);
+  WriteBytes(data, length);
 }
 
-bool Pickle::WriteBytes(const void* data, int length) {
+void Pickle::WriteBytes(const void* data, int length) {
   WriteBytesCommon(data, length);
-  return true;
 }
 
 void Pickle::Reserve(size_t length) {
@@ -427,13 +385,9 @@ bool Pickle::PeekNext(size_t header_size,
   if (length < header_size)
     return false;
 
-  if (hdr->payload_size > std::numeric_limits<size_t>::max() - header_size) {
-    // If payload_size causes an overflow, we return maximum possible
-    // pickle size to indicate that.
-    *pickle_size = std::numeric_limits<size_t>::max();
-  } else {
-    *pickle_size = header_size + hdr->payload_size;
-  }
+  // If payload_size causes an overflow, we return maximum possible
+  // pickle size to indicate that.
+  *pickle_size = ClampAdd(header_size, hdr->payload_size);
   return true;
 }
 

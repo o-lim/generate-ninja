@@ -18,12 +18,12 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/optional.h"
 #include "base/process/internal_linux.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
-#include "base/sys_info.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 
@@ -164,6 +164,44 @@ int GetProcessCPU(pid_t pid) {
   return total_cpu;
 }
 
+#if defined(OS_CHROMEOS)
+// Report on Chrome OS GEM object graphics memory. /run/debugfs_gpu is a
+// bind mount into /sys/kernel/debug and synchronously reading the in-memory
+// files in /sys is fast.
+void ReadChromeOSGraphicsMemory(SystemMemoryInfoKB* meminfo) {
+#if defined(ARCH_CPU_ARM_FAMILY)
+  FilePath geminfo_file("/run/debugfs_gpu/exynos_gem_objects");
+#else
+  FilePath geminfo_file("/run/debugfs_gpu/i915_gem_objects");
+#endif
+  std::string geminfo_data;
+  meminfo->gem_objects = -1;
+  meminfo->gem_size = -1;
+  if (ReadFileToString(geminfo_file, &geminfo_data)) {
+    int gem_objects = -1;
+    long long gem_size = -1;
+    int num_res = sscanf(geminfo_data.c_str(), "%d objects, %lld bytes",
+                         &gem_objects, &gem_size);
+    if (num_res == 2) {
+      meminfo->gem_objects = gem_objects;
+      meminfo->gem_size = gem_size;
+    }
+  }
+
+#if defined(ARCH_CPU_ARM_FAMILY)
+  // Incorporate Mali graphics memory if present.
+  FilePath mali_memory_file("/sys/class/misc/mali0/device/memory");
+  std::string mali_memory_data;
+  if (ReadFileToString(mali_memory_file, &mali_memory_data)) {
+    long long mali_size = -1;
+    int num_res = sscanf(mali_memory_data.c_str(), "%lld bytes", &mali_size);
+    if (num_res == 1)
+      meminfo->gem_size += mali_size;
+  }
+#endif  // defined(ARCH_CPU_ARM_FAMILY)
+}
+#endif  // defined(OS_CHROMEOS)
+
 }  // namespace
 
 // static
@@ -217,7 +255,7 @@ bool ProcessMetrics::GetWorkingSetKBytes(WorkingSetKBytes* ws_usage) const {
   return GetWorkingSetKBytesStatm(ws_usage);
 }
 
-double ProcessMetrics::GetCPUUsage() {
+double ProcessMetrics::GetPlatformIndependentCPUUsage() {
   TimeTicks time = TimeTicks::Now();
 
   if (last_cpu_ == 0) {
@@ -295,6 +333,25 @@ uint64_t ProcessMetrics::GetVmSwapBytes() const {
 }
 #endif  // defined(OS_LINUX) || defined(OS_ANDROID)
 
+#if defined(OS_LINUX) || defined(OS_ANDROID)
+bool ProcessMetrics::GetPageFaultCounts(PageFaultCounts* counts) const {
+  // We are not using internal::ReadStatsFileAndGetFieldAsInt64(), since it
+  // would read the file twice, and return inconsistent numbers.
+  std::string stats_data;
+  if (!internal::ReadProcStats(process_, &stats_data))
+    return false;
+  std::vector<std::string> proc_stats;
+  if (!internal::ParseProcStats(stats_data, &proc_stats))
+    return false;
+
+  counts->minor =
+      internal::GetProcStatsFieldAsInt64(proc_stats, internal::VM_MINFLT);
+  counts->major =
+      internal::GetProcStatsFieldAsInt64(proc_stats, internal::VM_MAJFLT);
+  return true;
+}
+#endif  // defined(OS_LINUX) || defined(OS_ANDROID)
+
 #if defined(OS_LINUX) || defined(OS_AIX)
 int ProcessMetrics::GetOpenFdCount() const {
   // Use /proc/<pid>/fd to count the number of entries there.
@@ -347,7 +404,6 @@ ProcessMetrics::ProcessMetrics(ProcessHandle process)
       last_absolute_idle_wakeups_(0),
 #endif
       last_cpu_(0) {
-  processor_count_ = SysInfo::NumberOfProcessors();
 }
 
 #if defined(OS_CHROMEOS)
@@ -561,7 +617,7 @@ const size_t kDiskWeightedIOTime = 13;
 }  // namespace
 
 std::unique_ptr<Value> SystemMemoryInfoKB::ToValue() const {
-  auto res = base::MakeUnique<DictionaryValue>();
+  auto res = std::make_unique<DictionaryValue>();
   res->SetInteger("total", total);
   res->SetInteger("free", free);
   res->SetInteger("available", available);
@@ -670,6 +726,9 @@ bool ParseProcVmstat(StringPiece vmstat_data, SystemMemoryInfoKB* meminfo) {
   //
   // Iterate through the whole file because the position of the
   // fields are dependent on the kernel version and configuration.
+  bool has_pswpin = false;
+  bool has_pswpout = false;
+  bool has_pgmajfault = false;
   for (const StringPiece& line : SplitStringPiece(
            vmstat_data, "\n", KEEP_WHITESPACE, SPLIT_WANT_NONEMPTY)) {
     std::vector<StringPiece> tokens = SplitStringPiece(
@@ -683,14 +742,22 @@ bool ParseProcVmstat(StringPiece vmstat_data, SystemMemoryInfoKB* meminfo) {
 
     if (tokens[0] == "pswpin") {
       meminfo->pswpin = val;
+      DCHECK(!has_pswpin);
+      has_pswpin = true;
     } else if (tokens[0] == "pswpout") {
       meminfo->pswpout = val;
+      DCHECK(!has_pswpout);
+      has_pswpout = true;
     } else if (tokens[0] == "pgmajfault") {
       meminfo->pgmajfault = val;
+      DCHECK(!has_pgmajfault);
+      has_pgmajfault = true;
     }
+    if (has_pswpin && has_pswpout && has_pgmajfault)
+      return true;
   }
 
-  return true;
+  return false;
 }
 
 bool GetSystemMemoryInfo(SystemMemoryInfoKB* meminfo) {
@@ -711,41 +778,8 @@ bool GetSystemMemoryInfo(SystemMemoryInfoKB* meminfo) {
   }
 
 #if defined(OS_CHROMEOS)
-  // Report on Chrome OS GEM object graphics memory. /run/debugfs_gpu is a
-  // bind mount into /sys/kernel/debug and synchronously reading the in-memory
-  // files in /sys is fast.
-#if defined(ARCH_CPU_ARM_FAMILY)
-  FilePath geminfo_file("/run/debugfs_gpu/exynos_gem_objects");
-#else
-  FilePath geminfo_file("/run/debugfs_gpu/i915_gem_objects");
+  ReadChromeOSGraphicsMemory(meminfo);
 #endif
-  std::string geminfo_data;
-  meminfo->gem_objects = -1;
-  meminfo->gem_size = -1;
-  if (ReadFileToString(geminfo_file, &geminfo_data)) {
-    int gem_objects = -1;
-    long long gem_size = -1;
-    int num_res = sscanf(geminfo_data.c_str(),
-                         "%d objects, %lld bytes",
-                         &gem_objects, &gem_size);
-    if (num_res == 2) {
-      meminfo->gem_objects = gem_objects;
-      meminfo->gem_size = gem_size;
-    }
-  }
-
-#if defined(ARCH_CPU_ARM_FAMILY)
-  // Incorporate Mali graphics memory if present.
-  FilePath mali_memory_file("/sys/class/misc/mali0/device/memory");
-  std::string mali_memory_data;
-  if (ReadFileToString(mali_memory_file, &mali_memory_data)) {
-    long long mali_size = -1;
-    int num_res = sscanf(mali_memory_data.c_str(), "%lld bytes", &mali_size);
-    if (num_res == 1)
-      meminfo->gem_size += mali_size;
-  }
-#endif  // defined(ARCH_CPU_ARM_FAMILY)
-#endif  // defined(OS_CHROMEOS)
 
   FilePath vmstat_file("/proc/vmstat");
   std::string vmstat_data;
@@ -778,7 +812,7 @@ SystemDiskInfo::SystemDiskInfo() {
 SystemDiskInfo::SystemDiskInfo(const SystemDiskInfo& other) = default;
 
 std::unique_ptr<Value> SystemDiskInfo::ToValue() const {
-  auto res = base::MakeUnique<DictionaryValue>();
+  auto res = std::make_unique<DictionaryValue>();
 
   // Write out uint64_t variables as doubles.
   // Note: this may discard some precision, but for JS there's no other option.
@@ -907,7 +941,7 @@ TimeDelta GetUserCpuTimeSinceBoot() {
 
 #if defined(OS_CHROMEOS)
 std::unique_ptr<Value> SwapInfo::ToValue() const {
-  auto res = base::MakeUnique<DictionaryValue>();
+  auto res = std::make_unique<DictionaryValue>();
 
   // Write out uint64_t variables as doubles.
   // Note: this may discard some precision, but for JS there's no other option.
@@ -924,13 +958,63 @@ std::unique_ptr<Value> SwapInfo::ToValue() const {
   return std::move(res);
 }
 
-void GetSwapInfo(SwapInfo* swap_info) {
-  // Synchronously reading files in /sys/block/zram0 does not hit the disk.
-  ThreadRestrictions::ScopedAllowIO allow_io;
+bool ParseZramMmStat(StringPiece mm_stat_data, SwapInfo* swap_info) {
+  // There are 7 columns in /sys/block/zram0/mm_stat,
+  // split by several spaces. The first three columns
+  // are orig_data_size, compr_data_size and mem_used_total.
+  // Example:
+  // 17715200 5008166 566062  0 1225715712  127 183842
+  //
+  // For more details:
+  // https://www.kernel.org/doc/Documentation/blockdev/zram.txt
 
-  FilePath zram_path("/sys/block/zram0");
-  uint64_t orig_data_size =
-      ReadFileToUint64(zram_path.Append("orig_data_size"));
+  std::vector<StringPiece> tokens = SplitStringPiece(
+      mm_stat_data, kWhitespaceASCII, TRIM_WHITESPACE, SPLIT_WANT_NONEMPTY);
+  if (tokens.size() < 7) {
+    DLOG(WARNING) << "zram mm_stat: tokens: " << tokens.size()
+                  << " malformed line: " << mm_stat_data.as_string();
+    return false;
+  }
+
+  if (!StringToUint64(tokens[0], &swap_info->orig_data_size))
+    return false;
+  if (!StringToUint64(tokens[1], &swap_info->compr_data_size))
+    return false;
+  if (!StringToUint64(tokens[2], &swap_info->mem_used_total))
+    return false;
+
+  return true;
+}
+
+bool ParseZramStat(StringPiece stat_data, SwapInfo* swap_info) {
+  // There are 11 columns in /sys/block/zram0/stat,
+  // split by several spaces. The first column is read I/Os
+  // and fifth column is write I/Os.
+  // Example:
+  // 299    0    2392    0    1    0    8    0    0    0    0
+  //
+  // For more details:
+  // https://www.kernel.org/doc/Documentation/blockdev/zram.txt
+
+  std::vector<StringPiece> tokens = SplitStringPiece(
+      stat_data, kWhitespaceASCII, TRIM_WHITESPACE, SPLIT_WANT_NONEMPTY);
+  if (tokens.size() < 11) {
+    DLOG(WARNING) << "zram stat: tokens: " << tokens.size()
+                  << " malformed line: " << stat_data.as_string();
+    return false;
+  }
+
+  if (!StringToUint64(tokens[0], &swap_info->num_reads))
+    return false;
+  if (!StringToUint64(tokens[4], &swap_info->num_writes))
+    return false;
+
+  return true;
+}
+
+namespace {
+
+bool IgnoreZramFirstPage(uint64_t orig_data_size, SwapInfo* swap_info) {
   if (orig_data_size <= 4096) {
     // A single page is compressed at startup, and has a high compression
     // ratio. Ignore this as it doesn't indicate any real swapping.
@@ -939,8 +1023,18 @@ void GetSwapInfo(SwapInfo* swap_info) {
     swap_info->num_writes = 0;
     swap_info->compr_data_size = 0;
     swap_info->mem_used_total = 0;
-    return;
+    return true;
   }
+  return false;
+}
+
+void ParseZramPath(SwapInfo* swap_info) {
+  FilePath zram_path("/sys/block/zram0");
+  uint64_t orig_data_size =
+      ReadFileToUint64(zram_path.Append("orig_data_size"));
+  if (IgnoreZramFirstPage(orig_data_size, swap_info))
+    return;
+
   swap_info->orig_data_size = orig_data_size;
   swap_info->num_reads = ReadFileToUint64(zram_path.Append("num_reads"));
   swap_info->num_writes = ReadFileToUint64(zram_path.Append("num_writes"));
@@ -948,6 +1042,60 @@ void GetSwapInfo(SwapInfo* swap_info) {
       ReadFileToUint64(zram_path.Append("compr_data_size"));
   swap_info->mem_used_total =
       ReadFileToUint64(zram_path.Append("mem_used_total"));
+}
+
+bool GetSwapInfoImpl(SwapInfo* swap_info) {
+  // Synchronously reading files in /sys/block/zram0 does not hit the disk.
+  ThreadRestrictions::ScopedAllowIO allow_io;
+
+  // Since ZRAM update, it shows the usage data in different places.
+  // If file "/sys/block/zram0/mm_stat" exists, use the new way, otherwise,
+  // use the old way.
+  static Optional<bool> use_new_zram_interface;
+  FilePath zram_mm_stat_file("/sys/block/zram0/mm_stat");
+  if (!use_new_zram_interface.has_value()) {
+    use_new_zram_interface = PathExists(zram_mm_stat_file);
+  }
+
+  if (!use_new_zram_interface.value()) {
+    ParseZramPath(swap_info);
+    return true;
+  }
+
+  std::string mm_stat_data;
+  if (!ReadFileToString(zram_mm_stat_file, &mm_stat_data)) {
+    DLOG(WARNING) << "Failed to open " << zram_mm_stat_file.value();
+    return false;
+  }
+  if (!ParseZramMmStat(mm_stat_data, swap_info)) {
+    DLOG(WARNING) << "Failed to parse " << zram_mm_stat_file.value();
+    return false;
+  }
+  if (IgnoreZramFirstPage(swap_info->orig_data_size, swap_info))
+    return true;
+
+  FilePath zram_stat_file("/sys/block/zram0/stat");
+  std::string stat_data;
+  if (!ReadFileToString(zram_stat_file, &stat_data)) {
+    DLOG(WARNING) << "Failed to open " << zram_stat_file.value();
+    return false;
+  }
+  if (!ParseZramStat(stat_data, swap_info)) {
+    DLOG(WARNING) << "Failed to parse " << zram_stat_file.value();
+    return false;
+  }
+
+  return true;
+}
+
+}  // namespace
+
+bool GetSwapInfo(SwapInfo* swap_info) {
+  if (!GetSwapInfoImpl(swap_info)) {
+    *swap_info = SwapInfo();
+    return false;
+  }
+  return true;
 }
 #endif  // defined(OS_CHROMEOS)
 

@@ -10,7 +10,7 @@ namespace base {
 namespace {
 
 #if DCHECK_IS_ON()
-AtomicRefCount g_cross_thread_ref_count_access_allow_count = 0;
+std::atomic_int g_cross_thread_ref_count_access_allow_count(0);
 #endif
 
 }  // namespace
@@ -18,45 +18,38 @@ AtomicRefCount g_cross_thread_ref_count_access_allow_count = 0;
 namespace subtle {
 
 bool RefCountedThreadSafeBase::HasOneRef() const {
-  return AtomicRefCountIsOne(&ref_count_);
+  return ref_count_.IsOne();
 }
 
-RefCountedThreadSafeBase::~RefCountedThreadSafeBase() {
 #if DCHECK_IS_ON()
+RefCountedThreadSafeBase::~RefCountedThreadSafeBase() {
   DCHECK(in_dtor_) << "RefCountedThreadSafe object deleted without "
                       "calling Release()";
-#endif
 }
-
-void RefCountedThreadSafeBase::AddRef() const {
-#if DCHECK_IS_ON()
-  DCHECK(!in_dtor_);
-  DCHECK(!needs_adopt_ref_)
-      << "This RefCounted object is created with non-zero reference count."
-      << " The first reference to such a object has to be made by AdoptRef or"
-      << " MakeRefCounted.";
 #endif
-  AtomicRefCountInc(&ref_count_);
-}
 
+#if defined(ARCH_CPU_64_BIT)
+void RefCountedBase::AddRefImpl() const {
+  // Check if |ref_count_| overflow only on 64 bit archs since the number of
+  // objects may exceed 2^32.
+  // To avoid the binary size bloat, use non-inline function here.
+  CHECK(++ref_count_ > 0);
+}
+#endif
+
+#if !defined(ARCH_CPU_X86_FAMILY)
 bool RefCountedThreadSafeBase::Release() const {
-#if DCHECK_IS_ON()
-  DCHECK(!in_dtor_);
-  DCHECK(!AtomicRefCountIsZero(&ref_count_));
-#endif
-  if (!AtomicRefCountDec(&ref_count_)) {
-#if DCHECK_IS_ON()
-    in_dtor_ = true;
-#endif
-    return true;
-  }
-  return false;
+  return ReleaseImpl();
 }
+void RefCountedThreadSafeBase::AddRef() const {
+  AddRefImpl();
+}
+#endif
 
 #if DCHECK_IS_ON()
 bool RefCountedBase::CalledOnValidSequence() const {
   return sequence_checker_.CalledOnValidSequence() ||
-         !AtomicRefCountIsZero(&g_cross_thread_ref_count_access_allow_count);
+         g_cross_thread_ref_count_access_allow_count.load() != 0;
 }
 #endif
 
@@ -64,11 +57,11 @@ bool RefCountedBase::CalledOnValidSequence() const {
 
 #if DCHECK_IS_ON()
 ScopedAllowCrossThreadRefCountAccess::ScopedAllowCrossThreadRefCountAccess() {
-  AtomicRefCountInc(&g_cross_thread_ref_count_access_allow_count);
+  ++g_cross_thread_ref_count_access_allow_count;
 }
 
 ScopedAllowCrossThreadRefCountAccess::~ScopedAllowCrossThreadRefCountAccess() {
-  AtomicRefCountDec(&g_cross_thread_ref_count_access_allow_count);
+  --g_cross_thread_ref_count_access_allow_count;
 }
 #endif
 

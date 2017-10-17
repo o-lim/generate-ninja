@@ -19,9 +19,9 @@
 *   [Target declarations](#targets)
     *   [action: Declare a target that runs a script a single time.](#action)
     *   [action_foreach: Declare a target that runs a script over a set of files.](#action_foreach)
-    *   [bundle_data: [iOS/OS X] Declare a target without output.](#bundle_data)
+    *   [bundle_data: [iOS/macOS] Declare a target without output.](#bundle_data)
     *   [copy: Declare a target that copies files.](#copy)
-    *   [create_bundle: [iOS/OS X] Build an OS X / iOS bundle.](#create_bundle)
+    *   [create_bundle: [iOS/macOS] Build an iOS or macOS bundle.](#create_bundle)
     *   [executable: Declare an executable target.](#executable)
     *   [group: Declare a named group of targets.](#group)
     *   [loadable_module: Declare a loadable module target.](#loadable_module)
@@ -42,6 +42,7 @@
     *   [get_target_outputs: [file list] Get the list of outputs from a target.](#get_target_outputs)
     *   [getenv: Get an environment variable.](#getenv)
     *   [import: Import a file into the current scope.](#import)
+    *   [not_needed: Mark variables from scope as not needed.](#not_needed)
     *   [pool: Defines a pool object.](#pool)
     *   [print: Prints to the console.](#print)
     *   [process_file_template: Do template expansion over a list of files.](#process_file_template)
@@ -79,6 +80,7 @@
     *   [args: [string list] Arguments passed to an action.](#args)
     *   [asmflags: [string list] Flags passed to the assembler.](#asmflags)
     *   [assert_no_deps: [label pattern list] Ensure no deps on these targets.](#assert_no_deps)
+    *   [bundle_contents_dir: Expansion of {{bundle_contents_dir}} in create_bundle.](#bundle_contents_dir)
     *   [bundle_deps_filter: [label list] A list of labels that are filtered out.](#bundle_deps_filter)
     *   [bundle_executable_dir: Expansion of {{bundle_executable_dir}} in create_bundle](#bundle_executable_dir)
     *   [bundle_plugins_dir: Expansion of {{bundle_plugins_dir}} in create_bundle.](#bundle_plugins_dir)
@@ -96,7 +98,6 @@
     *   [code_signing_sources: [file list] Sources for code signing step.](#code_signing_sources)
     *   [complete_static_lib: [boolean] Links all deps into a static library.](#complete_static_lib)
     *   [configs: [label list] Configs applying to this target or config.](#configs)
-    *   [console: [boolean] Run this action in the console pool.](#console)
     *   [data: [file list] Runtime data file dependencies.](#data)
     *   [data_deps: [label list] Non-linked dependencies.](#data_deps)
     *   [defines: [string list] C preprocessor defines.](#defines)
@@ -112,6 +113,8 @@
     *   [output_name: [string] Name for the output file other than the default.](#output_name)
     *   [output_prefix_override: [boolean] Don't use prefix for output name.](#output_prefix_override)
     *   [outputs: [file list] Output files for actions and copy targets.](#outputs)
+    *   [partial_info_plist: [filename] Path plist from asset catalog compiler.](#partial_info_plist)
+    *   [pool: [string] Label of the pool used by the action.](#pool)
     *   [precompiled_header: [string] Header file to precompile.](#precompiled_header)
     *   [precompiled_header_type: [string] "gcc" or "msvc".](#precompiled_header_type)
     *   [precompiled_source: [file name] Source file to precompile.](#precompiled_source)
@@ -125,6 +128,8 @@
     *   [testonly: [boolean] Declares a target must only be used for testing.](#testonly)
     *   [visibility: [label list] A list of labels that can depend on a target.](#visibility)
     *   [write_runtime_deps: Writes the target's runtime_deps to the given path.](#write_runtime_deps)
+    *   [xcode_extra_attributes: [scope] Extra attributes for Xcode projects.](#xcode_extra_attributes)
+    *   [test_application_name: [string] Test application name for unit or ui test target.](#test_application_name)
 *   [Other help topics](#other)
     *   [all: Print all the help at once](#all)
     *   [buildargs: How build arguments work.](#buildargs)
@@ -212,7 +217,7 @@
   tries really hard to always write something to the output JSON and convey
   errors that way rather than via return codes.
 ```
-### <a name="args"></a>**gn args <out_dir> [\--list] [\--short] [\--args]**
+### <a name="args"></a>**gn args <out_dir> [\--list] [\--short] [\--args] [\--overrides-only]**
 
 ```
   See also "gn help buildargs" for a more high-level overview of how
@@ -237,7 +242,7 @@
       Note: you can edit the build args manually by editing the file "args.gn"
       in the build directory and then running "gn gen <out_dir>".
 
-  gn args <out_dir> --list[=<exact_arg>] [--short]
+  gn args <out_dir> --list[=<exact_arg>] [--short] [--overrides-only]
       Lists all build arguments available in the current configuration, or, if
       an exact_arg is specified for the list flag, just that one build
       argument.
@@ -248,6 +253,10 @@
 
       If --short is specified, only the names and current values will be
       printed.
+
+      If --overrides-only is specified, only the names and current values of
+      arguments that have been overridden (i.e. non-default arguments) will
+      be printed. Overrides come from the <out_dir>/args.gn file and //.gn
 ```
 
 #### **Examples**
@@ -259,6 +268,9 @@
   gn args out/Debug --list --short
     Prints all arguments with their default values for the out/Debug
     build.
+
+  gn args out/Debug --list --short --overrides-only
+    Prints overridden arguments for the out/Debug build.
 
   gn args out/Debug --list=target_cpu
     Prints information about the "target_cpu" argument for the "
@@ -595,11 +607,9 @@
   gn format /abspath/some/BUILD.gn
   gn format --stdin
 ```
-### <a name="gen:"></a>**gn gen**: Generate ninja files.
+### <a name="gen"></a>**gn gen [\--check] [<ide options>] <out_dir>**
 
 ```
-  gn gen [<ide options>] <out_dir>
-
   Generates ninja files from the current tree and puts them in the given output
   directory.
 
@@ -607,6 +617,9 @@
       //out/foo
   Or it can be a directory relative to the current directory such as:
       out/foo
+
+  "gn gen --check" is the same as running "gn check". See "gn help check"
+  for documentation on that mode.
 
   See "gn help switches" for the common command-line switches.
 ```
@@ -645,6 +658,11 @@
   --no-deps
       Don't include targets dependencies to the solution. Changes the way how
       --filters option works. Only directly matching targets are included.
+
+  --winsdk=<sdk_version>
+      Use the specified Windows 10 SDK version to generate project files.
+      As an example, "10.0.15063.0" can be specified to use Creators Update SDK
+      instead of the default one.
 ```
 
 #### **Xcode Flags**
@@ -688,9 +706,10 @@
 #### **Generic JSON Output**
 
 ```
-  Dumps target information to JSON file and optionally invokes python script on
-  generated file. See comments at the beginning of json_project_writer.cc and
-  desc_builder.cc for overview of JSON file format.
+  Dumps target information to a JSON file and optionally invokes a
+  python script on the generated file. See the comments at the beginning
+  of json_project_writer.cc and desc_builder.cc for an overview of the JSON
+  file format.
 
   --json-file-name=<json_file_name>
       Overrides default file name (project.json) of generated JSON file.
@@ -1030,7 +1049,7 @@
 #### **Variables**
 
 ```
-  args, console, data, data_deps, depfile, deps, inputs, outputs*,
+  args, data, data_deps, depfile, deps, inputs, outputs*, pool,
   response_file_contents, script*, sources
   * = required
 ```
@@ -1108,7 +1127,7 @@
 #### **Variables**
 
 ```
-  args, console, data, data_deps, depfile, deps, inputs, outputs*,
+  args, data, data_deps, depfile, deps, inputs, outputs*, pool,
   response_file_contents, script*, sources*
   * = required
 ```
@@ -1140,7 +1159,7 @@
         "/{{source_name_part}}.h" ]
   }
 ```
-### <a name="bundle_data"></a>**bundle_data**: [iOS/OS X] Declare a target without output.
+### <a name="bundle_data"></a>**bundle_data**: [iOS/macOS] Declare a target without output.
 
 ```
   This target type allows to declare data that is required at runtime. It is
@@ -1152,8 +1171,8 @@
   output. The output must reference a file inside of {{bundle_root_dir}}.
 
   This target can be used on all platforms though it is designed only to
-  generate iOS/OS X bundle. In cross-platform projects, it is advised to put it
-  behind iOS/Mac conditionals.
+  generate iOS/macOS bundle. In cross-platform projects, it is advised to put it
+  behind iOS/macOS conditionals.
 
   See "gn help create_bundle" for more information.
 ```
@@ -1231,10 +1250,10 @@
     outputs = [ "$target_gen_dir/{{source_file_part}}" ]
   }
 ```
-### <a name="create_bundle"></a>**create_bundle**: [iOS/OS X] Build an OS X / iOS bundle.
+### <a name="create_bundle"></a>**create_bundle**: [ios/macOS] Build an iOS or macOS bundle.
 
 ```
-  This target generates an iOS/OS X bundle (which is a directory with a
+  This target generates an iOS or macOS bundle (which is a directory with a
   well-know structure). This target does not define any sources, instead they
   are computed from all "bundle_data" target this one depends on transitively
   (the recursion stops at "create_bundle" targets).
@@ -1243,8 +1262,8 @@
   expansion of {{bundle_*_dir}} rules in "bundle_data" outputs.
 
   This target can be used on all platforms though it is designed only to
-  generate iOS/OS X bundle. In cross-platform projects, it is advised to put it
-  behind iOS/Mac conditionals.
+  generate iOS or macOS bundle. In cross-platform projects, it is advised to put
+  it behind iOS/macOS conditionals.
 
   If a create_bundle is specified as a data_deps for another target, the bundle
   is considered a leaf, and its public and private dependencies will not
@@ -1274,10 +1293,11 @@
 #### **Variables**
 
 ```
-  bundle_root_dir*, bundle_resources_dir*, bundle_executable_dir*,
-  bundle_plugins_dir*, bundle_deps_filter, deps, data_deps, public_deps,
-  visibility, product_type, code_signing_args, code_signing_script,
-  code_signing_sources, code_signing_outputs
+  bundle_root_dir*, bundle_contents_dir*, bundle_resources_dir*,
+  bundle_executable_dir*, bundle_plugins_dir*, bundle_deps_filter, deps,
+  data_deps, public_deps, visibility, product_type, code_signing_args,
+  code_signing_script, code_signing_sources, code_signing_outputs,
+  xcode_extra_attributes, xcode_test_application_name, partial_info_plist
   * = required
 ```
 
@@ -1285,7 +1305,7 @@
 
 ```
   # Defines a template to create an application. On most platform, this is just
-  # an alias for an "executable" target, but on iOS/OS X, it builds an
+  # an alias for an "executable" target, but on iOS/macOS, it builds an
   # application bundle.
   template("app") {
     if (!is_ios && !is_mac) {
@@ -1307,7 +1327,7 @@
       bundle_data("${app_name}_bundle_info_plist") {
         deps = [ ":${app_name}_generate_info_plist" ]
         sources = [ "$gen_path/Info.plist" ]
-        outputs = [ "{{bundle_root_dir}}/Info.plist" ]
+        outputs = [ "{{bundle_contents_dir}}/Info.plist" ]
       }
 
       executable("${app_name}_generate_executable") {
@@ -1332,16 +1352,24 @@
 
       create_bundle("${app_name}.app") {
         product_type = "com.apple.product-type.application"
+
         if (is_ios) {
           bundle_root_dir = "${root_build_dir}/$target_name"
-          bundle_resources_dir = bundle_root_dir
-          bundle_executable_dir = bundle_root_dir
-          bundle_plugins_dir = bundle_root_dir + "/Plugins"
+          bundle_contents_dir = bundle_root_dir
+          bundle_resources_dir = bundle_contents_dir
+          bundle_executable_dir = bundle_contents_dir
+          bundle_plugins_dir = "${bundle_contents_dir}/Plugins"
+
+          extra_attributes = {
+            ONLY_ACTIVE_ARCH = "YES"
+            DEBUG_INFORMATION_FORMAT = "dwarf"
+          }
         } else {
-          bundle_root_dir = "${root_build_dir}/target_name/Contents"
-          bundle_resources_dir = bundle_root_dir + "/Resources"
-          bundle_executable_dir = bundle_root_dir + "/MacOS"
-          bundle_plugins_dir = bundle_root_dir + "/Plugins"
+          bundle_root_dir = "${root_build_dir}/target_name"
+          bundle_contents_dir  = "${bundle_root_dir}/Contents"
+          bundle_resources_dir = "${bundle_contents_dir}/Resources"
+          bundle_executable_dir = "${bundle_contents_dir}/MacOS"
+          bundle_plugins_dir = "${bundle_contents_dir}/Plugins"
         }
         deps = [ ":${app_name}_bundle_info_plist" ]
         if (is_ios && code_signing) {
@@ -1932,7 +1960,7 @@
   get_label_info(":foo", "name")
   # Returns string "foo".
 
-  get_label_info("//foo/bar:baz", "gen_dir")
+  get_label_info("//foo/bar:baz", "target_gen_dir")
   # Returns string "//out/Debug/gen/foo/bar".
 ```
 ### <a name="get_path_info"></a>**get_path_info**: Extract parts of a file or directory name.
@@ -2126,6 +2154,27 @@
 
   # Looks in the current directory.
   import("my_vars.gni")
+```
+### <a name="not_needed"></a>**not_needed**: Mark variables from scope as not needed.
+
+```
+  not_needed(variable_list_or_star, variable_to_ignore_list = [])
+  not_needed(from_scope, variable_list_or_star,
+             variable_to_ignore_list = [])
+
+  Mark the variables in the current or given scope as not needed, which means
+  you will not get an error about unused variables for these. The
+  variable_to_ignore_list allows excluding variables from "all matches" if
+  variable_list_or_star is "*".
+```
+
+#### **Example**
+
+```
+  not_needed("*", [ "config" ])
+  not_needed([ "data_deps", "deps" ])
+  not_needed(invoker, "*", [ "config" ])
+  not_needed(invoker, [ "data_deps", "deps" ])
 ```
 ### <a name="pool"></a>**pool**: Defines a pool object.
 
@@ -2582,6 +2631,22 @@
   would have a dependency on the action to make it run.
 ```
 
+#### **Overriding builtin targets**
+
+```
+  You can use template to redefine a built-in target in which case your template
+  takes a precedence over the built-in one. All uses of the target from within
+  the template definition will refer to the built-in target which makes it
+  possible to extend the behavior of the built-in target:
+
+    template("shared_library") {
+      shared_library(shlib) {
+        forward_variables_from(invoker, [ "*" ])
+        ...
+      }
+    }
+```
+
 #### **Example of defining a template**
 
 ```
@@ -2686,17 +2751,18 @@
     Other tools:
       "stamp": Tool for creating stamp files
       "copy": Tool to copy files.
+      "action": Defaults for actions
 
     Platform specific tools:
-      "copy_bundle_data": [iOS, OS X] Tool to copy files in a bundle.
-      "compile_xcassets": [iOS, OS X] Tool to compile asset catalogs.
+      "copy_bundle_data": [iOS, macOS] Tool to copy files in a bundle.
+      "compile_xcassets": [iOS, macOS] Tool to compile asset catalogs.
 ```
 
 #### **Tool variables**
 
 ```
     command  [string with substitutions]
-        Valid for: all tools (required)
+        Valid for: all tools except "action" (required)
 
         The command to run.
 
@@ -2796,6 +2862,7 @@
           ]
 
     pool [label, optional]
+        Valid for: all tools (optional)
 
         Label of the pool to use for the tool. Pools are used to limit the
         number of tasks that can execute concurrently during the build.
@@ -2866,13 +2933,13 @@
           restat = true
 
     rspfile  [string with substitutions]
-        Valid for: all tools (optional)
+        Valid for: all tools except "action" (optional)
 
         Name of the response file. If empty, no response file will be
         used. See "rspfile_content".
 
     rspfile_content  [string with substitutions]
-        Valid for: all tools (required when "rspfile" is specified)
+        Valid for: all tools except "action" (required when "rspfile" is used)
 
         The contents to be written to the response file. This may include all
         or part of the command to send to the tool which allows you to get
@@ -3041,7 +3108,7 @@
   common tool substitutions.
 
   The copy_bundle_data and compile_xcassets tools only allows the common tool
-  substitutions. Both tools are required to create iOS/OS X bundles and need
+  substitutions. Both tools are required to create iOS/macOS bundles and need
   only be defined on those platforms.
 
   The copy_bundle_data tool will be called with one source and needs to copy
@@ -3060,6 +3127,11 @@
         Expands to the product_type of the bundle that will contain the
         compiled asset catalog. Usually corresponds to the product_type
         property of the corresponding create_bundle target.
+
+    {{bundle_partial_info_plist}}
+        Expands to the path to the partial Info.plist generated by the
+        assets catalog compiler. Usually based on the target_name of
+        the create_bundle target.
 ```
 
 #### **Separate linking and dependencies for shared libraries**
@@ -3832,6 +3904,18 @@
     ]
   }
 ```
+### <a name="bundle_contents_dir"></a>**bundle_contents_dir**: Expansion of {{bundle_contents_dir}} in
+```
+                             create_bundle.
+
+  A string corresponding to a path in $root_build_dir.
+
+  This string is used by the "create_bundle" target to expand the
+  {{bundle_contents_dir}} of the "bundle_data" target it depends on. This must
+  correspond to a path under "bundle_root_dir".
+
+  See "gn help bundle_root_dir" for examples.
+```
 ### <a name="bundle_deps_filter"></a>**bundle_deps_filter**: [label list] A list of labels that are filtered out.
 
 ```
@@ -3913,15 +3997,16 @@
 ```
   bundle_data("info_plist") {
     sources = [ "Info.plist" ]
-    outputs = [ "{{bundle_root_dir}}/Info.plist" ]
+    outputs = [ "{{bundle_contents_dir}}/Info.plist" ]
   }
 
   create_bundle("doom_melon.app") {
     deps = [ ":info_plist" ]
-    bundle_root_dir = root_build_dir + "/doom_melon.app/Contents"
-    bundle_resources_dir = bundle_root_dir + "/Resources"
-    bundle_executable_dir = bundle_root_dir + "/MacOS"
-    bundle_plugins_dir = bundle_root_dir + "/PlugIns"
+    bundle_root_dir = "${root_build_dir}/doom_melon.app"
+    bundle_contents_dir = "${bundle_root_dir}/Contents"
+    bundle_resources_dir = "${bundle_contents_dir}/Resources"
+    bundle_executable_dir = "${bundle_contents_dir}/MacOS"
+    bundle_plugins_dir = "${bundle_contents_dir}/PlugIns"
   }
 ```
 ### <a name="cflags*"></a>**cflags***: Flags passed to the C compiler.
@@ -4279,27 +4364,6 @@
     }
   }
 ```
-### <a name="console"></a>**console**: Run this action in the console pool.
-
-```
-  Boolean. Defaults to false.
-
-  Actions marked "console = true" will be run in the built-in ninja "console"
-  pool. They will have access to real stdin and stdout, and output will not be
-  buffered by ninja. This can be useful for long-running actions with progress
-  logs, or actions that require user input.
-
-  Only one console pool target can run at any one time in Ninja. Refer to the
-  Ninja documentation on the console pool for more info.
-```
-
-#### **Example**
-
-```
-  action("long_action_with_progress_logs") {
-    console = true
-  }
-```
 ### <a name="data"></a>**data**: Runtime data file dependencies.
 
 ```
@@ -4324,7 +4388,7 @@
   However, no verification is done on these so GN doesn't enforce this. The
   paths are just rebased and passed along when requested.
 
-  Note: On iOS and OS X, create_bundle targets will not be recursed into when
+  Note: On iOS and macOS, create_bundle targets will not be recursed into when
   gathering data. See "gn help create_bundle" for details.
 
   See "gn help runtime_deps" for how these are used.
@@ -4341,7 +4405,7 @@
   This is normally used for things like plugins or helper programs that a
   target needs at runtime.
 
-  Note: On iOS and OS X, create_bundle targets will not be recursed into when
+  Note: On iOS and macOS, create_bundle targets will not be recursed into when
   gathering data_deps. See "gn help create_bundle" for details.
 
   See also "gn help deps" and "gn help data".
@@ -4845,6 +4909,31 @@
     Action targets (excluding action_foreach) must list literal output file(s)
     with no source expansions. See "gn help action".
 ```
+### <a name="partial_info_plist"></a>**partial_info_plist**: [filename] Path plist from asset catalog compiler.
+
+```
+  Valid for create_bundle target, corresponds to the path for the partial
+  Info.plist created by the asset catalog compiler that needs to be merged
+  with the application Info.plist (usually done by the code signing script).
+
+  The file will be generated regardless of whether the asset compiler has
+  been invoked or not. See "gn help create_bundle".
+```
+### <a name="pool"></a>**pool**: Label of the pool used by the action.
+
+```
+  A fully-qualified label representing the pool that will be used for the
+  action. Pools are defined using the pool() {...} declaration.
+```
+
+#### **Example**
+
+```
+  action("action") {
+    pool = "//build:custom_pool"
+    ...
+  }
+```
 ### <a name="precompiled_header"></a>**precompiled_header**: [string] Header file to precompile.
 
 ```
@@ -5111,7 +5200,7 @@
   For binary targets (source sets, executables, and libraries), the known file
   types will be compiled with the associated tools. Unknown file types and
   headers will be skipped. However, you should still list all C/C+ header files
-  so GN knows about the existance of those files for the purposes of include
+  so GN knows about the existence of those files for the purposes of include
   checking.
 
   As a special case, a file ending in ".def" will be treated as a Windows
@@ -5231,6 +5320,33 @@
   be the main output file of the target itself. The file contents will be the
   same as requesting the runtime deps be written on the command line (see "gn
   help --runtime-deps-list-file").
+```
+### <a name="xcode_extra_attributes"></a>**xcode_extra_attributes**: [scope] Extra attributes for Xcode projects.
+
+```
+  The value defined in this scope will be copied to the EXTRA_ATTRIBUTES
+  property of the generated Xcode project. They are only meaningful when
+  generating with --ide=xcode.
+
+  See "gn help create_bundle" for more information.
+```
+### <a name="test_application_name"></a>**test_application_name**: Test application name for unit or ui test target.
+
+```
+  Each unit and ui test target must have a test application target, and this
+  value is used to specify the relationship. Only meaningful to Xcode (used as
+  part of the Xcode project generation).
+
+  See "gn help create_bundle" for more information.
+```
+
+#### **Exmaple**
+
+```
+  create_bundle("chrome_xctest") {
+    test_application_name = "chrome"
+    ...
+  }
 ```
 ## <a name="other"></a>Other help topics
 
@@ -5357,6 +5473,11 @@
       Label of the root build target. The GN build will start by loading the
       build file containing this target name. This defaults to "//:" which will
       cause the file //BUILD.gn to be loaded.
+
+  script_executable [optional]
+      Path to specific Python executable or potentially a different language
+      interpreter that is used to execute scripts in action targets and
+      exec_script calls.
 
   secondary_source [optional]
       Label of an alternate directory tree to find input files. When searching

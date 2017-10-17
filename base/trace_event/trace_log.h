@@ -14,9 +14,9 @@
 #include <vector>
 
 #include "base/atomicops.h"
+#include "base/containers/stack.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "base/trace_event/trace_config.h"
 #include "base/trace_event/trace_event_impl.h"
@@ -193,7 +193,7 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
       const char* scope,
       unsigned long long id,
       int num_args,
-      const char** arg_names,
+      const char* const* arg_names,
       const unsigned char* arg_types,
       const unsigned long long* arg_values,
       std::unique_ptr<ConvertableToTraceFormat>* convertable_values,
@@ -206,7 +206,7 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
       unsigned long long id,
       unsigned long long bind_id,
       int num_args,
-      const char** arg_names,
+      const char* const* arg_names,
       const unsigned char* arg_types,
       const unsigned long long* arg_values,
       std::unique_ptr<ConvertableToTraceFormat>* convertable_values,
@@ -219,7 +219,7 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
       unsigned long long id,
       int process_id,
       int num_args,
-      const char** arg_names,
+      const char* const* arg_names,
       const unsigned char* arg_types,
       const unsigned long long* arg_values,
       std::unique_ptr<ConvertableToTraceFormat>* convertable_values,
@@ -233,7 +233,7 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
       int thread_id,
       const TimeTicks& timestamp,
       int num_args,
-      const char** arg_names,
+      const char* const* arg_names,
       const unsigned char* arg_types,
       const unsigned long long* arg_values,
       std::unique_ptr<ConvertableToTraceFormat>* convertable_values,
@@ -248,7 +248,7 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
       int thread_id,
       const TimeTicks& timestamp,
       int num_args,
-      const char** arg_names,
+      const char* const* arg_names,
       const unsigned char* arg_types,
       const unsigned long long* arg_values,
       std::unique_ptr<ConvertableToTraceFormat>* convertable_values,
@@ -259,7 +259,7 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
       const unsigned char* category_group_enabled,
       const char* name,
       int num_args,
-      const char** arg_names,
+      const char* const* arg_names,
       const unsigned char* arg_types,
       const unsigned long long* arg_values,
       std::unique_ptr<ConvertableToTraceFormat>* convertable_values,
@@ -268,6 +268,13 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
   void UpdateTraceEventDuration(const unsigned char* category_group_enabled,
                                 const char* name,
                                 TraceEventHandle handle);
+
+  void UpdateTraceEventDurationExplicit(
+      const unsigned char* category_group_enabled,
+      const char* name,
+      TraceEventHandle handle,
+      const TimeTicks& now,
+      const ThreadTicks& thread_now);
 
   void EndFilteredEvent(const unsigned char* category_group_enabled,
                         const char* name,
@@ -331,6 +338,9 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
   void UpdateETWCategoryGroupEnabledFlags();
 #endif
 
+  // Replaces |logged_events_| with a new TraceBuffer for testing.
+  void SetTraceBufferForTesting(std::unique_ptr<TraceBuffer> trace_buffer);
+
  private:
   typedef unsigned int InternalTraceOptions;
 
@@ -363,10 +373,6 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
   void UpdateCategoryState(TraceCategory* category);
 
   void CreateFiltersForTraceConfig();
-
-  // Configure synthetic delays based on the values set in the current
-  // trace config.
-  void UpdateSyntheticDelaysFromTraceConfig();
 
   InternalTraceOptions GetInternalOptionsFromTraceConfig(
       const TraceConfig& config);
@@ -458,7 +464,7 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
   std::unordered_map<int, std::string> thread_names_;
 
   // The following two maps are used only when ECHO_TO_CONSOLE.
-  std::unordered_map<int, std::stack<TimeTicks>> thread_event_start_times_;
+  std::unordered_map<int, base::stack<TimeTicks>> thread_event_start_times_;
   std::unordered_map<std::string, int> thread_colors_;
 
   TimeTicks buffer_limit_reached_timestamp_;
