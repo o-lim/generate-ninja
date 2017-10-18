@@ -61,6 +61,8 @@ class Builder {
   bool ConfigDefined(BuilderRecord* record, Err* err);
   bool ToolchainDefined(BuilderRecord* record, Err* err);
 
+  void CreateConsolePoolRecord(const Toolchain* toolchain);
+
   // Returns the record associated with the given label. This function checks
   // that if we already have references for it, the type matches. If no record
   // exists yet, a new one will be created.

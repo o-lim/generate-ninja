@@ -27,6 +27,10 @@ class Pool : public Item {
   int64_t depth() const { return depth_; }
   void set_depth(int64_t depth) { depth_ = depth; }
 
+  // Console pool option
+  bool is_console() const { return console_; }
+  void set_console(bool value) { console_ = value; }
+
   // The pool name in generated ninja files.
   std::string GetNinjaName(const Label& default_toolchain) const;
 
@@ -34,6 +38,7 @@ class Pool : public Item {
   std::string GetNinjaName(bool include_toolchain) const;
 
   int64_t depth_ = 0;
+  bool console_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(Pool);
 };

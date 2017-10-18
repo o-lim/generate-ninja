@@ -17,6 +17,7 @@
 #include "tools/gn/settings.h"
 #include "tools/gn/target.h"
 #include "tools/gn/trace.h"
+#include "tools/gn/variables.h"
 
 namespace {
 
@@ -289,7 +290,21 @@ bool Builder::ToolchainDefined(BuilderRecord* record, Err* err) {
     RecursiveSetShouldGenerate(record, true);
 
   loader_->ToolchainLoaded(toolchain);
+  CreateConsolePoolRecord(toolchain);
   return true;
+}
+
+void Builder::CreateConsolePoolRecord(const Toolchain* toolchain) {
+  Label label(SourceDir("//"), variables::kConsolePool,
+              toolchain->label().dir(),
+              toolchain->label().name());
+  const Settings * settings = loader_->GetToolchainSettings(toolchain->label());
+  std::unique_ptr<Pool> console_pool(new Pool(settings, label));
+  console_pool->set_console(true);
+  BuilderRecord* record = new BuilderRecord(BuilderRecord::ITEM_POOL, label);
+  record->set_item(std::move(console_pool));
+  record->set_resolved(true);
+  records_[label] = record;
 }
 
 BuilderRecord* Builder::GetOrCreateRecordOfType(const Label& label,

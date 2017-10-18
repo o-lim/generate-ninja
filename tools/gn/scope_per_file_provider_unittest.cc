@@ -22,6 +22,7 @@ TEST(ScopePerFileProvider, Expected) {
     scope.set_source_dir(SourceDir("//source/"));
     ScopePerFileProvider provider(&scope, true);
 
+    EXPECT_EQ("//:console_pool",        GPV(variables::kConsolePool));
     EXPECT_EQ("//toolchain:default",    GPV(variables::kCurrentToolchain));
     // TODO(brettw) this test harness does not set up the Toolchain manager
     // which is the source of this value, so we can't test this yet.

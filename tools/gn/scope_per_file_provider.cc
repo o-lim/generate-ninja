@@ -21,6 +21,9 @@ ScopePerFileProvider::~ScopePerFileProvider() {
 
 const Value* ScopePerFileProvider::GetProgrammaticValue(
     const base::StringPiece& ident) {
+  if (ident == variables::kConsolePool)
+    return GetConsolePool();
+
   if (ident == variables::kCurrentToolchain)
     return GetCurrentToolchain();
   if (ident == variables::kDefaultToolchain)
@@ -42,6 +45,15 @@ const Value* ScopePerFileProvider::GetProgrammaticValue(
       return GetTargetOutDir();
   }
   return nullptr;
+}
+
+const Value* ScopePerFileProvider::GetConsolePool() {
+  if (!console_pool_) {
+    console_pool_.reset(new Value(
+        nullptr,
+        std::string("//:") + variables::kConsolePool));
+  }
+  return console_pool_.get();
 }
 
 const Value* ScopePerFileProvider::GetCurrentToolchain() {

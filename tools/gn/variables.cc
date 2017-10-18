@@ -23,6 +23,30 @@ const char kColorConsole_Help[] =
   messages).
 )";
 
+const char kConsolePool[] = "console_pool";
+const char kConsolePool_HelpShort[] =
+    "console_pool: [label] Console pool object.";
+const char kConsolePool_Help[] =
+    R"(console_pool: Console pool object.
+
+  The console pool is a special, built-in, pool object that uses the built-in
+  ninja "console" pool. Any target using this pool will have access to real
+  stdin and stdout, and output will not be buffered by ninja. This can be
+  useful for long-running actions with progress logs, or actions that require
+  user input.
+
+  Only one console pool target can run at any one time in Ninja. Refer to the
+  Ninja documentation on the console pool for more info.
+
+Example
+
+  action("my_action") {
+    ...
+    pool = console_pool
+    ...
+   }
+)";
+
 const char kHostCpu[] = "host_cpu";
 const char kHostCpu_HelpShort[] =
     "host_cpu: [string] The processor architecture that GN is running on.";
@@ -2110,6 +2134,7 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(CodeSigningOutputs)
     INSERT_VARIABLE(CompleteStaticLib)
     INSERT_VARIABLE(Configs)
+    INSERT_VARIABLE(ConsolePool)
     INSERT_VARIABLE(Data)
     INSERT_VARIABLE(DataDeps)
     INSERT_VARIABLE(Defines)

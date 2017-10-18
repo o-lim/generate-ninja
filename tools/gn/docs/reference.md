@@ -103,6 +103,7 @@
     *   [command: [string with substitutions] Command to run for actions.](#command)
     *   [complete_static_lib: [boolean] Links all deps into a static library.](#complete_static_lib)
     *   [configs: [label list] Configs applying to this target or config.](#configs)
+    *   [console_pool: [label] Console pool object.](#console_pool)
     *   [cppflags: [string list] Flags passed to all C pre-processor variants.](#cppflags)
     *   [cppflags_c: [string list] Flags passed to the C pre-processor.](#cppflags_c)
     *   [cppflags_cc: [string list] Flags passed to the C++ pre-processor.](#cppflags_cc)
@@ -4822,6 +4823,28 @@
       configs = [ ":no_optimization" ]
     }
   }
+```
+### <a name="console_pool"></a>**console_pool**: Console pool object.
+
+```
+  The console pool is a special, built-in, pool object that uses the built-in
+  ninja "console" pool. Any target using this pool will have access to real
+  stdin and stdout, and output will not be buffered by ninja. This can be
+  useful for long-running actions with progress logs, or actions that require
+  user input.
+
+  Only one console pool target can run at any one time in Ninja. Refer to the
+  Ninja documentation on the console pool for more info.
+```
+
+#### **Example**
+
+```
+  action("my_action") {
+    ...
+    pool = console_pool
+    ...
+   }
 ```
 ### <a name="cppflags*"></a>**cppflags***: Flags passed to the pre-processor.
 

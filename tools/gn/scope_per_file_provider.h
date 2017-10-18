@@ -24,6 +24,7 @@ class ScopePerFileProvider : public Scope::ProgrammaticProvider {
   const Value* GetProgrammaticValue(const base::StringPiece& ident) override;
 
  private:
+  const Value* GetConsolePool();
   const Value* GetCurrentToolchain();
   const Value* GetDefaultToolchain();
   const Value* GetPythonPath();
@@ -36,6 +37,7 @@ class ScopePerFileProvider : public Scope::ProgrammaticProvider {
   bool allow_target_vars_;
 
   // All values are lazily created.
+  std::unique_ptr<Value> console_pool_;
   std::unique_ptr<Value> current_toolchain_;
   std::unique_ptr<Value> default_toolchain_;
   std::unique_ptr<Value> python_path_;
