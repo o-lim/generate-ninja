@@ -1,14 +1,13 @@
 version: "#{build}"
 clone_depth: 50
-image: Visual Studio 2015
+image: Visual Studio 2017
 
 environment:
-  VISUAL_STUDIO_PATH: "%ProgramFiles(x86)%\\Microsoft Visual Studio 14.0"
-  VISUAL_STUDIO_VERSION: "2015"
+  VISUAL_STUDIO_PATH: "%ProgramFiles(x86)%\\Microsoft Visual Studio\\2017\\Community"
+  VISUAL_STUDIO_VERSION: "2017"
   NINJA_VERSION: "1.7.2"
   NINJA_ZIP: "ninja-win.zip"
   NINJA_DOWNLOAD_URL: "https://github.com/ninja-build/ninja/releases/download"
-  PATH: "%UserProfile%\\bin;C:\\MinGW\bin;C:\\MinGW\\msys\\1.0\\bin;%PATH%"
 
   matrix:
     - platform: x86
@@ -17,8 +16,9 @@ environment:
       system: "x86_64-windows"
 
 init:
+  - set PATH=%UserProfile%\bin;C:\msys64\usr\bin;%PATH%
   # Make Visual Studio command line tools available
-  - call "%VISUAL_STUDIO_PATH%\VC\vcvarsall.bat" %platform%
+  - call "%VISUAL_STUDIO_PATH%\VC\Auxiliary\Build\vcvarsall.bat" %platform%
 
 install:
   - mkdir "%UserProfile%\bin"
@@ -29,7 +29,9 @@ install:
 
 build_script:
   - make
-  - zip -j "out\Release\gn-%system%.zip" "out\Release\gn.exe"
+
+after_build:
+  - 7z a -tzip "out\Release\gn-%system%.zip" "%APPVEYOR_BUILD_FOLDER%\out\Release\gn.exe"
 
 branches:
   except:
