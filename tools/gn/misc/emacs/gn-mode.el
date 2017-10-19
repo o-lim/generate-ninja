@@ -67,28 +67,27 @@ variable name or the '{{' and '}}' which surround it."
 
 ;; pool() is handled specially since it's also a variable name
 (defvar gn-font-lock-buildfile-fun-keywords
-  '("assert" "config" "declare_args" "defined" "exec_script" "foreach"
-    "forward_variables_from" "get_label_info" "get_path_info"
+  '("assert" "assert_no_deps" "config" "declare_args" "defined" "exec_script"
+    "foreach" "forward_variables_from" "get_label_info" "get_path_info"
     "get_target_outputs" "getenv" "import" "mark_used" "mark_used_from"
     "not_needed" "print" "process_file_template" "read_file" "rebase_path"
     "set_default_toolchain" "set_defaults" "set_sources_assignment_filter"
     "split_list" "template" "tool" "toolchain" "toolchain_args" "write_file"))
 
 (defvar gn-font-lock-predefined-var-keywords
-  '("current_cpu" "current_os" "current_toolchain" "default_toolchain"
-    "host_cpu" "host_os" "invoker" "python_path" "root_build_dir" "root_gen_dir"
-    "root_out_dir" "target_cpu" "target_gen_dir" "target_Name" "target_os"
-    "target_out_dir" "true" "false"))
+  '("console_pool" "current_cpu" "current_os" "current_toolchain"
+    "default_toolchain" "host_cpu" "host_os" "invoker" "python_path"
+    "root_build_dir" "root_gen_dir" "root_out_dir" "target_cpu" "target_gen_dir"
+    "target_Name" "target_os" "target_out_dir" "true" "false"))
 
 (defvar gn-font-lock-var-keywords
   '("all_dependent_configs" "allow_circular_includes_from" "args" "arflags"
-    "asmflags" "asmppflags" "assert_no_deps" "bundle_contents_dir"
-    "bundle_deps_filter" "bundle_executable_dir" "bundle_plugins_dir"
-    "bundle_resources_dir" "bundle_root_dir" "cflags" "cflags_c"
-    "cflags_cc" "cflags_objc" "cflags_objcc" "check_includes"
-    "code_signing_args" "code_signing_outputs" "code_signing_script"
-    "code_signing_sources" "command" "complete_static_lib" "configs"
-    "console" "cppflags" "cppflags_c" "cppflags_cc" "cppflags_objc"
+    "asmflags" "asmppflags" "bundle_contents_dir" "bundle_deps_filter"
+    "bundle_executable_dir" "bundle_plugins_dir" "bundle_resources_dir"
+    "bundle_root_dir" "cflags" "cflags_c" "cflags_cc" "cflags_objc"
+    "cflags_objcc" "check_includes" "code_signing_args" "code_signing_outputs"
+    "code_signing_script" "code_signing_sources" "command" "complete_static_lib"
+    "configs" "cppflags" "cppflags_c" "cppflags_cc" "cppflags_objc"
     "cppflags_objcc" "data" "data_deps" "default_output_extension"
     "default_output_dir" "defines" "define_switch" "depend_output" "depfile"
     "deps" "depsformat" "description" "include_dirs" "include_switch" "inputs"

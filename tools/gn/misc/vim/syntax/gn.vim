@@ -16,8 +16,8 @@ syn keyword     gnConditional       if else
 hi def link     gnConditional       Conditional
 
 " Predefined variables
-syn keyword     gnPredefVar current_cpu current_os current_toolchain
-syn keyword     gnPredefVar default_toolchain host_cpu host_os
+syn keyword     gnPredefVar console_pool current_cpu current_os
+syn keyword     gnPredefVar current_toolchain default_toolchain host_cpu host_os
 syn keyword     gnPredefVar root_build_dir root_gen_dir root_out_dir
 syn keyword     gnPredefVar target_cpu target_gen_dir target_out_dir
 syn keyword     gnPredefVar target_os
@@ -31,11 +31,11 @@ syn keyword     gnTarget loadable_module
 hi def link     gnTarget            Type
 
 " Buildfile functions
-syn keyword     gnFunctions assert config declare_args defined exec_script
-syn keyword     gnFunctions foreach forward_variables_from
+syn keyword     gnFunctions assert assert_no_deps config declare_args defined
+syn keyword     gnFunctions exec_script foreach forward_variables_from
 syn keyword     gnFunctions get_label_info get_path_info
 syn keyword     gnFunctions get_target_outputs getenv import print
-syn keyword     gnFunctions mark_used mark_used_from
+syn keyword     gnFunctions mark_used mark_used_from not_needed
 syn keyword     gnFunctions process_file_template read_file rebase_path
 syn keyword     gnFunctions set_default_toolchain set_defaults
 syn keyword     gnFunctions set_sources_assignment_filter target template tool
@@ -44,22 +44,27 @@ hi def link     gnFunctions         Macro
 
 " Variables
 syn keyword     gnVariable all_dependent_configs allow_circular_includes_from
-syn keyword     gnVariable args arflags asmflags asmppflags cflags cflags_c
-syn keyword     gnVariable cflags_cc cflags_objc cflags_objcc check_includes
-syn keyword     gnVariable command complete_static_lib configs console cppflags
-syn keyword     gnVariable cppflags_c cppflags_cc cppflags_objc cppflags_objcc
-syn keyword     gnVariable data data_deps defines define_switch
+syn keyword     gnVariable args arflags asmflags asmppflags bundle_contents_dir
+syn keyword     gnVariable bundle_deps_filter bundle_executable_dir
+syn keyword     gnVariable bundle_plugins_dir bundle_resources_dir
+syn keyword     gnVariable bundle_root_dir cflags cflags_c cflags_cc cflags_objc
+syn keyword     gnVariable cflags_objcc check_includes
+syn keyword     gnVariable code_signing_args code_signing_outputs
+syn keyword     gnVariable code_signing_script code_signing_sources
+syn keyword     gnVariable command complete_static_lib configs
+syn keyword     gnVariable cppflags cppflags_c cppflags_cc cppflags_objc
+syn keyword     gnVariable cppflags_objcc data data_deps defines define_switch
 syn keyword     gnVariable default_output_extension default_output_dir
 syn keyword     gnVariable depend_output depfile deps depsformat description
 syn keyword     gnVariable include_dirs include_switch inputs interpreter
 syn keyword     gnVariable ldflags lib_dirs libs lib_dir_switch lib_switch
 syn keyword     gnVariable link_output output_extension output_dir output_name
-syn keyword     gnVariable output_prefix outputs precompiled_header
+syn keyword     gnVariable output_prefix outputs pool precompiled_header
 syn keyword     gnVariable precompiled_header_type precompiled_source
 syn keyword     gnVariable restat runtime_link_output public public_configs
 syn keyword     gnVariable public_deps rspfile rspfile_content script sources
 syn keyword     gnVariable sys_include_dirs sys_include_switch testonly
-syn keyword     gnVariable visibility
+syn keyword     gnVariable visibility write_runtime_deps
 hi def link     gnVariable          Keyword
 
 " Strings
