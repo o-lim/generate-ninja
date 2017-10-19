@@ -1160,7 +1160,7 @@ config("default_warnings") {
       ]
     }
   } else {
-    if (is_mac && !is_nacl) {
+    if (is_mac && !is_nacl && (!use_xcode_clang || xcode_version_int >= 830)) {
       # When compiling Objective-C, warns if a method is used whose
       # availability is newer than the deployment target.
       cflags += [ "-Wunguarded-availability" ]
@@ -1331,7 +1331,7 @@ config("chromium_code") {
 
     # TODO(crbug.com/761419): Add to default_warnings instead of to
     # chromium_code once fixed in third_party.
-    if (is_ios) {
+    if (is_ios && (!use_xcode_clang || xcode_version_int >= 830)) {
       cflags_objc += [ "-Wunguarded-availability" ]
       cflags_objcc += [ "-Wunguarded-availability" ]
     }
@@ -1686,6 +1686,11 @@ config("optimize_max") {
             # incremental value of C4702 for PGO builds is likely very small.
             "/wd4702",
           ]
+        }
+        if (use_incremental_wpo) {
+          arflags = [ "/LTCG:INCREMENTAL" ]
+        } else {
+          arflags = [ "/LTCG" ]
         }
         # TODO(crbug.com/598772): Enable -flto for Clang.
       }

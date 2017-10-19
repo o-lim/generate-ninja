@@ -58,6 +58,9 @@ config("base_flags") {
       "-Wno-char-subscripts",
     ]
   }
+  if (is_mac && use_xcode_clang && xcode_version_int < 830) {
+    cflags += [ "-Wno-unknown-pragmas" ]
+  }
 }
 
 config("base_implementation") {
