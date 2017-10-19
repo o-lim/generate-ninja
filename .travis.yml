@@ -16,9 +16,14 @@ matrix:
       osx_image: xcode8
       env:
         - system="x86_64-darwin"
-        - DEPLOY=1
+        - DEPLOY=0
     - os: osx
       osx_image: xcode8.3
+      env:
+        - system="x86_64-darwin"
+        - DEPLOY=1
+    - os: osx
+      osx_image: xcode9
       env:
         - system="x86_64-darwin"
         - DEPLOY=0
