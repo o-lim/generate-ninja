@@ -143,7 +143,7 @@
     *   [visibility: [label list] A list of labels that can depend on a target.](#visibility)
     *   [write_runtime_deps: Writes the target's runtime_deps to the given path.](#write_runtime_deps)
     *   [xcode_extra_attributes: [scope] Extra attributes for Xcode projects.](#xcode_extra_attributes)
-    *   [test_application_name: [string] Test application name for unit or ui test target.](#test_application_name)
+    *   [xcode_test_application_name: [string] Test application name for unit or ui test target.](#xcode_test_application_name)
 *   [Other help topics](#other)
     *   [all: Print all the help at once](#all)
     *   [buildargs: How build arguments work.](#buildargs)
@@ -6240,7 +6240,7 @@
 
   See "gn help create_bundle" for more information.
 ```
-### <a name="test_application_name"></a>**test_application_name**: Test application name for unit or ui test target.
+### <a name="xcode_test_application_name"></a>**xcode_test_application_name**: Test application name for unit or ui test target.
 
 ```
   Each unit and ui test target must have a test application target, and this
@@ -6254,7 +6254,7 @@
 
 ```
   create_bundle("chrome_xctest") {
-    test_application_name = "chrome"
+    xcode_test_application_name = "chrome"
     ...
   }
 ```
