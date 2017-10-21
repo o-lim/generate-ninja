@@ -5,6 +5,7 @@
 #include "tools/gn/value.h"
 
 #include <stddef.h>
+#include <map>
 #include <utility>
 
 #include "base/strings/string_number_conversions.h"
@@ -165,10 +166,14 @@ std::string Value::ToString(bool quote_string) const {
       if (scope_values.empty())
         return std::string("{ }");
 
-      std::string result = "{\n";
+      std::map<std::string, std::string> sorted_values;
       for (const auto& pair : scope_values) {
-        result += "  " + pair.first.as_string() + " = " +
-                  pair.second.ToString(true) + "\n";
+        sorted_values[pair.first.as_string()] = pair.second.ToString(true);
+      }
+
+      std::string result = "{\n";
+      for (const auto& pair : sorted_values) {
+        result += "  " + pair.first + " = " + pair.second + "\n";
       }
       result += "}";
 
