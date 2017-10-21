@@ -4,11 +4,20 @@
 
 #include "tools/gn/args.h"
 
+#include "base/memory/ptr_util.h"
 #include "base/sys_info.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/string_split.h"
 #include "build/build_config.h"
 #include "tools/gn/standard_out.h"
 #include "tools/gn/string_utils.h"
 #include "tools/gn/variables.h"
+
+#if defined(GN_BUILD)
+#include "tools/gn/last_commit_position.h"
+#else
+#define LAST_COMMIT_POSITION "UNKNOWN"
+#endif
 
 const char kBuildArgs_Help[] =
     R"(Build Arguments Overview
@@ -145,6 +154,7 @@ void Args::SetupRootScope(Scope* dest,
   base::AutoLock lock(lock_);
 
   SetSystemVarsLocked(dest);
+  SetVersionVarLocked(dest);
 
   // Apply overrides for already declared args.
   // (i.e. the system vars we set above)
@@ -386,6 +396,57 @@ void Args::SetSystemVarsLocked(Scope* dest) const {
   dest->MarkUsed(variables::kHostOs);
   dest->MarkUsed(variables::kCurrentOs);
   dest->MarkUsed(variables::kTargetOs);
+}
+
+void Args::SetVersionVarLocked(Scope * dest) const {
+  lock_.AssertAcquired();
+
+  auto version = base::MakeUnique<Scope>(dest->settings());
+
+  int64_t major = 0;
+  int64_t minor = 0;
+  int64_t patch = 0;
+  std::string suffix;
+  std::string version_string = LAST_COMMIT_POSITION;
+
+  std::vector<std::string> tokens = base::SplitString(
+      version_string, ".-", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
+  if (!tokens.empty()) {
+    bool pass = base::StringToInt64(tokens[0], &major);
+    if (!pass)
+      major = 0;
+    if (pass && tokens.size() > 1U) {
+      pass = base::StringToInt64(tokens[1], &minor);
+      if (!pass)
+        minor = 0;
+    }
+    if (pass && tokens.size() > 2U) {
+      pass = base::StringToInt64(tokens[2], &patch);
+      if (!pass)
+        patch = 0;
+    }
+    if (pass && tokens.size() > 3U) {
+      for (size_t i = 3U; i < tokens.size(); i++) {
+        suffix += "-" + tokens[i];
+      }
+    }
+  }
+
+  Value major_val(nullptr, major);
+  Value minor_val(nullptr, minor);
+  Value patch_val(nullptr, patch);
+  Value suffix_val(nullptr, suffix);
+  Value string_val(nullptr, version_string);
+
+  version->SetValue("major", major_val, nullptr);
+  version->SetValue("minor", minor_val, nullptr);
+  version->SetValue("patch", patch_val, nullptr);
+  version->SetValue("suffix", suffix_val, nullptr);
+  version->SetValue("string", string_val, nullptr);
+
+  Value version_val(nullptr, Value::SCOPE);
+  version_val.SetScopeValue(std::move(version));
+  dest->SetValue(variables::kGnVersion, version_val, nullptr);
 }
 
 void Args::ApplyOverridesLocked(const Scope::KeyValueMap& values,

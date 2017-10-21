@@ -79,3 +79,27 @@ TEST(ArgsTest, VerifyOverrideScope) {
   ASSERT_NE(nullptr, setup.scope()->GetValue("c"));
   EXPECT_EQ(Value(nullptr, "cvalue2"), *setup.scope()->GetValue("c"));
 }
+
+#if defined(GN_BUILD)
+TEST(ArgsTest, VerifyGnVersionScope) {
+  TestWithScope setup;
+  Args args;
+
+  Scope::KeyValueMap toolchain_overrides;
+  args.SetupRootScope(setup.scope(), toolchain_overrides);
+
+  const Value* version_val = setup.scope()->GetValue("gn_version");
+  const Scope* version = version_val->scope_value();
+
+  int64_t major = version->GetValue("major")->int_value();
+  int64_t minor = version->GetValue("minor")->int_value();
+  int64_t patch = version->GetValue("patch")->int_value();
+  std::string suffix = version->GetValue("suffix")->string_value();
+  std::string version_string = version->GetValue("string")->string_value();
+
+  std::stringstream ss;
+  ss << major << "." << minor << "." << patch << suffix;
+
+  EXPECT_EQ(version_string, ss.str());
+}
+#endif

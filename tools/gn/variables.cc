@@ -8,6 +8,34 @@ namespace variables {
 
 // Built-in variables ----------------------------------------------------------
 
+const char kGnVersion[] = "gn_version";
+const char kGnVersion_HelpShort[] =
+    "gn_version: [scope] GN version information.";
+const char kGnVersion_Help[] =
+    R"(gn_version: [scope] GN version information.
+
+  This is a scope variable containing the current GN program's version
+  information. The gn_version scope is defined to have the following
+  variables:
+
+      major [integer]
+        The GN major version number.
+
+      minor [integer]
+        The GN minor version number.
+
+      patch [integer]
+        The GN patch level.
+
+      suffix [string]
+        A string suffix appended to the GN version number used to form the
+        version string. This can be used to indicate an alpha/beta version
+        of GN (i.e. suffix = "-beta").
+
+      string [string]
+        The GN version string as printed by "gn --version".
+)";
+
 const char kColorConsole[] = "color_console";
 const char kColorConsole_HelpShort[] =
     "color_console: [boolean] Whether or not colored output is on.";
@@ -2140,6 +2168,7 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(Defines)
     INSERT_VARIABLE(Depfile)
     INSERT_VARIABLE(Deps)
+    INSERT_VARIABLE(GnVersion)
     INSERT_VARIABLE(IncludeDirs)
     INSERT_VARIABLE(Inputs)
     INSERT_VARIABLE(Ldflags)

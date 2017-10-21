@@ -235,6 +235,7 @@ static_library("gn_lib") {
   deps = [
     "//base",
     "//base/third_party/dynamic_annotations",
+    ":last_commit_position",
   ]
 }
 
@@ -296,6 +297,8 @@ executable("gn") {
 }
 
 test("gn_unittests") {
+  defines += []   # this makes sure defines are forwarded to the test template
+
   sources = [
     "action_target_generator_unittest.cc",
     "analyzer_unittest.cc",

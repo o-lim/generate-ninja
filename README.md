@@ -73,7 +73,8 @@ Furthermore, this fork adds some minor features as well as some bug fixes:
  - Support `--all-toolchains` option for QtCreator generator
  - Add `define_switch` and `include_switch` variables to toolchain function
  - Add `color_console` built-in variable
- - Add the `console_pool` built-in variable
+ - Add `console_pool` built-in variable
+ - Add `gn_version` built-in variable
  - Allow `gn desc` to support multiple target labels
  - Allow clobbering in `forward_variables_from`
  - Use console pool to regenerate ninja files
