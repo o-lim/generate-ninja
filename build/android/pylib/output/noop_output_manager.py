@@ -9,37 +9,34 @@ from pylib.base import output_manager
 # --local-output args are both not passed to test runner then use this
 # as the output manager impl.
 
-# pylint: disable=abstract-method
 # pylint: disable=no-self-use
-# pylint: disable=super-init-not-called
-# pylint: disable=unused-argument
 
 class NoopOutputManager(output_manager.OutputManager):
 
   def __init__(self):
     super(NoopOutputManager, self).__init__()
 
+  #override
+  def _CreateArchivedFile(self, out_filename, out_subdir, datatype):
+    del out_filename, out_subdir, datatype
+    return NoopArchivedFile()
+
 
 class NoopArchivedFile(output_manager.ArchivedFile):
 
   def __init__(self):
-    pass
-
-  @property
-  def name(self):
-    return ''
-
-  def write(self, *args, **kwargs):
-    pass
-
-  def flush(self, *args, **kwargs):
-    pass
+    super(NoopArchivedFile, self).__init__(None, None, None)
 
   def Link(self):
+    """NoopArchivedFiles are not retained."""
     return ''
 
-  def Archive(self):
+  def _Link(self):
     pass
 
-  def Delete(self):
+  def Archive(self):
+    """NoopArchivedFiles are not retained."""
+    pass
+
+  def _Archive(self):
     pass
