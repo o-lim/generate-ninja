@@ -2,7 +2,7 @@
 
 set -eufo pipefail
 
-NINJA_VERSION="1.7.2"
+NINJA_VERSION="1.8.2"
 
 source .travis/platform.sh
 

@@ -5,7 +5,7 @@ image: Visual Studio 2017
 environment:
   VISUAL_STUDIO_PATH: "%ProgramFiles(x86)%\\Microsoft Visual Studio\\2017\\Community"
   VISUAL_STUDIO_VERSION: "2017"
-  NINJA_VERSION: "1.7.2"
+  NINJA_VERSION: "1.8.2"
   NINJA_ZIP: "ninja-win.zip"
   NINJA_DOWNLOAD_URL: "https://github.com/ninja-build/ninja/releases/download"
 
