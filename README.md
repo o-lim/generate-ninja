@@ -35,6 +35,7 @@ with the following files/directories exported directly via `git archive`:
  - third\_party/googletest
  - third\_party/libxml
  - third\_party/modp\_b64
+ - third\_party/tcmalloc
  - third\_party/win\_build\_output
  - third\_party/zlib
 
