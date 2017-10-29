@@ -55,7 +55,8 @@ declare_args() {
   # See http://clang.llvm.org/docs/ControlFlowIntegrity.html
   #
   # TODO(pcc): Remove this flag if/when CFI is enabled in all official builds.
-  is_cfi = false
+  is_cfi = target_os == "linux" && !is_chromeos && target_cpu == "x64" &&
+           is_official_build && is_clang
 
   # Enable checks for bad casts: derived cast and unrelated cast.
   # TODO(krasin): remove this, when we're ready to add these checks by default.
