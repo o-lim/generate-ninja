@@ -13,8 +13,22 @@ config("static_config") {
 }
 
 config("ldconfig") {
+  visibility = [ ":*" ]
+
+  if (is_linux) {
+    ldflags = [
+      "-static",
+    ]
+  }
 }
 
 config("executable_config") {
   configs = [ ":ldconfig", ":static_config" ]
+}
+
+# Shared libaries should not have RPATH or RUNPATH set. This allows the
+# shared libs to inherit RPATH from the parent executable that is loading
+# the shared library. (See internal b/37514052 for more details.)
+config("shared_library_config") {
+  configs = [ ":static_config" ]
 }
