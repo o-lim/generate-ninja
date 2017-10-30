@@ -63,6 +63,22 @@ const AllocatorDispatch AllocatorDispatch::default_dispatch = {
 
 extern "C" {
 
+// this bit of magic is used to workaround an issue
+// with glibc 2.24 when replacing memory allocators. Jemalloc and tcmalloc
+// both rely on providing implementations of malloc (calloc, free, etc.)
+// so that the linker drops the need for glib's malloc.o and use
+// jemalloc/tcmalloc's implementation instead. However, in glibc 2.24
+// fork() now calls internal functions specific to glib's memory allocator.
+// The functions below provide empty implementations so that the linker
+// continues to drop the need for malloc.o and pickup jemalloc/tcmalloc
+// insead. See https://github.com/jemalloc/jemalloc/issues/442#event-840687583
+// and https://github.com/gperftools/gperftools/issues/856 for more context.
+// Also this was fixed in glibc 2.25 but that is not widely deployed
+// https://sourceware.org/bugzilla/show_bug.cgi?id=20432
+SHIM_ALWAYS_EXPORT void __malloc_fork_lock_parent(void) {}
+SHIM_ALWAYS_EXPORT void __malloc_fork_unlock_parent(void) {}
+SHIM_ALWAYS_EXPORT void __malloc_fork_unlock_child(void) {}
+
 SHIM_ALWAYS_EXPORT void malloc_stats(void) __THROW {
   return tc_malloc_stats();
 }
