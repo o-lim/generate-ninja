@@ -50,8 +50,11 @@ Return value
   may be other output files as well (like import libraries) which will follow.
 
   source sets: this will return a list of the resulting object file(s) for each
-  source file after it has been compiled. Depending on the platform and output
-  type, there may be more than one output file for each source file.
+  source file after it has been compiled. Depending on the platform and file
+  type, there may be more than one output file for each source file. However,
+  there can only be one object file for each source file. The "main output" for
+  each source file (the actual object file) will always be the first output for
+  that source file.
 
 Example
 
@@ -122,12 +125,13 @@ Value RunGetTargetOutputs(Scope* scope,
       target->output_type() == Target::ACTION_FOREACH) {
     target->action_values().GetOutputsAsSourceFiles(target, &files);
   } else if (target->output_type() == Target::SOURCE_SET) {
+    // Compute object files for all sources. Only take the first output from
+    // the tool if there is more than one.
+    std::vector<OutputFile> outputs;
     for (const SourceFile& source : target->sources()) {
-      Toolchain::ToolType tool_type;
-      std::vector<OutputFile> outputs;
-      target->GetOutputFilesForSource(source, &tool_type, &outputs);
-      for (const auto & out : outputs)
-        source_outputs.push_back(out);
+      Toolchain::ToolType tool_type = Toolchain::TYPE_NONE;
+      if (target->GetOutputFilesForSource(source, &tool_type, &outputs))
+        source_outputs.push_back(outputs[0]);
     }
   } else if (target->output_type() == Target::EXECUTABLE ||
              target->output_type() == Target::LOADABLE_MODULE ||

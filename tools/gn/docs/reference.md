@@ -2194,8 +2194,11 @@
   may be other output files as well (like import libraries) which will follow.
 
   source sets: this will return a list of the resulting object file(s) for each
-  source file after it has been compiled. Depending on the platform and output
-  type, there may be more than one output file for each source file.
+  source file after it has been compiled. Depending on the platform and file
+  type, there may be more than one output file for each source file. However,
+  there can only be one object file for each source file. The "main output" for
+  each source file (the actual object file) will always be the first output for
+  that source file.
 ```
 
 #### **Example**
