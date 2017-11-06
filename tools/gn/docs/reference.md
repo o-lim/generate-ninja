@@ -64,6 +64,7 @@
     *   [current_os: [string] The operating system of the current toolchain.](#current_os)
     *   [current_toolchain: [string] Label of the current toolchain.](#current_toolchain)
     *   [default_toolchain: [string] Label of the default toolchain.](#default_toolchain)
+    *   [gn_version: [scope] GN version information.](#gn_version)
     *   [host_cpu: [string] The processor architecture that GN is running on.](#host_cpu)
     *   [host_os: [string] The operating system that GN is running on.](#host_os)
     *   [invoker: [string] The invoking scope inside a template.](#invoker)
@@ -115,7 +116,6 @@
     *   [depfile: [string] File name for input dependencies for actions.](#depfile)
     *   [deps: [label list] Private linked dependencies.](#deps)
     *   [description: [string with substitutions, optional] Description of the action.](#description)
-    *   [gn_version: [scope] GN version information.](#gn_version)
     *   [include_dirs: [directory list] Additional include directories.](#include_dirs)
     *   [inputs: [file list] Additional compile-time dependencies.](#inputs)
     *   [interpreter: [string, optional] Interpreter to use for action scripts.](#interpreter)
@@ -3659,6 +3659,30 @@
   A fully-qualified label representing the default toolchain, which may not
   necessarily be the current one (see "current_toolchain").
 ```
+### <a name="version:"></a>**gn_version**: [scope] GN version information.
+
+```
+  This is a scope variable containing the current GN program's version
+  information. The gn_version scope is defined to have the following
+  variables:
+
+      major [integer]
+        The GN major version number.
+
+      minor [integer]
+        The GN minor version number.
+
+      patch [integer]
+        The GN patch level.
+
+      suffix [string]
+        A string suffix appended to the GN version number used to form the
+        version string. This can be used to indicate an alpha/beta version
+        of GN (i.e. suffix = "-beta").
+
+      string [string]
+        The GN version string as printed by "gn --version".
+```
 ### <a name="host_cpu"></a>**host_cpu**: The processor architecture that GN is running on.
 
 ```
@@ -5282,30 +5306,6 @@
 ```
   What to print when then action is run (see "gn help action" and
   "gn help action_foreach")
-```
-### <a name="version:"></a>**gn_version**: [scope] GN version information.
-
-```
-  This is a scope variable containing the current GN program's version
-  information. The gn_version scope is defined to have the following
-  variables:
-
-      major [integer]
-        The GN major version number.
-
-      minor [integer]
-        The GN minor version number.
-
-      patch [integer]
-        The GN patch level.
-
-      suffix [string]
-        A string suffix appended to the GN version number used to form the
-        version string. This can be used to indicate an alpha/beta version
-        of GN (i.e. suffix = "-beta").
-
-      string [string]
-        The GN version string as printed by "gn --version".
 ```
 ### <a name="include_dirs"></a>**include_dirs**: Additional include directories.
 
