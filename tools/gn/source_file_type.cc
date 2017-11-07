@@ -19,11 +19,11 @@ SourceFileType GetDefaultSourceFileType(const SourceFile& file) {
     return SOURCE_C;
   if (extension == "m")
     return SOURCE_M;
-  if (extension == "mm")
+  if (extension == "mm" || extension == "M")
     return SOURCE_MM;
   if (extension == "rc")
     return SOURCE_RC;
-  if (extension == "S" || extension == "s" || extension == "asm")
+  if (extension == "S" || extension == "s" || extension == "sx")
     return SOURCE_S;
   if (extension == "asm")
     return SOURCE_ASM;
