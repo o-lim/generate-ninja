@@ -120,9 +120,10 @@ jumbo_component("base") {
     # non-component case.
     static_component_type = "source_set"
   }
-  if (is_nacl) {
+  if (is_nacl || is_ios) {
     # Link errors related to malloc functions if libbase for nacl is
-    # compiled with jumbo.
+    # compiled with jumbo: https://crbug.com/775959.
+    # Same for ios: https://crbug.com/776313.
     never_build_jumbo = true
   }
 
@@ -136,6 +137,9 @@ jumbo_component("base") {
     "allocator/allocator_shim.h",
     "allocator/malloc_zone_functions_mac.cc",
     "allocator/malloc_zone_functions_mac.h",
+    "android/android_hardware_buffer_abi.h",
+    "android/android_hardware_buffer_compat.cc",
+    "android/android_hardware_buffer_compat.h",
     "android/animation_frame_time_histogram.cc",
     "android/apk_assets.cc",
     "android/apk_assets.h",
@@ -372,6 +376,8 @@ jumbo_component("base") {
     "hash.cc",
     "hash.h",
     "ios/block_types.h",
+    "ios/callback_counter.h",
+    "ios/callback_counter.mm",
     "ios/crb_protocol_observers.h",
     "ios/crb_protocol_observers.mm",
     "ios/device_util.h",
@@ -506,6 +512,7 @@ jumbo_component("base") {
     "memory/shared_memory_android.cc",
     "memory/shared_memory_handle.cc",
     "memory/shared_memory_handle.h",
+    "memory/shared_memory_handle_android.cc",
     "memory/shared_memory_handle_mac.cc",
     "memory/shared_memory_handle_win.cc",
     "memory/shared_memory_helper.cc",
@@ -600,6 +607,7 @@ jumbo_component("base") {
     "nix/xdg_util.cc",
     "nix/xdg_util.h",
     "observer_list.h",
+    "observer_list_threadsafe.cc",
     "observer_list_threadsafe.h",
     "optional.h",
     "os_compat_android.cc",
@@ -1056,6 +1064,7 @@ jumbo_component("base") {
     "win/scoped_bstr.cc",
     "win/scoped_bstr.h",
     "win/scoped_co_mem.h",
+    "win/scoped_com_initializer.cc",
     "win/scoped_com_initializer.h",
     "win/scoped_gdi_object.h",
     "win/scoped_handle.cc",
@@ -1070,6 +1079,9 @@ jumbo_component("base") {
     "win/scoped_select_object.h",
     "win/scoped_variant.cc",
     "win/scoped_variant.h",
+    "win/scoped_windows_thread_environment.h",
+    "win/scoped_winrt_initializer.cc",
+    "win/scoped_winrt_initializer.h",
     "win/shortcut.cc",
     "win/shortcut.h",
     "win/startup_information.cc",
@@ -1080,6 +1092,8 @@ jumbo_component("base") {
     "win/win_util.h",
     "win/windows_version.cc",
     "win/windows_version.h",
+    "win/winrt_storage_util.cc",
+    "win/winrt_storage_util.h",
     "win/wrapped_window_proc.cc",
     "win/wrapped_window_proc.h",
   ]
@@ -1110,7 +1124,9 @@ jumbo_component("base") {
     }
   }
 
-  if (!is_mac && is_posix) {
+  # MacOS and Android have their own custom shared memory implementations due
+  # to supporting both POSIX and native handles.
+  if (is_posix && !is_mac && !is_android) {
     sources += [ "memory/shared_memory_handle_posix.cc" ]
   }
 
@@ -2055,6 +2071,7 @@ test("base_unittests") {
     "i18n/string_search_unittest.cc",
     "i18n/time_formatting_unittest.cc",
     "i18n/timezone_unittest.cc",
+    "ios/callback_counter_unittest.mm",
     "ios/crb_protocol_observers_unittest.mm",
     "ios/device_util_unittest.mm",
     "ios/weak_nsobject_unittest.mm",
@@ -2280,11 +2297,13 @@ test("base_unittests") {
     "win/scoped_hstring_unittest.cc",
     "win/scoped_process_information_unittest.cc",
     "win/scoped_variant_unittest.cc",
+    "win/scoped_winrt_initializer_unittest.cc",
     "win/shortcut_unittest.cc",
     "win/startup_information_unittest.cc",
     "win/wait_chain_unittest.cc",
     "win/win_util_unittest.cc",
     "win/windows_version_unittest.cc",
+    "win/winrt_storage_util_unittest.cc",
     "win/wrapped_window_proc_unittest.cc",
   ]
 
@@ -2758,6 +2777,17 @@ if (is_android) {
       ":base_java_test_support",
     ]
     java_files = [ "test/android/javatests/src/org/chromium/base/test/TestChildProcessConnection.java" ]
+  }
+
+  java_library("base_junit_test_support") {
+    # Skip platform checks since Robolectric depends on requires_android targets.
+    bypass_platform_checks = true
+    testonly = true
+    java_files = [ "android/junit/src/org/chromium/base/metrics/test/ShadowRecordHistogram.java" ]
+    deps = [
+      ":base_java",
+      "//third_party/robolectric:robolectric_all_java",
+    ]
   }
 
   junit_binary("base_junit_tests") {

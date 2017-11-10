@@ -713,6 +713,11 @@ class BASE_EXPORT ThreadActivityTracker {
   // Gets the base memory address used for storing data.
   const void* GetBaseAddress();
 
+  // Access the "data unchanged" flag so tests can determine if an activity
+  // was pushed and popped in a single call.
+  void ClearDataChangedForTesting();
+  bool WasDataChangedForTesting();
+
   // Explicitly sets the process ID.
   void SetOwningProcessIdForTesting(int64_t pid, int64_t stamp);
 
@@ -883,8 +888,8 @@ class BASE_EXPORT GlobalActivityTracker {
   // Like above but internally creates an allocator around a disk file with
   // the specified |size| at the given |file_path|. Any existing file will be
   // overwritten. The |id| and |name| are arbitrary and stored in the allocator
-  // for reference by whatever process reads it.
-  static void CreateWithFile(const FilePath& file_path,
+  // for reference by whatever process reads it. Returns true if successful.
+  static bool CreateWithFile(const FilePath& file_path,
                              size_t size,
                              uint64_t id,
                              StringPiece name,
@@ -894,7 +899,7 @@ class BASE_EXPORT GlobalActivityTracker {
   // Like above but internally creates an allocator using local heap memory of
   // the specified size. This is used primarily for unit tests. The |process_id|
   // can be zero to get it from the OS but is taken for testing purposes.
-  static void CreateWithLocalMemory(size_t size,
+  static bool CreateWithLocalMemory(size_t size,
                                     uint64_t id,
                                     StringPiece name,
                                     int stack_depth,

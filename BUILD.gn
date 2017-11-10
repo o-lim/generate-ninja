@@ -304,13 +304,14 @@ group("gn_all") {
       "//testing/android/junit:junit_unit_tests",
       "//third_party/android_async_task:android_async_task_java",
       "//third_party/catapult/devil",
-      "//third_party/errorprone:chromium_errorprone",
+      "//third_party/errorprone:errorprone_java",
       "//third_party/smhasher:murmurhash3",
       "//tools/android:android_tools",
       "//tools/android:memconsumer",
       "//tools/android:push_apps_to_background",
       "//tools/android/audio_focus_grabber:audio_focus_grabber_apk",
       "//tools/android/customtabs_benchmark:customtabs_benchmark_apk",
+      "//tools/android/errorprone_plugin:errorprone_plugin_java",
       "//tools/android/kerberos/SpnegoAuthenticator:spnego_authenticator_apk",
       "//tools/cygprofile:cygprofile_unittests",
       "//ui/android:ui_junit_tests",
@@ -686,10 +687,10 @@ group("gn_all") {
       if (!is_android) {
         deps += [ "//chrome/test:load_library_perf_tests" ]
       }
-      deps += [
-        "//native_client/src/trusted/platform_qualify:vcpuid",
-        "//third_party/libjpeg_turbo:simd_asm",
-      ]
+      if (enable_nacl) {
+        deps += [ "//native_client/src/trusted/platform_qualify:vcpuid" ]
+      }
+      deps += [ "//third_party/libjpeg_turbo:simd_asm" ]
     }
     if (is_linux && current_toolchain == host_toolchain) {
       deps += [ "//v8:v8_shell" ]
@@ -1146,6 +1147,16 @@ template("assert_valid_out_dir") {
   assert(
       sources == invoker.actual_sources,
       "Do not use a platform name in your output directory (found \"$root_build_dir\"). http://crbug.com/548283")
+}
+
+if (!is_win || !is_clang) {
+  group("webui_closure_compile") {
+    data_deps = []
+    if (is_chromeos) {
+      data_deps +=
+          [ "//chrome/browser/resources/chromeos/login:closure_compile" ]
+    }
+  }
 }
 
 assert_valid_out_dir("_unused") {

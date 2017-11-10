@@ -2,12 +2,19 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//testing/libfuzzer/fuzzer_test.gni")
+
 if (current_cpu == "arm" || current_cpu == "arm64") {
   import("//build/config/arm.gni")
 }
 
 config("zlib_config") {
   include_dirs = [ "." ]
+  if (current_cpu == "arm" || current_cpu == "arm64") {
+    if (arm_use_neon) {
+      include_dirs += [ "contrib/optimizations/arm" ]
+    }
+  }
 }
 
 config("zlib_adler32_simd_config") {
@@ -124,15 +131,13 @@ static_library("zlib") {
 
   if (current_cpu == "arm" || current_cpu == "arm64") {
     if (arm_use_neon) {
-      # TODO: handle InflateBack case, see crbug.com/769880.
-      sources -= [
-        "inffast.c",
-        "inflate.c",
-      ]
+      sources -= [ "inflate.c" ]
       sources += [
-        "contrib/arm/chunkcopy.h",
-        "contrib/arm/inffast.c",
-        "contrib/arm/inflate.c",
+        "contrib/optimizations/arm/chunkcopy_arm.h",
+        "contrib/optimizations/chunkcopy.h",
+        "contrib/optimizations/inffast_chunky.c",
+        "contrib/optimizations/inffast_chunky.h",
+        "contrib/optimizations/inflate.c",
       ]
     }
   }
@@ -162,8 +167,42 @@ static_library("zlib") {
 
   public_configs = [ ":zlib_config" ]
 
-  deps += [
-    ":zlib_x86_simd"
+  deps += [ ":zlib_x86_simd" ]
+}
+
+fuzzer_test("zlib_uncompress_fuzzer") {
+  sources = [
+    "contrib/tests/fuzzers/uncompress_fuzzer.cc",
+  ]
+  deps = [
+    ":zlib",
+  ]
+}
+
+fuzzer_test("zlib_inflate_fuzzer") {
+  sources = [
+    "contrib/tests/fuzzers/inflate_fuzzer.cc",
+  ]
+  deps = [
+    ":zlib",
+  ]
+}
+
+fuzzer_test("zlib_deflate_set_dictionary_fuzzer") {
+  sources = [
+    "contrib/tests/fuzzers/deflate_set_dictionary_fuzzer.cc",
+  ]
+  deps = [
+    ":zlib",
+  ]
+}
+
+fuzzer_test("zlib_deflate_fuzzer") {
+  sources = [
+    "contrib/tests/fuzzers/deflate_fuzzer.cc",
+  ]
+  deps = [
+    ":zlib",
   ]
 }
 

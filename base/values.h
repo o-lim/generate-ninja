@@ -32,7 +32,6 @@
 #include <vector>
 
 #include "base/base_export.h"
-#include "base/compiler_specific.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/span.h"
 #include "base/macros.h"
@@ -82,7 +81,7 @@ class Value;
 class BASE_EXPORT Value {
  public:
   using BlobStorage = std::vector<char>;
-  using DictStorage = base::flat_map<std::string, std::unique_ptr<Value>>;
+  using DictStorage = flat_map<std::string, std::unique_ptr<Value>>;
   using ListStorage = std::vector<Value>;
 
   enum class Type {
@@ -104,6 +103,10 @@ class BASE_EXPORT Value {
   // TODO(crbug.com/646113): Delete this and migrate callsites.
   static std::unique_ptr<Value> CreateWithCopiedBuffer(const char* buffer,
                                                        size_t size);
+
+  // Adaptors for converting from the old way to the new way and vice versa.
+  static Value FromUniquePtrValue(std::unique_ptr<Value> val);
+  static std::unique_ptr<Value> ToUniquePtrValue(Value val);
 
   Value(Value&& that) noexcept;
   Value() noexcept;  // A null value.
@@ -230,13 +233,18 @@ class BASE_EXPORT Value {
   //
   //   std::vector<StringPiece> components = ...
   //   auto* found = FindPath(components);
+  //
+  // Note: If there is only one component in the path, use FindKey() instead.
   Value* FindPath(std::initializer_list<StringPiece> path);
   Value* FindPath(span<const StringPiece> path);
   const Value* FindPath(std::initializer_list<StringPiece> path) const;
   const Value* FindPath(span<const StringPiece> path) const;
 
-  // Like FindPath but will only return the value if the leaf Value type
+  // Like FindPath() but will only return the value if the leaf Value type
   // matches the given type. Will return nullptr otherwise.
+  //
+  // Note: If there is only one component in the path, use FindKeyOfType()
+  // instead.
   Value* FindPathOfType(std::initializer_list<StringPiece> path, Type type);
   Value* FindPathOfType(span<const StringPiece> path, Type type);
   const Value* FindPathOfType(std::initializer_list<StringPiece> path,
@@ -257,6 +265,8 @@ class BASE_EXPORT Value {
   //
   //   std::vector<StringPiece> components = ...
   //   value.SetPath(components, std::move(myvalue));
+  //
+  // Note: If there is only one component in the path, use SetKey() instead.
   Value* SetPath(std::initializer_list<StringPiece> path, Value value);
   Value* SetPath(span<const StringPiece> path, Value value);
 
@@ -272,6 +282,8 @@ class BASE_EXPORT Value {
   //
   //   std::vector<StringPiece> components = ...
   //   bool success = value.RemovePath(components);
+  //
+  // Note: If there is only one component in the path, use RemoveKey() instead.
   bool RemovePath(std::initializer_list<StringPiece> path);
   bool RemovePath(span<const StringPiece> path);
 

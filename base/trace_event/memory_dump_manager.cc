@@ -60,9 +60,7 @@ void DoGlobalDumpWithoutCallback(
     MemoryDumpManager::RequestGlobalDumpFunction global_dump_fn,
     MemoryDumpType dump_type,
     MemoryDumpLevelOfDetail level_of_detail) {
-  // The actual dump_guid will be set by service. TODO(primiano): remove
-  // guid from the request args API.
-  MemoryDumpRequestArgs args{0 /* dump_guid */, dump_type, level_of_detail};
+  GlobalMemoryDumpRequestArgs args{dump_type, level_of_detail};
   global_dump_fn.Run(args);
 }
 
@@ -265,7 +263,7 @@ bool MemoryDumpManager::EnableHeapProfiling(HeapProfilingMode profiling_mode) {
 
     case kHeapProfilingModeBackground:
       AllocationContextTracker::SetCaptureMode(
-          AllocationContextTracker::CaptureMode::PSEUDO_STACK);
+          AllocationContextTracker::CaptureMode::MIXED_STACK);
       break;
 
     case kHeapProfilingModePseudo:

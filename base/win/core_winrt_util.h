@@ -7,11 +7,12 @@
 
 #include <hstring.h>
 #include <inspectable.h>
+#include <roapi.h>
 #include <windef.h>
-#include <windows.storage.streams.h>
 
 #include "base/base_export.h"
 #include "base/strings/string16.h"
+#include "base/win/scoped_hstring.h"
 
 namespace base {
 namespace win {
@@ -25,21 +26,16 @@ BASE_EXPORT bool ResolveCoreWinRTDelayload();
 // The following stubs are provided for when component build is enabled, in
 // order to avoid the propagation of delay-loading CoreWinRT to other modules.
 
+BASE_EXPORT HRESULT RoInitialize(RO_INIT_TYPE init_type);
+
+BASE_EXPORT void RoUninitialize();
+
 BASE_EXPORT HRESULT RoGetActivationFactory(HSTRING class_id,
                                            const IID& iid,
                                            void** out_factory);
 
 BASE_EXPORT HRESULT RoActivateInstance(HSTRING class_id,
                                        IInspectable** instance);
-
-BASE_EXPORT HRESULT
-GetPointerToBufferData(ABI::Windows::Storage::Streams::IBuffer* buffer,
-                       uint8_t** out);
-
-BASE_EXPORT HRESULT
-CreateIBufferFromData(const uint8_t* data,
-                      UINT32 length,
-                      ABI::Windows::Storage::Streams::IBuffer** buffer);
 
 // Retrieves an activation factory for the type specified.
 template <typename InterfaceType, char16 const* runtime_class_id>

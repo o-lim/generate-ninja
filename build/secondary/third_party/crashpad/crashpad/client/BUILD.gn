@@ -8,6 +8,10 @@ config("client_config") {
 
 static_library("client") {
   sources = [
+    "annotation.cc",
+    "annotation.h",
+    "annotation_list.cc",
+    "annotation_list.h",
     "crash_report_database.cc",
     "crash_report_database.h",
     "crash_report_database_mac.mm",
@@ -21,9 +25,7 @@ static_library("client") {
     "prune_crash_reports.h",
     "settings.cc",
     "settings.h",
-    "simple_address_range_bag.cc",
     "simple_address_range_bag.h",
-    "simple_string_dictionary.cc",
     "simple_string_dictionary.h",
     "simulate_crash.h",
     "simulate_crash_mac.cc",

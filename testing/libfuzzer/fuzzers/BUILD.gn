@@ -5,7 +5,6 @@
 # Individual libfuzzer tests that didn't find their home yet.
 
 import("//build/config/features.gni")
-import("//media/media_options.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//third_party/protobuf/proto_library.gni")
 
@@ -39,52 +38,6 @@ fuzzer_test("language_detection_fuzzer") {
     "//base",
     "//components/translate/core/language_detection:language_detection",
   ]
-}
-
-if (proprietary_codecs) {
-  fuzzer_test("mp4_box_reader_fuzzer") {
-    sources = [
-      "mp4_box_reader_fuzzer.cc",
-    ]
-    deps = [
-      "//base",
-      "//media",
-    ]
-    libfuzzer_options = [ "max_len=500" ]
-    dict = "dicts/mp4.dict"
-  }
-}
-
-if (enable_mse_mpeg2ts_stream_parser) {
-  fuzzer_test("es_parser_adts_fuzzer") {
-    sources = [
-      "es_parser_adts_fuzzer.cc",
-    ]
-    deps = [
-      "//base",
-      "//media",
-    ]
-  }
-
-  fuzzer_test("es_parser_h264_fuzzer") {
-    sources = [
-      "es_parser_h264_fuzzer.cc",
-    ]
-    deps = [
-      "//base",
-      "//media",
-    ]
-  }
-
-  fuzzer_test("es_parser_mpeg1audio_fuzzer") {
-    sources = [
-      "es_parser_mpeg1audio_fuzzer.cc",
-    ]
-    deps = [
-      "//base",
-      "//media",
-    ]
-  }
 }
 
 fuzzer_test("snappy_fuzzer") {
@@ -202,15 +155,6 @@ fuzzer_test("gfx_png_image_fuzzer") {
   ]
   dict = "dicts/png.dict"
   seed_corpuses = libpng_seed_corpuses
-}
-
-fuzzer_test("zlib_uncompress_fuzzer") {
-  sources = [
-    "zlib_uncompress_fuzzer.cc",
-  ]
-  deps = [
-    "//third_party/zlib",
-  ]
 }
 
 fuzzer_test("libxml_xml_read_memory_fuzzer") {
@@ -464,6 +408,13 @@ fuzzer_test("angle_translator_fuzzer") {
   libfuzzer_options = [ "max_len=1000" ]
 }
 
+fuzzer_test("swiftshader_vertex_routine_fuzzer") {
+  sources = []
+  deps = [
+    "//third_party/swiftshader:vertex_routine_fuzzer",
+  ]
+}
+
 fuzzer_test("sha1_fuzzer") {
   sources = [
     "sha1_fuzzer.cc",
@@ -484,10 +435,19 @@ fuzzer_test("hash_fuzzer") {
 
 # third_party/minizip/src is checked out only on unix platform by gclient.
 if (is_linux) {
-  # TODO(yawano): Add compress test case
   fuzzer_test("minizip_uncompress_fuzzer") {
     sources = [
       "minizip_uncompress_fuzzer.cc",
+    ]
+    deps = [
+      "//third_party/minizip:minizip",
+    ]
+    seed_corpus = "//testing/libfuzzer/fuzzers/minizip_uncompress_corpus"
+  }
+
+  fuzzer_test("minizip_compress_fuzzer") {
+    sources = [
+      "minizip_compress_fuzzer.cc",
     ]
     deps = [
       "//third_party/minizip:minizip",
