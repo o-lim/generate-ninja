@@ -1,6 +1,6 @@
 
 COMMIT_HASH := $Format:%h$
-GN_VERSION := 0.3.1
+GN_VERSION := 0.3.2
 export GN_VERSION := $(if $(filter-out %:%h,$(COMMIT_HASH)),$(GN_VERSION)-$(COMMIT_HASH))
 
 .PHONY: all
