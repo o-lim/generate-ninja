@@ -68,6 +68,13 @@ extern char** environ;
 
 namespace base {
 
+// Friend and derived class of ScopedAllowBaseSyncPrimitives which allows
+// GetAppOutputInternal() to join a process. GetAppOutputInternal() can't itself
+// be a friend of ScopedAllowBaseSyncPrimitives because it is in the anonymous
+// namespace.
+class GetAppOutputScopedAllowBaseSyncPrimitives
+    : public base::ScopedAllowBaseSyncPrimitives {};
+
 #if !defined(OS_NACL_NONSFI)
 
 namespace {
@@ -540,7 +547,6 @@ static bool GetAppOutputInternal(
     std::string* output,
     bool do_search_path,
     int* exit_code) {
-  // Doing a blocking wait for another command to finish counts as IO.
   base::AssertBlockingAllowed();
   // exit_code must be supplied so calling function can determine success.
   DCHECK(exit_code);
@@ -638,6 +644,9 @@ static bool GetAppOutputInternal(
       // Always wait for exit code (even if we know we'll declare
       // GOT_MAX_OUTPUT).
       Process process(pid);
+      // A process launched with GetAppOutput*() usually doesn't wait on the
+      // process that launched it and thus chances of deadlock are low.
+      GetAppOutputScopedAllowBaseSyncPrimitives allow_base_sync_primitives;
       return process.WaitForExit(exit_code);
     }
   }
@@ -720,8 +729,9 @@ NOINLINE pid_t CloneAndLongjmpInChild(unsigned long flags,
   // specifying a new stack, so we use setjmp/longjmp to emulate
   // fork-like behavior.
   alignas(16) char stack_buf[PTHREAD_STACK_MIN];
-#if defined(ARCH_CPU_X86_FAMILY) || defined(ARCH_CPU_ARM_FAMILY) || \
-    defined(ARCH_CPU_MIPS_FAMILY)
+#if defined(ARCH_CPU_X86_FAMILY) || defined(ARCH_CPU_ARM_FAMILY) ||   \
+    defined(ARCH_CPU_MIPS_FAMILY) || defined(ARCH_CPU_S390_FAMILY) || \
+    defined(ARCH_CPU_PPC64_FAMILY)
   // The stack grows downward.
   void* stack = stack_buf + sizeof(stack_buf);
 #else
@@ -754,8 +764,9 @@ pid_t ForkWithFlags(unsigned long flags, pid_t* ptid, pid_t* ctid) {
     // parameters depending on CONFIG_CLONE_BACKWARDS* configuration options.
 #if defined(ARCH_CPU_X86_64)
     return syscall(__NR_clone, flags, nullptr, ptid, ctid, nullptr);
-#elif defined(ARCH_CPU_X86) || defined(ARCH_CPU_ARM_FAMILY) || \
-    defined(ARCH_CPU_MIPS_FAMILY)
+#elif defined(ARCH_CPU_X86) || defined(ARCH_CPU_ARM_FAMILY) ||        \
+    defined(ARCH_CPU_MIPS_FAMILY) || defined(ARCH_CPU_S390_FAMILY) || \
+    defined(ARCH_CPU_PPC64_FAMILY)
     // CONFIG_CLONE_BACKWARDS defined.
     return syscall(__NR_clone, flags, nullptr, ptid, nullptr, ctid);
 #else

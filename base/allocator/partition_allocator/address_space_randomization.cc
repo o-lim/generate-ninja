@@ -7,17 +7,9 @@
 #include "base/allocator/partition_allocator/page_allocator.h"
 #include "base/allocator/partition_allocator/spin_lock.h"
 #include "base/lazy_instance.h"
+#include "base/rand_util.h"
 #include "build/build_config.h"
 
-#if defined(OS_WIN)
-#include <windows.h>
-#include "base/win/windows_version.h"
-#else
-#include <sys/time.h>
-#include <unistd.h>
-#endif
-
-// VersionHelpers.h must be included after windows.h.
 #if defined(OS_WIN)
 #include <VersionHelpers.h>
 #endif
@@ -37,6 +29,8 @@ struct ranctx {
   uint32_t d;
 };
 
+static LazyInstance<ranctx>::Leaky s_ranctx = LAZY_INSTANCE_INITIALIZER;
+
 #define rot(x, k) (((x) << (k)) | ((x) >> (32 - (k))))
 
 uint32_t ranvalInternal(ranctx* x) {
@@ -53,40 +47,31 @@ uint32_t ranvalInternal(ranctx* x) {
 uint32_t ranval(ranctx* x) {
   subtle::SpinLock::Guard guard(x->lock);
   if (UNLIKELY(!x->initialized)) {
-    x->initialized = true;
-    char c;
-    uint32_t seed = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&c));
-    uint32_t pid;
-    uint32_t usec;
-#if defined(OS_WIN)
-    pid = GetCurrentProcessId();
-    SYSTEMTIME st;
-    GetSystemTime(&st);
-    usec = static_cast<uint32_t>(st.wMilliseconds * 1000);
-#else
-    pid = static_cast<uint32_t>(getpid());
-    struct timeval tv;
-    gettimeofday(&tv, 0);
-    usec = static_cast<uint32_t>(tv.tv_usec);
-#endif
-    seed ^= pid;
-    seed ^= usec;
-    x->a = 0xf1ea5eed;
-    x->b = x->c = x->d = seed;
-    for (int i = 0; i < 20; ++i) {
-      (void)ranvalInternal(x);
-    }
-  }
-  uint32_t ret = ranvalInternal(x);
-  return ret;
-}
+    const uint64_t r1 = RandUint64();
+    const uint64_t r2 = RandUint64();
 
-static LazyInstance<ranctx>::Leaky s_ranctx = LAZY_INSTANCE_INITIALIZER;
+    x->a = static_cast<uint32_t>(r1);
+    x->b = static_cast<uint32_t>(r1 >> 32);
+    x->c = static_cast<uint32_t>(r2);
+    x->d = static_cast<uint32_t>(r2 >> 32);
+
+    x->initialized = true;
+  }
+
+  return ranvalInternal(x);
+}
 
 }  // namespace
 
-// Calculates a random preferred mapping address. In calculating an address, we
-// balance good ASLR against not fragmenting the address space too badly.
+void SetRandomPageBaseSeed(int64_t seed) {
+  ranctx* x = s_ranctx.Pointer();
+  subtle::SpinLock::Guard guard(x->lock);
+  // Set RNG to initial state.
+  x->initialized = true;
+  x->a = x->b = static_cast<uint32_t>(seed);
+  x->c = x->d = static_cast<uint32_t>(seed >> 32);
+}
+
 void* GetRandomPageBase() {
   uintptr_t random = static_cast<uintptr_t>(ranval(s_ranctx.Pointer()));
 

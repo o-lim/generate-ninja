@@ -16,6 +16,7 @@
 #include "base/posix/eintr_wrapper.h"
 #include "base/process/kill.h"
 #include "base/third_party/dynamic_annotations/dynamic_annotations.h"
+#include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 
 #if defined(OS_MACOSX)
@@ -354,7 +355,9 @@ bool Process::Terminate(int exit_code, bool wait) const {
       result = kill(process_, SIGKILL) == 0;
   }
 
-  if (!result)
+  if (result)
+    Exited(exit_code);
+  else
     DPLOG(ERROR) << "Unable to terminate process " << process_;
 
   return result;
@@ -366,11 +369,23 @@ bool Process::WaitForExit(int* exit_code) const {
 }
 
 bool Process::WaitForExitWithTimeout(TimeDelta timeout, int* exit_code) const {
+  if (!timeout.is_zero())
+    internal::AssertBaseSyncPrimitivesAllowed();
+
   // Record the event that this thread is blocking upon (for hang diagnosis).
   base::debug::ScopedProcessWaitActivity process_activity(this);
 
-  return WaitForExitWithTimeoutImpl(Handle(), exit_code, timeout);
+  int local_exit_code;
+  bool exited = WaitForExitWithTimeoutImpl(Handle(), &local_exit_code, timeout);
+  if (exited) {
+    Exited(local_exit_code);
+    if (exit_code)
+      *exit_code = local_exit_code;
+  }
+  return exited;
 }
+
+void Process::Exited(int exit_code) const {}
 
 #if !defined(OS_LINUX) && !defined(OS_MACOSX) && !defined(OS_AIX)
 bool Process::IsProcessBackgrounded() const {

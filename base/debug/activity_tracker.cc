@@ -1025,6 +1025,14 @@ const void* ThreadActivityTracker::GetBaseAddress() {
   return header_;
 }
 
+void ThreadActivityTracker::ClearDataChangedForTesting() {
+  header_->data_unchanged.store(2, std::memory_order_relaxed);
+}
+
+bool ThreadActivityTracker::WasDataChangedForTesting() {
+  return !header_->data_unchanged.load(std::memory_order_relaxed);
+}
+
 void ThreadActivityTracker::SetOwningProcessIdForTesting(int64_t pid,
                                                          int64_t stamp) {
   header_->owner.SetOwningProcessIdForTesting(pid, stamp);
@@ -1262,7 +1270,7 @@ void GlobalActivityTracker::CreateWithAllocator(
 
 #if !defined(OS_NACL)
 // static
-void GlobalActivityTracker::CreateWithFile(const FilePath& file_path,
+bool GlobalActivityTracker::CreateWithFile(const FilePath& file_path,
                                            size_t size,
                                            uint64_t id,
                                            StringPiece name,
@@ -1278,15 +1286,19 @@ void GlobalActivityTracker::CreateWithFile(const FilePath& file_path,
                                    File::FLAG_WRITE | File::FLAG_SHARE_DELETE),
                               {0, static_cast<int64_t>(size)},
                               MemoryMappedFile::READ_WRITE_EXTEND);
-  DCHECK(success);
+  if (!success)
+    return false;
+  if (!FilePersistentMemoryAllocator::IsFileAcceptable(*mapped_file, false))
+    return false;
   CreateWithAllocator(std::make_unique<FilePersistentMemoryAllocator>(
                           std::move(mapped_file), size, id, name, false),
                       stack_depth, 0);
+  return true;
 }
 #endif  // !defined(OS_NACL)
 
 // static
-void GlobalActivityTracker::CreateWithLocalMemory(size_t size,
+bool GlobalActivityTracker::CreateWithLocalMemory(size_t size,
                                                   uint64_t id,
                                                   StringPiece name,
                                                   int stack_depth,
@@ -1294,6 +1306,7 @@ void GlobalActivityTracker::CreateWithLocalMemory(size_t size,
   CreateWithAllocator(
       std::make_unique<LocalPersistentMemoryAllocator>(size, id, name),
       stack_depth, process_id);
+  return true;
 }
 
 // static
@@ -1406,7 +1419,8 @@ void GlobalActivityTracker::RecordProcessLaunch(
     // TODO(bcwhite): Measure this in UMA.
     NOTREACHED() << "Process #" << process_id
                  << " was previously recorded as \"launched\""
-                 << " with no corresponding exit.";
+                 << " with no corresponding exit.\n"
+                 << known_processes_[pid];
     known_processes_.erase(pid);
   }
 
@@ -1495,6 +1509,8 @@ void GlobalActivityTracker::CleanupAfterProcess(int64_t process_id,
     while ((ref = iter.GetNextOfType(kTypeIdProcessDataRecord)) != 0) {
       const void* memory = allocator_->GetAsArray<char>(
           ref, kTypeIdProcessDataRecord, PersistentMemoryAllocator::kSizeAny);
+      if (!memory)
+        continue;
       int64_t found_id;
       int64_t create_stamp;
       if (ActivityUserData::GetOwningProcessId(memory, &found_id,
@@ -1532,6 +1548,8 @@ void GlobalActivityTracker::CleanupAfterProcess(int64_t process_id,
       case ModuleInfoRecord::kPersistentTypeId: {
         const void* memory = allocator_->GetAsArray<char>(
             ref, type, PersistentMemoryAllocator::kSizeAny);
+        if (!memory)
+          continue;
         int64_t found_id;
         int64_t create_stamp;
 

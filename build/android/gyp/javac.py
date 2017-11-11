@@ -333,6 +333,9 @@ def _ParseOptions(argv):
       action='append',
       help='Annotation processor to use.')
   parser.add_option(
+      '--processorpath',
+      help='Where javac should look for annotation processors.')
+  parser.add_option(
       '--processor-arg',
       dest='processor_args',
       action='append',
@@ -360,6 +363,11 @@ def _ParseOptions(argv):
       help='Use the Errorprone compiler at this path.')
   parser.add_option('--jar-path', help='Jar output path.')
   parser.add_option('--stamp', help='Path to touch on success.')
+  parser.add_option(
+      '--javac-arg',
+      action='append',
+      default=[],
+      help='Additional arguments to pass to javac.')
 
   options, args = parser.parse_args(argv)
   build_utils.CheckOptions(options, parser, required=('jar_path',))
@@ -464,9 +472,13 @@ def main(argv):
 
   if options.processors:
     javac_cmd.extend(['-processor', ','.join(options.processors)])
+  if options.processorpath:
+    javac_cmd.extend(['-processorpath', options.processorpath])
   if options.processor_args:
     for arg in options.processor_args:
       javac_cmd.extend(['-A%s' % arg])
+
+  javac_cmd.extend(options.javac_arg)
 
   classpath_inputs = options.bootclasspath
   if options.classpath:

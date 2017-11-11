@@ -7,6 +7,7 @@ import("//build/config/chrome_build.gni")
 import("//build/config/chromecast_build.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/coverage/coverage.gni")
+import("//build/config/host_byteorder.gni")
 import("//build/toolchain/cc_wrapper.gni")
 import("//build/toolchain/toolchain.gni")
 import("//build_overrides/build.gni")
@@ -512,6 +513,7 @@ config("compiler") {
     if (is_win) {
       # This is a straight translation of the non-Windows flags below.
       ldflags += [
+        "/opt:lldlto=0",
         "/opt:lldltojobs=8",
         "/lldltocache:" +
             rebase_path("$root_out_dir/thinlto-cache", root_build_dir),
@@ -881,6 +883,25 @@ config("compiler_cpu_abi") {
           "--target=armv7-unknown-nacl-gnueabihf",
         ]
       }
+    } else if (current_cpu == "ppc64") {
+      if (v8_current_cpu == "ppc") {
+        cflags += [ "-m32" ]
+        ldflags += [ "-m32" ]
+      } else if (v8_current_cpu == "ppc64") {
+        cflags += [ "-m64" ]
+        ldflags += [ "-m64" ]
+      }
+    } else if (current_cpu == "s390x") {
+      if (v8_current_cpu == "s390" && host_byteorder == "little") {
+        cflags += [ "-m32" ]
+        ldflags += [ "-m32" ]
+      } else if (v8_current_cpu == "s390") {
+        cflags += [ "-m31" ]
+        ldflags += [ "-m31" ]
+      } else if (v8_current_cpu == "s390x") {
+        cflags += [ "-m64" ]
+        ldflags += [ "-m64" ]
+      }
     }
   }
 
@@ -1191,6 +1212,7 @@ config("default_warnings") {
       # Don't warn about "maybe" uninitialized. Clang doesn't include this
       # in -Wall but gcc does, and it gives false positives.
       cflags += [ "-Wno-maybe-uninitialized" ]
+      cflags += [ "-Wno-deprecated-declarations" ]
     }
   }
 
@@ -1257,13 +1279,10 @@ config("default_warnings") {
 
         # TODO(hans): https://crbug.com/767059
         "-Wno-tautological-unsigned-enum-zero-compare",
+
+        # TODO(hans): https://crbug.com/767059
+        "-Wno-tautological-constant-compare",
       ]
-      if (llvm_force_head_revision) {
-        cflags += [
-          # TODO(hans): https://crbug.com/767059
-          "-Wno-tautological-constant-compare",
-        ]
-      }
     } else if (use_xcode_clang && xcode_version_int >= 830) {
       # This is necessary to allow a progressive transition from using xcode 8.0
       # to 8.3 or more recent. Remove when all bots are migrated to 8.3.

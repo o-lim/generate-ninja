@@ -80,6 +80,16 @@ std::unique_ptr<Value> Value::CreateWithCopiedBuffer(const char* buffer,
   return std::make_unique<Value>(BlobStorage(buffer, buffer + size));
 }
 
+// static
+Value Value::FromUniquePtrValue(std::unique_ptr<Value> val) {
+  return std::move(*val);
+}
+
+// static
+std::unique_ptr<Value> Value::ToUniquePtrValue(Value val) {
+  return std::make_unique<Value>(std::move(val));
+}
+
 Value::Value(Value&& that) noexcept {
   InternalMoveConstructFrom(std::move(that));
 }
@@ -312,6 +322,7 @@ Value* Value::FindPath(span<const StringPiece> path) {
 }
 
 const Value* Value::FindPath(std::initializer_list<StringPiece> path) const {
+  DCHECK_GE(path.size(), 2u) << "Use FindKey() for a path of length 1.";
   return FindPath(make_span(path.begin(), path.size()));
 }
 
@@ -337,6 +348,7 @@ Value* Value::FindPathOfType(span<const StringPiece> path, Type type) {
 
 const Value* Value::FindPathOfType(std::initializer_list<StringPiece> path,
                                    Type type) const {
+  DCHECK_GE(path.size(), 2u) << "Use FindKeyOfType() for a path of length 1.";
   return FindPathOfType(make_span(path.begin(), path.size()), type);
 }
 
@@ -349,6 +361,7 @@ const Value* Value::FindPathOfType(span<const StringPiece> path,
 }
 
 Value* Value::SetPath(std::initializer_list<StringPiece> path, Value value) {
+  DCHECK_GE(path.size(), 2u) << "Use SetKey() for a path of length 1.";
   return SetPath(make_span(path.begin(), path.size()), std::move(value));
 }
 
@@ -383,6 +396,7 @@ Value* Value::SetPath(span<const StringPiece> path, Value value) {
 }
 
 bool Value::RemovePath(std::initializer_list<StringPiece> path) {
+  DCHECK_GE(path.size(), 2u) << "Use RemoveKey() for a path of length 1.";
   return RemovePath(make_span(path.begin(), path.size()));
 }
 
