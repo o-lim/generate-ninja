@@ -19,7 +19,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "build/build_config.h"
+#include "util/build_config.h"
 
 namespace base {
 
@@ -43,12 +43,6 @@ int64_t ComputeDirectorySize(const FilePath& root_path) {
   return running_size;
 }
 
-bool Move(const FilePath& from_path, const FilePath& to_path) {
-  if (from_path.ReferencesParent() || to_path.ReferencesParent())
-    return false;
-  return internal::MoveUnsafe(from_path, to_path);
-}
-
 bool ContentsEqual(const FilePath& filename1, const FilePath& filename2) {
   // We open the file in binary format even if they are text files because
   // we are just comparing that bytes are exactly same in both files and not
@@ -69,8 +63,7 @@ bool ContentsEqual(const FilePath& filename1, const FilePath& filename2) {
     file1.read(buffer1, BUFFER_SIZE);
     file2.read(buffer2, BUFFER_SIZE);
 
-    if ((file1.eof() != file2.eof()) ||
-        (file1.gcount() != file2.gcount()) ||
+    if ((file1.eof() != file2.eof()) || (file1.gcount() != file2.gcount()) ||
         (memcmp(buffer1, buffer2, static_cast<size_t>(file1.gcount())))) {
       file1.close();
       file2.close();
@@ -98,8 +91,7 @@ bool TextContentsEqual(const FilePath& filename1, const FilePath& filename2) {
     getline(file2, line2);
 
     // Check for mismatched EOF states, or any error state.
-    if ((file1.eof() != file2.eof()) ||
-        file1.bad() || file2.bad()) {
+    if ((file1.eof() != file2.eof()) || file1.bad() || file2.bad()) {
       return false;
     }
 
@@ -136,27 +128,52 @@ bool ReadFileToStringWithMaxSize(const FilePath& path,
     return false;
   }
 
-  const size_t kBufferSize = 1 << 16;
-  std::unique_ptr<char[]> buf(new char[kBufferSize]);
-  size_t len;
-  size_t size = 0;
-  bool read_status = true;
-
   // Many files supplied in |path| have incorrect size (proc files etc).
-  // Hence, the file is read sequentially as opposed to a one-shot read.
-  while ((len = fread(buf.get(), 1, kBufferSize, file)) > 0) {
-    if (contents)
-      contents->append(buf.get(), std::min(len, max_size - size));
+  // Hence, the file is read sequentially as opposed to a one-shot read, using
+  // file size as a hint for chunk size if available.
+  constexpr int64_t kDefaultChunkSize = 1 << 16;
+  int64_t chunk_size;
+#if !defined(OS_NACL_NONSFI)
+  if (!GetFileSize(path, &chunk_size) || chunk_size <= 0)
+    chunk_size = kDefaultChunkSize - 1;
+  // We need to attempt to read at EOF for feof flag to be set so here we
+  // use |chunk_size| + 1.
+  chunk_size = std::min<uint64_t>(chunk_size, max_size) + 1;
+#else
+  chunk_size = kDefaultChunkSize;
+#endif  // !defined(OS_NACL_NONSFI)
+  size_t bytes_read_this_pass;
+  size_t bytes_read_so_far = 0;
+  bool read_status = true;
+  std::string local_contents;
+  local_contents.resize(chunk_size);
 
-    if ((max_size - size) < len) {
+  while ((bytes_read_this_pass = fread(&local_contents[bytes_read_so_far], 1,
+                                       chunk_size, file)) > 0) {
+    if ((max_size - bytes_read_so_far) < bytes_read_this_pass) {
+      // Read more than max_size bytes, bail out.
+      bytes_read_so_far = max_size;
       read_status = false;
       break;
     }
+    // In case EOF was not reached, iterate again but revert to the default
+    // chunk size.
+    if (bytes_read_so_far == 0)
+      chunk_size = kDefaultChunkSize;
 
-    size += len;
+    bytes_read_so_far += bytes_read_this_pass;
+    // Last fread syscall (after EOF) can be avoided via feof, which is just a
+    // flag check.
+    if (feof(file))
+      break;
+    local_contents.resize(bytes_read_so_far + chunk_size);
   }
   read_status = read_status && !ferror(file);
   CloseFile(file);
+  if (contents) {
+    contents->swap(local_contents);
+    contents->resize(bytes_read_so_far);
+  }
 
   return read_status;
 }
@@ -169,7 +186,7 @@ bool ReadFileToString(const FilePath& path, std::string* contents) {
 #if !defined(OS_NACL_NONSFI)
 bool IsDirectoryEmpty(const FilePath& dir_path) {
   FileEnumerator files(dir_path, false,
-      FileEnumerator::FILES | FileEnumerator::DIRECTORIES);
+                       FileEnumerator::FILES | FileEnumerator::DIRECTORIES);
   if (files.Next().empty())
     return true;
   return false;
@@ -178,13 +195,13 @@ bool IsDirectoryEmpty(const FilePath& dir_path) {
 FILE* CreateAndOpenTemporaryFile(FilePath* path) {
   FilePath directory;
   if (!GetTempDir(&directory))
-    return NULL;
+    return nullptr;
 
   return CreateAndOpenTemporaryFileInDir(directory, path);
 }
 
 bool CreateDirectory(const FilePath& full_path) {
-  return CreateDirectoryAndGetError(full_path, NULL);
+  return CreateDirectoryAndGetError(full_path, nullptr);
 }
 
 bool GetFileSize(const FilePath& file_path, int64_t* file_size) {
@@ -195,34 +212,17 @@ bool GetFileSize(const FilePath& file_path, int64_t* file_size) {
   return true;
 }
 
-bool TouchFile(const FilePath& path,
-               const Time& last_accessed,
-               const Time& last_modified) {
-  int flags = File::FLAG_OPEN | File::FLAG_WRITE_ATTRIBUTES;
-
-#if defined(OS_WIN)
-  // On Windows, FILE_FLAG_BACKUP_SEMANTICS is needed to open a directory.
-  if (DirectoryExists(path))
-    flags |= File::FLAG_BACKUP_SEMANTICS;
-#endif  // OS_WIN
-
-  File file(path, flags);
-  if (!file.IsValid())
-    return false;
-
-  return file.SetTimes(last_accessed, last_modified);
-}
 #endif  // !defined(OS_NACL_NONSFI)
 
 bool CloseFile(FILE* file) {
-  if (file == NULL)
+  if (file == nullptr)
     return true;
   return fclose(file) == 0;
 }
 
 #if !defined(OS_NACL_NONSFI)
 bool TruncateFile(FILE* file) {
-  if (file == NULL)
+  if (file == nullptr)
     return false;
   long current_offset = ftell(file);
   if (current_offset == -1)

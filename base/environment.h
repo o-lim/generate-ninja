@@ -9,22 +9,21 @@
 #include <memory>
 #include <string>
 
-#include "base/base_export.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
-#include "build/build_config.h"
+#include "util/build_config.h"
 
 namespace base {
 
 namespace env_vars {
 
-#if defined(OS_POSIX)
-BASE_EXPORT extern const char kHome[];
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
+extern const char kHome[];
 #endif
 
 }  // namespace env_vars
 
-class BASE_EXPORT Environment {
+class Environment {
  public:
   virtual ~Environment();
 
@@ -46,7 +45,6 @@ class BASE_EXPORT Environment {
   virtual bool UnSetVar(StringPiece variable_name) = 0;
 };
 
-
 #if defined(OS_WIN)
 
 typedef string16 NativeEnvironmentString;
@@ -63,10 +61,9 @@ typedef std::map<NativeEnvironmentString, NativeEnvironmentString>
 // which is a concatenated list of null-terminated 16-bit strings. The end is
 // marked by a double-null terminator. The size of the returned string will
 // include the terminators.
-BASE_EXPORT string16 AlterEnvironment(const wchar_t* env,
-                                      const EnvironmentMap& changes);
+string16 AlterEnvironment(const wchar_t* env, const EnvironmentMap& changes);
 
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
 
 typedef std::string NativeEnvironmentString;
 typedef std::map<NativeEnvironmentString, NativeEnvironmentString>
@@ -79,9 +76,8 @@ typedef std::map<NativeEnvironmentString, NativeEnvironmentString>
 // returned array will have appended to it the storage for the array itself so
 // there is only one pointer to manage, but this means that you can't copy the
 // array without keeping the original around.
-BASE_EXPORT std::unique_ptr<char* []> AlterEnvironment(
-    const char* const* env,
-    const EnvironmentMap& changes);
+std::unique_ptr<char*[]> AlterEnvironment(const char* const* env,
+                                          const EnvironmentMap& changes);
 
 #endif
 

@@ -5,6 +5,7 @@
 #include "base/strings/utf_string_conversion_utils.h"
 
 #include "base/third_party/icu/icu_utf.h"
+#include "util/build_config.h"
 
 namespace base {
 
@@ -35,15 +36,14 @@ bool ReadUnicodeCharacter(const char16* src,
                           uint32_t* code_point) {
   if (CBU16_IS_SURROGATE(src[*char_index])) {
     if (!CBU16_IS_SURROGATE_LEAD(src[*char_index]) ||
-        *char_index + 1 >= src_len ||
-        !CBU16_IS_TRAIL(src[*char_index + 1])) {
+        *char_index + 1 >= src_len || !CBU16_IS_TRAIL(src[*char_index + 1])) {
       // Invalid surrogate pair.
       return false;
     }
 
     // Valid surrogate pair.
-    *code_point = CBU16_GET_SUPPLEMENTARY(src[*char_index],
-                                          src[*char_index + 1]);
+    *code_point =
+        CBU16_GET_SUPPLEMENTARY(src[*char_index], src[*char_index + 1]);
     (*char_index)++;
   } else {
     // Not a surrogate, just one 16-bit word.
@@ -75,7 +75,6 @@ size_t WriteUnicodeCharacter(uint32_t code_point, std::string* output) {
     return 1;
   }
 
-
   // CBU8_APPEND_UNSAFE can append up to 4 bytes.
   size_t char_offset = output->length();
   size_t original_char_offset = char_offset;
@@ -104,7 +103,7 @@ size_t WriteUnicodeCharacter(uint32_t code_point, string16* output) {
 
 // Generalized Unicode converter -----------------------------------------------
 
-template<typename CHAR>
+template <typename CHAR>
 void PrepareForUTF8Output(const CHAR* src,
                           size_t src_len,
                           std::string* output) {
@@ -121,10 +120,13 @@ void PrepareForUTF8Output(const CHAR* src,
 }
 
 // Instantiate versions we know callers will need.
+#if !defined(OS_WIN)
+// wchar_t and char16 are the same thing on Windows.
 template void PrepareForUTF8Output(const wchar_t*, size_t, std::string*);
+#endif
 template void PrepareForUTF8Output(const char16*, size_t, std::string*);
 
-template<typename STRING>
+template <typename STRING>
 void PrepareForUTF16Or32Output(const char* src,
                                size_t src_len,
                                STRING* output) {
@@ -142,7 +144,10 @@ void PrepareForUTF16Or32Output(const char* src,
 }
 
 // Instantiate versions we know callers will need.
+#if !defined(OS_WIN)
+// std::wstring and string16 are the same thing on Windows.
 template void PrepareForUTF16Or32Output(const char*, size_t, std::wstring*);
+#endif
 template void PrepareForUTF16Or32Output(const char*, size_t, string16*);
 
 }  // namespace base

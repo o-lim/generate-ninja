@@ -33,7 +33,7 @@ int c16memcmp(const char16* s1, const char16* s2, size_t n) {
 }
 
 size_t c16len(const char16* s) {
-  const char16 *s_orig = s;
+  const char16* s_orig = s;
   while (*s) {
     ++s;
   }
@@ -47,7 +47,7 @@ const char16* c16memchr(const char16* s, char16 c, size_t n) {
     }
     ++s;
   }
-  return 0;
+  return nullptr;
 }
 
 char16* c16memmove(char16* s1, const char16* s2, size_t n) {
@@ -59,7 +59,7 @@ char16* c16memcpy(char16* s1, const char16* s2, size_t n) {
 }
 
 char16* c16memset(char16* s, char16 c, size_t n) {
-  char16 *s_orig = s;
+  char16* s_orig = s;
   while (n-- > 0) {
     *s = c;
     ++s;

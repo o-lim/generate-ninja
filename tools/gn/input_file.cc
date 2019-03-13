@@ -7,13 +7,9 @@
 #include "base/files/file_util.h"
 
 InputFile::InputFile(const SourceFile& name)
-    : name_(name),
-      dir_(name_.GetDir()),
-      contents_loaded_(false) {
-}
+    : name_(name), dir_(name_.GetDir()), contents_loaded_(false) {}
 
-InputFile::~InputFile() {
-}
+InputFile::~InputFile() = default;
 
 void InputFile::SetContents(const std::string& c) {
   contents_loaded_ = true;
@@ -28,4 +24,3 @@ bool InputFile::Load(const base::FilePath& system_path) {
   }
   return false;
 }
-

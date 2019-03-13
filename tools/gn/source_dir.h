@@ -10,7 +10,6 @@
 #include <algorithm>
 #include <string>
 
-#include "base/containers/hash_tables.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/strings/string_piece.h"
@@ -37,28 +36,57 @@ class SourceDir {
   SourceDir(SwapIn, std::string* s);
   ~SourceDir();
 
-  // Resolves a file or dir name relative to this source directory. Will return
-  // an empty SourceDir/File on error and set the give *err pointer (required).
-  // Empty input is always an error.
+  // Resolves a file or dir name (based on as_file parameter) relative
+  // to this source directory. Will return an empty string on error
+  // and set the give *err pointer (required). Empty input is always an error.
+  //
+  // Passed non null v_value will be used to resolve path (in cases where
+  // a substring has been extracted from the value, as with label resolution).
+  // In this use case parameter v is used to generate proper error.
   //
   // If source_root is supplied, these functions will additionally handle the
   // case where the input is a system-absolute but still inside the source
   // tree. This is the case for some external tools.
+  std::string ResolveRelativeAs(
+      bool as_file,
+      const Value& v,
+      Err* err,
+      const base::StringPiece& source_root = base::StringPiece(),
+      const std::string* v_value = nullptr) const;
+
+  // Like ResolveRelativeAs above, but allows to produce result
+  // without overhead for string conversion (on input value).
+  template <typename StringType>
+  std::string ResolveRelativeAs(
+      bool as_file,
+      const Value& blame_input_value,
+      const StringType& input_value,
+      Err* err,
+      const base::StringPiece& source_root = base::StringPiece()) const;
+
+  // Wrapper for ResolveRelativeAs.
   SourceFile ResolveRelativeFile(
       const Value& p,
       Err* err,
       const base::StringPiece& source_root = base::StringPiece()) const;
-  SourceDir ResolveRelativeDir(
-      const Value& p,
-      Err* err,
-      const base::StringPiece& source_root = base::StringPiece()) const;
 
-  // Like ResolveRelativeDir but takes a separate value (which gets blamed)
-  // and string to use (in cases where a substring has been extracted from the
-  // value, as with label resolution).
+  // Wrapper for ResolveRelativeAs.
+  template <typename StringType>
   SourceDir ResolveRelativeDir(
-      const Value& blame_but_dont_use,
-      const base::StringPiece& p,
+      const Value& blame_input_value,
+      const StringType& input_value,
+      Err* err,
+      const base::StringPiece& source_root = base::StringPiece()) const {
+    SourceDir ret;
+    ret.value_ = ResolveRelativeAs<StringType>(false, blame_input_value,
+                                               input_value, err, source_root);
+    return ret;
+  }
+
+  // Wrapper for ResolveRelativeDir where input_value equals to
+  // v.string_value().
+  SourceDir ResolveRelativeDir(
+      const Value& v,
       Err* err,
       const base::StringPiece& source_root = base::StringPiece()) const;
 
@@ -77,9 +105,7 @@ class SourceDir {
 
   // Returns true if this path starts with a single slash which indicates a
   // system-absolute path.
-  bool is_system_absolute() const {
-    return !is_source_absolute();
-  }
+  bool is_system_absolute() const { return !is_source_absolute(); }
 
   // Returns a source-absolute path starting with only one slash at the
   // beginning (normally source-absolute paths start with two slashes to mark
@@ -93,21 +119,25 @@ class SourceDir {
     return base::StringPiece(&value_[1], value_.size() - 1);
   }
 
+  // Returns a path that does not end with a slash.
+  //
+  // This function simply returns the reference to the value if the path is a
+  // root, e.g. "/" or "//".
+  base::StringPiece SourceWithNoTrailingSlash() const {
+    if (value_.size() > 2)
+      return base::StringPiece(&value_[0], value_.size() - 1);
+    return base::StringPiece(value_);
+  }
+
   void SwapValue(std::string* v);
 
   bool operator==(const SourceDir& other) const {
     return value_ == other.value_;
   }
-  bool operator!=(const SourceDir& other) const {
-    return !operator==(other);
-  }
-  bool operator<(const SourceDir& other) const {
-    return value_ < other.value_;
-  }
+  bool operator!=(const SourceDir& other) const { return !operator==(other); }
+  bool operator<(const SourceDir& other) const { return value_ < other.value_; }
 
-  void swap(SourceDir& other) {
-    value_.swap(other.value_);
-  }
+  void swap(SourceDir& other) { value_.swap(other.value_); }
 
  private:
   friend class SourceFile;
@@ -116,16 +146,17 @@ class SourceDir {
   // Copy & assign supported.
 };
 
-namespace BASE_HASH_NAMESPACE {
+namespace std {
 
-template<> struct hash<SourceDir> {
+template <>
+struct hash<SourceDir> {
   std::size_t operator()(const SourceDir& v) const {
     hash<std::string> h;
     return h(v.value());
   }
 };
 
-}  // namespace BASE_HASH_NAMESPACE
+}  // namespace std
 
 inline void swap(SourceDir& lhs, SourceDir& rhs) {
   lhs.swap(rhs);

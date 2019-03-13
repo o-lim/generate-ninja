@@ -20,12 +20,9 @@ BinaryTargetGenerator::BinaryTargetGenerator(
     const FunctionCallNode* function_call,
     Target::OutputType type,
     Err* err)
-    : TargetGenerator(target, scope, function_call, err),
-      output_type_(type) {
-}
+    : TargetGenerator(target, scope, function_call, err), output_type_(type) {}
 
-BinaryTargetGenerator::~BinaryTargetGenerator() {
-}
+BinaryTargetGenerator::~BinaryTargetGenerator() = default;
 
 void BinaryTargetGenerator::DoRun() {
   target_->set_output_type(output_type_);
@@ -48,10 +45,10 @@ void BinaryTargetGenerator::DoRun() {
   if (!FillPublic())
     return;
 
-  if (!FillCheckIncludes())
+  if (!FillFriends())
     return;
 
-  if (!FillInputs())
+  if (!FillCheckIncludes())
     return;
 
   if (!FillConfigs())
@@ -79,6 +76,15 @@ bool BinaryTargetGenerator::FillCompleteStaticLib() {
     if (!value->VerifyTypeIs(Value::BOOLEAN, err_))
       return false;
     target_->set_complete_static_lib(value->boolean_value());
+  }
+  return true;
+}
+
+bool BinaryTargetGenerator::FillFriends() {
+  const Value* value = scope_->GetValue(variables::kFriend, true);
+  if (value) {
+    return ExtractListOfLabelPatterns(*value, scope_->GetSourceDir(),
+                                      &target_->friends(), err_);
   }
   return true;
 }
@@ -119,8 +125,8 @@ bool BinaryTargetGenerator::FillOutputDir() {
   if (err_->has_error())
     return false;
 
-  if (!EnsureStringIsInOutputDir(build_settings->build_dir(),
-                                 dir.value(), value->origin(), err_))
+  if (!EnsureStringIsInOutputDir(build_settings->build_dir(), dir.value(),
+                                 value->origin(), err_))
     return false;
   target_->set_output_dir(dir);
   return true;
@@ -137,8 +143,8 @@ bool BinaryTargetGenerator::FillOutputExtension() {
 }
 
 bool BinaryTargetGenerator::FillAllowCircularIncludesFrom() {
-  const Value* value = scope_->GetValue(
-      variables::kAllowCircularIncludesFrom, true);
+  const Value* value =
+      scope_->GetValue(variables::kAllowCircularIncludesFrom, true);
   if (!value)
     return true;
 
@@ -159,10 +165,11 @@ bool BinaryTargetGenerator::FillAllowCircularIncludesFrom() {
     }
     if (!found_dep) {
       *err_ = Err(*value, "Label not in deps.",
-          "The label \"" + cur.GetUserVisibleName(false) +
-          "\"\nwas not in the deps of this target. "
-          "allow_circular_includes_from only allows\ntargets present in the "
-          "deps.");
+                  "The label \"" + cur.GetUserVisibleName(false) +
+                      "\"\nwas not in the deps of this target. "
+                      "allow_circular_includes_from only allows\ntargets "
+                      "present in the "
+                      "deps.");
       return false;
     }
   }

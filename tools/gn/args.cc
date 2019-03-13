@@ -4,10 +4,11 @@
 
 #include "tools/gn/args.h"
 
-#include "base/sys_info.h"
-#include "build/build_config.h"
+#include "tools/gn/source_file.h"
 #include "tools/gn/string_utils.h"
 #include "tools/gn/variables.h"
+#include "util/build_config.h"
+#include "util/sys_info.h"
 
 const char kBuildArgs_Help[] =
     R"(Build Arguments Overview
@@ -85,43 +86,33 @@ void RemoveDeclaredOverrides(const Scope::KeyValueMap& declared_arguments,
 }  // namespace
 
 Args::ValueWithOverride::ValueWithOverride()
-    : default_value(),
-      has_override(false),
-      override_value() {
-}
+    : default_value(), has_override(false), override_value() {}
 
 Args::ValueWithOverride::ValueWithOverride(const Value& def_val)
-    : default_value(def_val),
-      has_override(false),
-      override_value() {
-}
+    : default_value(def_val), has_override(false), override_value() {}
 
-Args::ValueWithOverride::~ValueWithOverride() {
-}
+Args::ValueWithOverride::~ValueWithOverride() = default;
 
-Args::Args() {
-}
+Args::Args() = default;
 
 Args::Args(const Args& other)
     : overrides_(other.overrides_),
       all_overrides_(other.all_overrides_),
       declared_arguments_per_toolchain_(
           other.declared_arguments_per_toolchain_),
-      toolchain_overrides_(other.toolchain_overrides_) {
-}
+      toolchain_overrides_(other.toolchain_overrides_) {}
 
-Args::~Args() {
-}
+Args::~Args() = default;
 
 void Args::AddArgOverride(const char* name, const Value& value) {
-  base::AutoLock lock(lock_);
+  std::lock_guard<std::mutex> lock(lock_);
 
   overrides_[base::StringPiece(name)] = value;
   all_overrides_[base::StringPiece(name)] = value;
 }
 
 void Args::AddArgOverrides(const Scope::KeyValueMap& overrides) {
-  base::AutoLock lock(lock_);
+  std::lock_guard<std::mutex> lock(lock_);
 
   for (const auto& cur_override : overrides) {
     overrides_[cur_override.first] = cur_override.second;
@@ -129,8 +120,14 @@ void Args::AddArgOverrides(const Scope::KeyValueMap& overrides) {
   }
 }
 
+void Args::AddDefaultArgOverrides(const Scope::KeyValueMap& overrides) {
+  std::lock_guard<std::mutex> lock(lock_);
+  for (const auto& cur_override : overrides)
+    overrides_[cur_override.first] = cur_override.second;
+}
+
 const Value* Args::GetArgOverride(const char* name) const {
-  base::AutoLock lock(lock_);
+  std::lock_guard<std::mutex> lock(lock_);
 
   Scope::KeyValueMap::const_iterator found =
       all_overrides_.find(base::StringPiece(name));
@@ -141,7 +138,7 @@ const Value* Args::GetArgOverride(const char* name) const {
 
 void Args::SetupRootScope(Scope* dest,
                           const Scope::KeyValueMap& toolchain_overrides) const {
-  base::AutoLock lock(lock_);
+  std::lock_guard<std::mutex> lock(lock_);
 
   SetSystemVarsLocked(dest);
 
@@ -158,7 +155,7 @@ void Args::SetupRootScope(Scope* dest,
 bool Args::DeclareArgs(const Scope::KeyValueMap& args,
                        Scope* scope_to_set,
                        Err* err) const {
-  base::AutoLock lock(lock_);
+  std::lock_guard<std::mutex> lock(lock_);
 
   Scope::KeyValueMap& declared_arguments(
       DeclaredArgumentsForToolchainLocked(scope_to_set));
@@ -178,8 +175,8 @@ bool Args::DeclareArgs(const Scope::KeyValueMap& args,
     if (previously_declared != declared_arguments.end()) {
       if (previously_declared->second.origin() != arg.second.origin()) {
         // Declaration location mismatch.
-        *err = Err(arg.second.origin(),
-            "Duplicate build argument declaration.",
+        *err = Err(
+            arg.second.origin(), "Duplicate build argument declaration.",
             "Here you're declaring an argument that was already declared "
             "elsewhere.\nYou can only declare each argument once in the entire "
             "build so there is one\ncanonical place for documentation and the "
@@ -232,7 +229,7 @@ bool Args::DeclareArgs(const Scope::KeyValueMap& args,
 }
 
 bool Args::VerifyAllOverridesUsed(Err* err) const {
-  base::AutoLock lock(lock_);
+  std::lock_guard<std::mutex> lock(lock_);
   Scope::KeyValueMap unused_overrides(all_overrides_);
   for (const auto& map_pair : declared_arguments_per_toolchain_)
     RemoveDeclaredOverrides(map_pair.second, &unused_overrides);
@@ -246,9 +243,10 @@ bool Args::VerifyAllOverridesUsed(Err* err) const {
   const Value& value = unused_overrides.begin()->second;
 
   std::string err_help(
-      "The variable \"" + name + "\" was set as a build argument\n"
+      "The variable \"" + name +
+      "\" was set as a build argument\n"
       "but never appeared in a declare_args() block in any buildfile.\n\n"
-      "To view all possible args, run \"gn args --list <builddir>\"");
+      "To view all possible args, run \"gn args --list <out_dir>\"");
 
   // Use all declare_args for a spelling suggestion.
   std::vector<base::StringPiece> candidates;
@@ -267,7 +265,7 @@ bool Args::VerifyAllOverridesUsed(Err* err) const {
 Args::ValueWithOverrideMap Args::GetAllArguments() const {
   ValueWithOverrideMap result;
 
-  base::AutoLock lock(lock_);
+  std::lock_guard<std::mutex> lock(lock_);
 
   // Default values.
   for (const auto& map_pair : declared_arguments_per_toolchain_) {
@@ -288,8 +286,6 @@ Args::ValueWithOverrideMap Args::GetAllArguments() const {
 }
 
 void Args::SetSystemVarsLocked(Scope* dest) const {
-  lock_.AssertAcquired();
-
   // Host OS.
   const char* os = nullptr;
 #if defined(OS_WIN)
@@ -298,16 +294,12 @@ void Args::SetSystemVarsLocked(Scope* dest) const {
   os = "mac";
 #elif defined(OS_LINUX)
   os = "linux";
-#elif defined(OS_ANDROID)
-  os = "android";
-#elif defined(OS_NETBSD)
-  os = "netbsd";
+#elif defined(OS_FREEBSD)
+  os = "freebsd";
 #elif defined(OS_AIX)
   os = "aix";
-#elif defined(OS_FUCHSIA)
-  os = "fuchsia";
 #else
-  #error Unknown OS type.
+#error Unknown OS type.
 #endif
   // NOTE: Adding a new port? Please follow
   // https://chromium.googlesource.com/chromium/src/+/master/docs/new_port_policy.md
@@ -325,7 +317,7 @@ void Args::SetSystemVarsLocked(Scope* dest) const {
 
   // Set the host CPU architecture based on the underlying OS, not
   // whatever the current bit-tedness of the GN binary is.
-  std::string os_arch = base::SysInfo::OperatingSystemArchitecture();
+  std::string os_arch = OperatingSystemArchitecture();
   if (os_arch == "x86")
     arch = kX86;
   else if (os_arch == "x86_64")
@@ -384,8 +376,6 @@ void Args::SetSystemVarsLocked(Scope* dest) const {
 
 void Args::ApplyOverridesLocked(const Scope::KeyValueMap& values,
                                 Scope* scope) const {
-  lock_.AssertAcquired();
-
   const Scope::KeyValueMap& declared_arguments(
       DeclaredArgumentsForToolchainLocked(scope));
 
@@ -402,19 +392,15 @@ void Args::ApplyOverridesLocked(const Scope::KeyValueMap& values,
 }
 
 void Args::SaveOverrideRecordLocked(const Scope::KeyValueMap& values) const {
-  lock_.AssertAcquired();
   for (const auto& val : values)
     all_overrides_[val.first] = val.second;
 }
 
 Scope::KeyValueMap& Args::DeclaredArgumentsForToolchainLocked(
     Scope* scope) const {
-  lock_.AssertAcquired();
   return declared_arguments_per_toolchain_[scope->settings()];
 }
 
-Scope::KeyValueMap& Args::OverridesForToolchainLocked(
-    Scope* scope) const {
-  lock_.AssertAcquired();
+Scope::KeyValueMap& Args::OverridesForToolchainLocked(Scope* scope) const {
   return toolchain_overrides_[scope->settings()];
 }

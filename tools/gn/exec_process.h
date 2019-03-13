@@ -7,10 +7,13 @@
 
 #include <string>
 
+#include "base/strings/string16.h"
+#include "util/build_config.h"
+
 namespace base {
 class CommandLine;
 class FilePath;
-}
+}  // namespace base
 
 namespace internal {
 
@@ -19,6 +22,14 @@ bool ExecProcess(const base::CommandLine& cmdline,
                  std::string* std_out,
                  std::string* std_err,
                  int* exit_code);
+
+#if defined(OS_WIN)
+bool ExecProcess(const base::string16& cmdline_str,
+                 const base::FilePath& startup_dir,
+                 std::string* std_out,
+                 std::string* std_err,
+                 int* exit_code);
+#endif  // OS_WIN
 
 }  // namespace internal
 

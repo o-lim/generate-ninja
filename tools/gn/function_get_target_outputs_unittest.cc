@@ -2,21 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
 #include <utility>
 
-#include "base/memory/ptr_util.h"
-#include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/functions.h"
 #include "tools/gn/target.h"
 #include "tools/gn/test_with_scope.h"
+#include "util/test/test.h"
 
 namespace {
 
 class GetTargetOutputsTest : public testing::Test {
  public:
-  GetTargetOutputsTest() {
-    setup_.scope()->set_item_collector(&items_);
-  }
+  GetTargetOutputsTest() { setup_.scope()->set_item_collector(&items_); }
 
   Value GetTargetOutputs(const std::string& name, Err* err) {
     FunctionCallNode function;
@@ -61,7 +59,7 @@ class GetTargetOutputsTest : public testing::Test {
 
 TEST_F(GetTargetOutputsTest, Copy) {
   auto action =
-      base::MakeUnique<Target>(setup_.settings(), GetLabel("//foo/", "bar"));
+      std::make_unique<Target>(setup_.settings(), GetLabel("//foo/", "bar"));
   action->set_output_type(Target::COPY_FILES);
   action->sources().push_back(SourceFile("//file.txt"));
   action->action_values().outputs() =
@@ -77,11 +75,10 @@ TEST_F(GetTargetOutputsTest, Copy) {
 
 TEST_F(GetTargetOutputsTest, Action) {
   auto action =
-      base::MakeUnique<Target>(setup_.settings(), GetLabel("//foo/", "bar"));
+      std::make_unique<Target>(setup_.settings(), GetLabel("//foo/", "bar"));
   action->set_output_type(Target::ACTION);
-  action->action_values().outputs() = SubstitutionList::MakeForTest(
-      "//output1.txt",
-      "//output2.txt");
+  action->action_values().outputs() =
+      SubstitutionList::MakeForTest("//output1.txt", "//output2.txt");
 
   items_.push_back(std::move(action));
 
@@ -93,12 +90,12 @@ TEST_F(GetTargetOutputsTest, Action) {
 
 TEST_F(GetTargetOutputsTest, ActionForeach) {
   auto action =
-      base::MakeUnique<Target>(setup_.settings(), GetLabel("//foo/", "bar"));
+      std::make_unique<Target>(setup_.settings(), GetLabel("//foo/", "bar"));
   action->set_output_type(Target::ACTION_FOREACH);
   action->sources().push_back(SourceFile("//file.txt"));
-  action->action_values().outputs() = SubstitutionList::MakeForTest(
-      "//out/Debug/{{source_file_part}}.one",
-      "//out/Debug/{{source_file_part}}.two");
+  action->action_values().outputs() =
+      SubstitutionList::MakeForTest("//out/Debug/{{source_file_part}}.one",
+                                    "//out/Debug/{{source_file_part}}.two");
 
   items_.push_back(std::move(action));
 

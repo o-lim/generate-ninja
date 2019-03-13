@@ -7,10 +7,10 @@
 #include <stddef.h>
 
 #include "base/strings/string_util.h"
-#include "build/build_config.h"
 #include "tools/gn/err.h"
 #include "tools/gn/filesystem_utils.h"
 #include "tools/gn/value.h"
+#include "util/build_config.h"
 
 const char kLabelPattern_Help[] =
     R"*(Label patterns
@@ -33,11 +33,12 @@ const char kLabelPattern_Help[] =
        "//foo/bar/*"  (all targets in any subdir of //foo/bar)
        "./*"  (all targets in the current build file or sub dirs)
 
-  Any of the above forms can additionally take an explicit toolchain. In this
-  case, the toolchain must be fully qualified (no wildcards are supported in
-  the toolchain name).
+  Any of the above forms can additionally take an explicit toolchain
+  in parenthesis at the end of the label pattern. In this case, the
+  toolchain must be fully qualified (no wildcards are supported in the
+  toolchain name).
 
-    "//foo:bar(//build/toochain:mac)"
+    "//foo:bar(//build/toolchain:mac)"
         An explicit target in an explicit toolchain.
 
     ":*(//build/toolchain/linux:32bit)"
@@ -48,23 +49,19 @@ const char kLabelPattern_Help[] =
         toolchain.
 )*";
 
-LabelPattern::LabelPattern() : type_(MATCH) {
-}
+LabelPattern::LabelPattern() : type_(MATCH) {}
 
 LabelPattern::LabelPattern(Type type,
                            const SourceDir& dir,
                            const base::StringPiece& name,
                            const Label& toolchain_label)
-    : toolchain_(toolchain_label),
-      type_(type),
-      dir_(dir) {
+    : toolchain_(toolchain_label), type_(type), dir_(dir) {
   name.CopyToString(&name_);
 }
 
 LabelPattern::LabelPattern(const LabelPattern& other) = default;
 
-LabelPattern::~LabelPattern() {
-}
+LabelPattern::~LabelPattern() = default;
 
 // static
 LabelPattern LabelPattern::GetPattern(const SourceDir& current_dir,
@@ -166,10 +163,11 @@ LabelPattern LabelPattern::GetPattern(const SourceDir& current_dir,
 
     if (!path.empty() && path[path.size() - 1] != '/') {
       // The input was "foo*" which is invalid.
-      *err = Err(value, "'*' must match full directories in a label pattern.",
-          "You did \"foo*\" but this thing doesn't do general pattern\n"
-          "matching. Instead, you have to add a slash: \"foo/*\" to match\n"
-          "all targets in a directory hierarchy.");
+      *err =
+          Err(value, "'*' must match full directories in a label pattern.",
+              "You did \"foo*\" but this thing doesn't do general pattern\n"
+              "matching. Instead, you have to add a slash: \"foo/*\" to match\n"
+              "all targets in a directory hierarchy.");
       return LabelPattern();
     }
   }
@@ -179,7 +177,7 @@ LabelPattern LabelPattern::GetPattern(const SourceDir& current_dir,
     // The non-wildcard stuff better not have a wildcard.
     if (path.find('*') != base::StringPiece::npos) {
       *err = Err(value, "Label patterns only support wildcard suffixes.",
-          "The pattern contained a '*' that wasn't at the end.");
+                 "The pattern contained a '*' that wasn't at the end.");
       return LabelPattern();
     }
 
@@ -192,7 +190,8 @@ LabelPattern LabelPattern::GetPattern(const SourceDir& current_dir,
   // Resolve the name. At this point, we're doing wildcard matches so the
   // name should either be empty ("foo/*") or a wildcard ("foo:*");
   if (colon != std::string::npos && name != "*") {
-    *err = Err(value, "Invalid label pattern.",
+    *err = Err(
+        value, "Invalid label pattern.",
         "You seem to be using the wildcard more generally that is supported.\n"
         "Did you mean \"foo:*\" to match everything in the file, or\n"
         "\"./*\" to recursively match everything in the currend subtree.");
@@ -235,12 +234,22 @@ bool LabelPattern::Matches(const Label& label) const {
       return label.dir() == dir_;
     case RECURSIVE_DIRECTORY:
       // Our directory must be a prefix of the input label for recursive.
-      return label.dir().value().compare(0, dir_.value().size(), dir_.value())
-          == 0;
+      return label.dir().value().compare(0, dir_.value().size(),
+                                         dir_.value()) == 0;
     default:
       NOTREACHED();
       return false;
   }
+}
+
+// static
+bool LabelPattern::VectorMatches(const std::vector<LabelPattern>& patterns,
+                                 const Label& label) {
+  for (const auto& pattern : patterns) {
+    if (pattern.Matches(label))
+      return true;
+  }
+  return false;
 }
 
 std::string LabelPattern::Describe() const {

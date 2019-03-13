@@ -13,7 +13,7 @@
 #include "base/scoped_clear_errno.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "build/build_config.h"
+#include "util/build_config.h"
 
 namespace base {
 
@@ -150,7 +150,8 @@ const std::string& SStringPrintf(std::string* dst, const char* format, ...) {
 
 #if defined(OS_WIN)
 const std::wstring& SStringPrintf(std::wstring* dst,
-                                  const wchar_t* format, ...) {
+                                  const wchar_t* format,
+                                  ...) {
   va_list ap;
   va_start(ap, format);
   dst->clear();

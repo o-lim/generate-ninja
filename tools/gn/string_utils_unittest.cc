@@ -5,14 +5,16 @@
 #include "tools/gn/string_utils.h"
 
 #include <stdint.h>
+
+#include <memory>
 #include <utility>
 
-#include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/err.h"
 #include "tools/gn/scope.h"
 #include "tools/gn/settings.h"
 #include "tools/gn/token.h"
 #include "tools/gn/value.h"
+#include "util/test/test.h"
 
 namespace {
 
@@ -23,8 +25,8 @@ bool CheckExpansionCase(const char* input, const char* expected, bool success) {
   scope.SetValue("onestring", Value(nullptr, "one"), nullptr);
 
   // Nested scope called "onescope" with a value "one" inside it.
-  std::unique_ptr<Scope> onescope(
-      new Scope(static_cast<const Settings*>(nullptr)));
+  std::unique_ptr<Scope> onescope =
+      std::make_unique<Scope>(static_cast<const Settings*>(nullptr));
   onescope->SetValue("one", Value(nullptr, one), nullptr);
   scope.SetValue("onescope", Value(nullptr, std::move(onescope)), nullptr);
 
@@ -52,7 +54,6 @@ bool CheckExpansionCase(const char* input, const char* expected, bool success) {
 
   if (!success)
     return true;  // Don't check result on failure.
-  printf("%s\n", result.string_value().c_str());
   return result.string_value() == expected;
 }
 
@@ -71,7 +72,10 @@ TEST(StringUtils, ExpandStringLiteralIdentifier) {
   EXPECT_TRUE(CheckExpansionCase("$onelist", "[1]", true));
 
   // Hex values
-  EXPECT_TRUE(CheckExpansionCase("$0x0AA", "\x0A""A", true));
+  EXPECT_TRUE(CheckExpansionCase("$0x0AA",
+                                 "\x0A"
+                                 "A",
+                                 true));
   EXPECT_TRUE(CheckExpansionCase("$0x0a$0xfF", "\x0A\xFF", true));
 
   // Errors

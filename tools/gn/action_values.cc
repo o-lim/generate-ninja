@@ -8,9 +8,9 @@
 #include "tools/gn/substitution_writer.h"
 #include "tools/gn/target.h"
 
-ActionValues::ActionValues() {}
+ActionValues::ActionValues() = default;
 
-ActionValues::~ActionValues() {}
+ActionValues::~ActionValues() = default;
 
 void ActionValues::GetOutputsAsSourceFiles(
     const Target* target,
@@ -19,10 +19,10 @@ void ActionValues::GetOutputsAsSourceFiles(
     // The bundle_data target has no output, the real output will be generated
     // by the create_bundle target.
   } else if (target->output_type() == Target::COPY_FILES ||
-      target->output_type() == Target::ACTION_FOREACH) {
+             target->output_type() == Target::ACTION_FOREACH) {
     // Copy and foreach applies the outputs to the sources.
-    SubstitutionWriter::ApplyListToSources(
-        target, target->settings(), outputs_, target->sources(), result);
+    SubstitutionWriter::ApplyListToSources(target, target->settings(), outputs_,
+                                           target->sources(), result);
   } else {
     // Actions (and anything else that happens to specify an output) just use
     // the output list with no substitution.

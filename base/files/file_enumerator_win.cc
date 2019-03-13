@@ -9,7 +9,6 @@
 #include <string.h>
 
 #include "base/logging.h"
-#include "base/threading/thread_restrictions.h"
 
 namespace base {
 
@@ -55,8 +54,8 @@ int64_t FileEnumerator::FileInfo::GetSize() const {
   return static_cast<int64_t>(size.QuadPart);
 }
 
-base::Time FileEnumerator::FileInfo::GetLastModifiedTime() const {
-  return base::Time::FromFileTime(find_data_.ftLastWriteTime);
+Ticks FileEnumerator::FileInfo::GetLastModifiedTime() const {
+  return *reinterpret_cast<const uint64_t*>(&find_data_.ftLastWriteTime);
 }
 
 // FileEnumerator --------------------------------------------------------------
@@ -111,8 +110,6 @@ FileEnumerator::FileInfo FileEnumerator::GetInfo() const {
 }
 
 FilePath FileEnumerator::Next() {
-  AssertBlockingAllowed();
-
   while (has_find_data_ || !pending_paths_.empty()) {
     if (!has_find_data_) {
       // The last find FindFirstFile operation is done, prepare a new one.

@@ -14,7 +14,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
-#include "build/build_config.h"
+#include "util/build_config.h"
 
 namespace base {
 
@@ -78,38 +78,6 @@ bool JSONWriter::BuildJSONString(const Value& node, size_t depth) {
       return result;
     }
 
-    case Value::Type::DOUBLE: {
-      double value;
-      bool result = node.GetAsDouble(&value);
-      DCHECK(result);
-      if (omit_double_type_preservation_ &&
-          value <= std::numeric_limits<int64_t>::max() &&
-          value >= std::numeric_limits<int64_t>::min() &&
-          std::floor(value) == value) {
-        json_string_->append(Int64ToString(static_cast<int64_t>(value)));
-        return result;
-      }
-      std::string real = DoubleToString(value);
-      // Ensure that the number has a .0 if there's no decimal or 'e'.  This
-      // makes sure that when we read the JSON back, it's interpreted as a
-      // real rather than an int.
-      if (real.find('.') == std::string::npos &&
-          real.find('e') == std::string::npos &&
-          real.find('E') == std::string::npos) {
-        real.append(".0");
-      }
-      // The JSON spec requires that non-integer values in the range (-1,1)
-      // have a zero before the decimal point - ".52" is not valid, "0.52" is.
-      if (real[0] == '.') {
-        real.insert(static_cast<size_t>(0), static_cast<size_t>(1), '0');
-      } else if (real.length() > 1 && real[0] == '-' && real[1] == '.') {
-        // "-.1" bad "-0.1" good
-        real.insert(static_cast<size_t>(1), static_cast<size_t>(1), '0');
-      }
-      json_string_->append(real);
-      return result;
-    }
-
     case Value::Type::STRING: {
       std::string value;
       bool result = node.GetAsString(&value);
@@ -123,7 +91,7 @@ bool JSONWriter::BuildJSONString(const Value& node, size_t depth) {
       if (pretty_print_)
         json_string_->push_back(' ');
 
-      const ListValue* list = NULL;
+      const ListValue* list = nullptr;
       bool first_value_has_been_output = false;
       bool result = node.GetAsList(&list);
       DCHECK(result);
@@ -154,7 +122,7 @@ bool JSONWriter::BuildJSONString(const Value& node, size_t depth) {
       if (pretty_print_)
         json_string_->append(kPrettyPrintLineEnding);
 
-      const DictionaryValue* dict = NULL;
+      const DictionaryValue* dict = nullptr;
       bool first_value_has_been_output = false;
       bool result = node.GetAsDictionary(&dict);
       DCHECK(result);

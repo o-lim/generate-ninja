@@ -13,7 +13,6 @@
 
 #include "base/environment.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/sha1.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -36,8 +35,13 @@ using TargetToFileList = std::unordered_map<const Target*, Target::FileList>;
 using TargetToTarget = std::unordered_map<const Target*, const Target*>;
 using TargetToPBXTarget = std::unordered_map<const Target*, PBXTarget*>;
 
-const char kEarlGreyFileNameIdentifier[] = "egtest.mm";
-const char kXCTestFileNameIdentifier[] = "xctest.mm";
+const char* kXCTestFileSuffixes[] = {
+    "egtest.m",
+    "egtest.mm",
+    "xctest.m",
+    "xctest.mm",
+};
+
 const char kXCTestModuleTargetNamePostfix[] = "_module";
 const char kXCUITestRunnerTargetNamePostfix[] = "_runner";
 
@@ -47,9 +51,13 @@ struct SafeEnvironmentVariableInfo {
 };
 
 SafeEnvironmentVariableInfo kSafeEnvironmentVariables[] = {
-    {"HOME", true}, {"LANG", true},    {"PATH", true},
-    {"USER", true}, {"TMPDIR", false},
-};
+    {"HOME", true},
+    {"LANG", true},
+    {"PATH", true},
+    {"USER", true},
+    {"TMPDIR", false},
+    {"ICECC_VERSION", true},
+    {"ICECC_CLANG_REMOTE_CPP", true}};
 
 XcodeWriter::TargetOsType GetTargetOs(const Args& args) {
   const Value* target_os_value = args.GetArgOverride(variables::kTargetOs);
@@ -126,10 +134,15 @@ bool IsXCUITestModuleTarget(const Target* target) {
 }
 
 bool IsXCTestFile(const SourceFile& file) {
-  return base::EndsWith(file.GetName(), kEarlGreyFileNameIdentifier,
-                        base::CompareCase::SENSITIVE) ||
-         base::EndsWith(file.GetName(), kXCTestFileNameIdentifier,
-                        base::CompareCase::SENSITIVE);
+  std::string file_name = file.GetName();
+  for (size_t i = 0; i < arraysize(kXCTestFileSuffixes); ++i) {
+    if (base::EndsWith(file_name, kXCTestFileSuffixes[i],
+                       base::CompareCase::SENSITIVE)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 const Target* FindApplicationTargetByName(
@@ -151,8 +164,8 @@ void AddPBXTargetDependency(const PBXTarget* base_pbxtarget,
                             PBXTarget* dependent_pbxtarget,
                             const PBXProject* project) {
   auto container_item_proxy =
-      base::MakeUnique<PBXContainerItemProxy>(project, base_pbxtarget);
-  auto dependency = base::MakeUnique<PBXTargetDependency>(
+      std::make_unique<PBXContainerItemProxy>(project, base_pbxtarget);
+  auto dependency = std::make_unique<PBXTargetDependency>(
       base_pbxtarget, std::move(container_item_proxy));
 
   dependent_pbxtarget->AddDependency(std::move(dependency));
@@ -282,7 +295,7 @@ void AddXCTestFilesToTestModuleTarget(const Target::FileList& xctest_file_list,
 
 class CollectPBXObjectsPerClassHelper : public PBXObjectVisitor {
  public:
-  CollectPBXObjectsPerClassHelper() {}
+  CollectPBXObjectsPerClassHelper() = default;
 
   void Visit(PBXObject* object) override {
     DCHECK(object);
@@ -363,17 +376,14 @@ bool XcodeWriter::RunAndWriteFiles(const std::string& workspace_name,
       break;
   }
 
-  const std::string source_path =
-      base::FilePath::FromUTF8Unsafe(
-          RebasePath("//", build_settings->build_dir()))
-          .StripTrailingSeparators()
-          .AsUTF8Unsafe();
+  const std::string source_path = FilePathToUTF8(
+      UTF8ToFilePath(RebasePath("//", build_settings->build_dir()))
+          .StripTrailingSeparators());
 
-  std::string config_name = build_settings->build_dir()
-                                .Resolve(base::FilePath())
-                                .StripTrailingSeparators()
-                                .BaseName()
-                                .AsUTF8Unsafe();
+  std::string config_name = FilePathToUTF8(build_settings->build_dir()
+                                               .Resolve(base::FilePath())
+                                               .StripTrailingSeparators()
+                                               .BaseName());
   DCHECK(!config_name.empty());
 
   std::string::size_type separator = config_name.find('-');
@@ -400,7 +410,7 @@ XcodeWriter::XcodeWriter(const std::string& name) : name_(name) {
     name_.assign("all");
 }
 
-XcodeWriter::~XcodeWriter() {}
+XcodeWriter::~XcodeWriter() = default;
 
 // static
 bool XcodeWriter::FilterTargets(const BuildSettings* build_settings,

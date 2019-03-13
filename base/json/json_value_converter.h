@@ -11,7 +11,6 @@
 #include <string>
 #include <vector>
 
-#include "base/base_export.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -72,7 +71,7 @@
 // Sometimes JSON format uses string representations for other types such
 // like enum, timestamp, or URL.  You can use RegisterCustomField method
 // and specify a function to convert a StringPiece to your type.
-//   bool ConvertFunc(const StringPiece& s, YourEnum* result) {
+//   bool ConvertFunc(StringPiece s, YourEnum* result) {
 //     // do something and return true if succeed...
 //   }
 //   struct Message {
@@ -92,13 +91,13 @@ class JSONValueConverter;
 
 namespace internal {
 
-template<typename StructType>
+template <typename StructType>
 class FieldConverterBase {
  public:
   explicit FieldConverterBase(const std::string& path) : field_path_(path) {}
-  virtual ~FieldConverterBase() {}
-  virtual bool ConvertField(const base::Value& value, StructType* obj)
-      const = 0;
+  virtual ~FieldConverterBase() = default;
+  virtual bool ConvertField(const base::Value& value,
+                            StructType* obj) const = 0;
   const std::string& field_path() const { return field_path_; }
 
  private:
@@ -109,7 +108,7 @@ class FieldConverterBase {
 template <typename FieldType>
 class ValueConverter {
  public:
-  virtual ~ValueConverter() {}
+  virtual ~ValueConverter() = default;
   virtual bool Convert(const base::Value& value, FieldType* field) const = 0;
 };
 
@@ -117,19 +116,18 @@ template <typename StructType, typename FieldType>
 class FieldConverter : public FieldConverterBase<StructType> {
  public:
   explicit FieldConverter(const std::string& path,
-                          FieldType StructType::* field,
+                          FieldType StructType::*field,
                           ValueConverter<FieldType>* converter)
       : FieldConverterBase<StructType>(path),
         field_pointer_(field),
-        value_converter_(converter) {
-  }
+        value_converter_(converter) {}
 
   bool ConvertField(const base::Value& value, StructType* dst) const override {
     return value_converter_->Convert(value, &(dst->*field_pointer_));
   }
 
  private:
-  FieldType StructType::* field_pointer_;
+  FieldType StructType::*field_pointer_;
   std::unique_ptr<ValueConverter<FieldType>> value_converter_;
   DISALLOW_COPY_AND_ASSIGN(FieldConverter);
 };
@@ -138,9 +136,9 @@ template <typename FieldType>
 class BasicValueConverter;
 
 template <>
-class BASE_EXPORT BasicValueConverter<int> : public ValueConverter<int> {
+class BasicValueConverter<int> : public ValueConverter<int> {
  public:
-  BasicValueConverter() {}
+  BasicValueConverter() = default;
 
   bool Convert(const base::Value& value, int* field) const override;
 
@@ -149,10 +147,9 @@ class BASE_EXPORT BasicValueConverter<int> : public ValueConverter<int> {
 };
 
 template <>
-class BASE_EXPORT BasicValueConverter<std::string>
-    : public ValueConverter<std::string> {
+class BasicValueConverter<std::string> : public ValueConverter<std::string> {
  public:
-  BasicValueConverter() {}
+  BasicValueConverter() = default;
 
   bool Convert(const base::Value& value, std::string* field) const override;
 
@@ -161,10 +158,9 @@ class BASE_EXPORT BasicValueConverter<std::string>
 };
 
 template <>
-class BASE_EXPORT BasicValueConverter<string16>
-    : public ValueConverter<string16> {
+class BasicValueConverter<string16> : public ValueConverter<string16> {
  public:
-  BasicValueConverter() {}
+  BasicValueConverter() = default;
 
   bool Convert(const base::Value& value, string16* field) const override;
 
@@ -173,9 +169,9 @@ class BASE_EXPORT BasicValueConverter<string16>
 };
 
 template <>
-class BASE_EXPORT BasicValueConverter<double> : public ValueConverter<double> {
+class BasicValueConverter<double> : public ValueConverter<double> {
  public:
-  BasicValueConverter() {}
+  BasicValueConverter() = default;
 
   bool Convert(const base::Value& value, double* field) const override;
 
@@ -184,9 +180,9 @@ class BASE_EXPORT BasicValueConverter<double> : public ValueConverter<double> {
 };
 
 template <>
-class BASE_EXPORT BasicValueConverter<bool> : public ValueConverter<bool> {
+class BasicValueConverter<bool> : public ValueConverter<bool> {
  public:
-  BasicValueConverter() {}
+  BasicValueConverter() = default;
 
   bool Convert(const base::Value& value, bool* field) const override;
 
@@ -197,7 +193,7 @@ class BASE_EXPORT BasicValueConverter<bool> : public ValueConverter<bool> {
 template <typename FieldType>
 class ValueFieldConverter : public ValueConverter<FieldType> {
  public:
-  typedef bool(*ConvertFunc)(const base::Value* value, FieldType* field);
+  typedef bool (*ConvertFunc)(const base::Value* value, FieldType* field);
 
   explicit ValueFieldConverter(ConvertFunc convert_func)
       : convert_func_(convert_func) {}
@@ -215,7 +211,7 @@ class ValueFieldConverter : public ValueConverter<FieldType> {
 template <typename FieldType>
 class CustomFieldConverter : public ValueConverter<FieldType> {
  public:
-  typedef bool(*ConvertFunc)(const StringPiece& value, FieldType* field);
+  typedef bool (*ConvertFunc)(StringPiece value, FieldType* field);
 
   explicit CustomFieldConverter(ConvertFunc convert_func)
       : convert_func_(convert_func) {}
@@ -223,7 +219,7 @@ class CustomFieldConverter : public ValueConverter<FieldType> {
   bool Convert(const base::Value& value, FieldType* field) const override {
     std::string string_value;
     return value.GetAsString(&string_value) &&
-        convert_func_(string_value, field);
+           convert_func_(string_value, field);
   }
 
  private:
@@ -235,7 +231,7 @@ class CustomFieldConverter : public ValueConverter<FieldType> {
 template <typename NestedType>
 class NestedValueConverter : public ValueConverter<NestedType> {
  public:
-  NestedValueConverter() {}
+  NestedValueConverter() = default;
 
   bool Convert(const base::Value& value, NestedType* field) const override {
     return converter_.Convert(value, field);
@@ -250,7 +246,7 @@ template <typename Element>
 class RepeatedValueConverter
     : public ValueConverter<std::vector<std::unique_ptr<Element>>> {
  public:
-  RepeatedValueConverter() {}
+  RepeatedValueConverter() = default;
 
   bool Convert(const base::Value& value,
                std::vector<std::unique_ptr<Element>>* field) const override {
@@ -270,7 +266,6 @@ class RepeatedValueConverter
       if (basic_converter_.Convert(*element, e.get())) {
         field->push_back(std::move(e));
       } else {
-        DVLOG(1) << "failure at " << i << "-th element";
         return false;
       }
     }
@@ -286,7 +281,7 @@ template <typename NestedType>
 class RepeatedMessageConverter
     : public ValueConverter<std::vector<std::unique_ptr<NestedType>>> {
  public:
-  RepeatedMessageConverter() {}
+  RepeatedMessageConverter() = default;
 
   bool Convert(const base::Value& value,
                std::vector<std::unique_ptr<NestedType>>* field) const override {
@@ -304,7 +299,6 @@ class RepeatedMessageConverter
       if (converter_.Convert(*element, nested.get())) {
         field->push_back(std::move(nested));
       } else {
-        DVLOG(1) << "failure at " << i << "-th element";
         return false;
       }
     }
@@ -320,7 +314,7 @@ template <typename NestedType>
 class RepeatedCustomValueConverter
     : public ValueConverter<std::vector<std::unique_ptr<NestedType>>> {
  public:
-  typedef bool(*ConvertFunc)(const base::Value* value, NestedType* field);
+  typedef bool (*ConvertFunc)(const base::Value* value, NestedType* field);
 
   explicit RepeatedCustomValueConverter(ConvertFunc convert_func)
       : convert_func_(convert_func) {}
@@ -341,7 +335,6 @@ class RepeatedCustomValueConverter
       if ((*convert_func_)(element, nested.get())) {
         field->push_back(std::move(nested));
       } else {
-        DVLOG(1) << "failure at " << i << "-th element";
         return false;
       }
     }
@@ -353,64 +346,59 @@ class RepeatedCustomValueConverter
   DISALLOW_COPY_AND_ASSIGN(RepeatedCustomValueConverter);
 };
 
-
 }  // namespace internal
 
 template <class StructType>
 class JSONValueConverter {
  public:
-  JSONValueConverter() {
-    StructType::RegisterJSONConverter(this);
-  }
+  JSONValueConverter() { StructType::RegisterJSONConverter(this); }
 
-  void RegisterIntField(const std::string& field_name,
-                        int StructType::* field) {
+  void RegisterIntField(const std::string& field_name, int StructType::*field) {
     fields_.push_back(
         std::make_unique<internal::FieldConverter<StructType, int>>(
             field_name, field, new internal::BasicValueConverter<int>));
   }
 
   void RegisterStringField(const std::string& field_name,
-                           std::string StructType::* field) {
+                           std::string StructType::*field) {
     fields_.push_back(
         std::make_unique<internal::FieldConverter<StructType, std::string>>(
             field_name, field, new internal::BasicValueConverter<std::string>));
   }
 
   void RegisterStringField(const std::string& field_name,
-                           string16 StructType::* field) {
+                           string16 StructType::*field) {
     fields_.push_back(
         std::make_unique<internal::FieldConverter<StructType, string16>>(
             field_name, field, new internal::BasicValueConverter<string16>));
   }
 
   void RegisterBoolField(const std::string& field_name,
-                         bool StructType::* field) {
+                         bool StructType::*field) {
     fields_.push_back(
         std::make_unique<internal::FieldConverter<StructType, bool>>(
             field_name, field, new internal::BasicValueConverter<bool>));
   }
 
   void RegisterDoubleField(const std::string& field_name,
-                           double StructType::* field) {
+                           double StructType::*field) {
     fields_.push_back(
         std::make_unique<internal::FieldConverter<StructType, double>>(
             field_name, field, new internal::BasicValueConverter<double>));
   }
 
   template <class NestedType>
-  void RegisterNestedField(
-      const std::string& field_name, NestedType StructType::* field) {
+  void RegisterNestedField(const std::string& field_name,
+                           NestedType StructType::*field) {
     fields_.push_back(
         std::make_unique<internal::FieldConverter<StructType, NestedType>>(
             field_name, field, new internal::NestedValueConverter<NestedType>));
   }
 
   template <typename FieldType>
-  void RegisterCustomField(
-      const std::string& field_name,
-      FieldType StructType::* field,
-      bool (*convert_func)(const StringPiece&, FieldType*)) {
+  void RegisterCustomField(const std::string& field_name,
+                           FieldType StructType::*field,
+                           bool (*convert_func)(StringPiece, FieldType*)) {
     fields_.push_back(
         std::make_unique<internal::FieldConverter<StructType, FieldType>>(
             field_name, field,
@@ -418,10 +406,10 @@ class JSONValueConverter {
   }
 
   template <typename FieldType>
-  void RegisterCustomValueField(
-      const std::string& field_name,
-      FieldType StructType::* field,
-      bool (*convert_func)(const base::Value*, FieldType*)) {
+  void RegisterCustomValueField(const std::string& field_name,
+                                FieldType StructType::*field,
+                                bool (*convert_func)(const base::Value*,
+                                                     FieldType*)) {
     fields_.push_back(
         std::make_unique<internal::FieldConverter<StructType, FieldType>>(
             field_name, field,
@@ -505,7 +493,6 @@ class JSONValueConverter {
       const base::Value* field = NULL;
       if (dictionary_value->Get(field_converter->field_path(), &field)) {
         if (!field_converter->ConvertField(*field, output)) {
-          DVLOG(1) << "failure at field " << field_converter->field_path();
           return false;
         }
       }

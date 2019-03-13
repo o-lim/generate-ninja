@@ -9,20 +9,17 @@
 
 #include <memory>
 
-#include "base/base_export.h"
 #include "base/logging.h"
 #include "base/scoped_generic.h"
-#include "build/build_config.h"
+#include "util/build_config.h"
 
 namespace base {
 
 namespace internal {
 
-#if defined(OS_POSIX)
-struct BASE_EXPORT ScopedFDCloseTraits {
-  static int InvalidValue() {
-    return -1;
-  }
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
+struct ScopedFDCloseTraits {
+  static int InvalidValue() { return -1; }
   static void Free(int fd);
 };
 #endif
@@ -39,7 +36,7 @@ struct ScopedFILECloser {
 
 // -----------------------------------------------------------------------------
 
-#if defined(OS_POSIX)
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
 // A low-level Posix file descriptor closer class. Use this when writing
 // platform-specific code, especially that does non-file-like things with the
 // FD (like sockets).

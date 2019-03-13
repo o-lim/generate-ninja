@@ -8,7 +8,6 @@
 #ifndef BASE_CALLBACK_INTERNAL_H_
 #define BASE_CALLBACK_INTERNAL_H_
 
-#include "base/base_export.h"
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -31,6 +30,22 @@ struct BindStateBaseRefCountTraits {
   static void Destruct(const BindStateBase*);
 };
 
+template <typename T, bool IsScalar = std::is_scalar<T>::value>
+struct PassingTraits;
+
+template <typename T>
+struct PassingTraits<T, false> {
+  using Type = T&&;
+};
+
+template <typename T>
+struct PassingTraits<T, true> {
+  using Type = T;
+};
+
+template <typename T>
+using PassingTraitsType = typename PassingTraits<T>::Type;
+
 // BindStateBase is used to provide an opaque handle that the Callback
 // class can use to represent a function object with bound arguments.  It
 // behaves as an existential type that is used by a corresponding
@@ -42,12 +57,12 @@ struct BindStateBaseRefCountTraits {
 // Creating a vtable for every BindState template instantiation results in a lot
 // of bloat. Its only task is to call the destructor which can be done with a
 // function pointer.
-class BASE_EXPORT BindStateBase
+class BindStateBase
     : public RefCountedThreadSafe<BindStateBase, BindStateBaseRefCountTraits> {
  public:
   REQUIRE_ADOPTION_FOR_REFCOUNTED_TYPE();
 
-  using InvokeFuncStorage = void(*)();
+  using InvokeFuncStorage = void (*)();
 
  private:
   BindStateBase(InvokeFuncStorage polymorphic_invoke,
@@ -69,9 +84,7 @@ class BASE_EXPORT BindStateBase
   friend struct BindState;
   friend struct ::base::FakeBindState;
 
-  bool IsCancelled() const {
-    return is_cancelled_(this);
-  }
+  bool IsCancelled() const { return is_cancelled_(this); }
 
   // In C++, it is safe to cast function pointers to function pointers of
   // another type. It is not okay to use void*. We create a InvokeFuncStorage
@@ -90,16 +103,16 @@ class BASE_EXPORT BindStateBase
 // template bloat.
 // CallbackBase<MoveOnly> is a direct base class of MoveOnly callbacks, and
 // CallbackBase<Copyable> uses CallbackBase<MoveOnly> for its implementation.
-class BASE_EXPORT CallbackBase {
+class CallbackBase {
  public:
-  CallbackBase(CallbackBase&& c);
-  CallbackBase& operator=(CallbackBase&& c);
+  CallbackBase(CallbackBase&& c) noexcept;
+  CallbackBase& operator=(CallbackBase&& c) noexcept;
 
   explicit CallbackBase(const CallbackBaseCopyable& c);
   CallbackBase& operator=(const CallbackBaseCopyable& c);
 
-  explicit CallbackBase(CallbackBaseCopyable&& c);
-  CallbackBase& operator=(CallbackBaseCopyable&& c);
+  explicit CallbackBase(CallbackBaseCopyable&& c) noexcept;
+  CallbackBase& operator=(CallbackBaseCopyable&& c) noexcept;
 
   // Returns true if Callback is null (doesn't refer to anything).
   bool is_null() const { return !bind_state_; }
@@ -118,6 +131,8 @@ class BASE_EXPORT CallbackBase {
   // Returns true if this callback equals |other|. |other| may be null.
   bool EqualsInternal(const CallbackBase& other) const;
 
+  constexpr inline CallbackBase();
+
   // Allow initializing of |bind_state_| via the constructor to avoid default
   // initialization of the scoped_refptr.
   explicit CallbackBase(BindStateBase* bind_state);
@@ -134,18 +149,21 @@ class BASE_EXPORT CallbackBase {
   scoped_refptr<BindStateBase> bind_state_;
 };
 
+constexpr CallbackBase::CallbackBase() = default;
+
 // CallbackBase<Copyable> is a direct base class of Copyable Callbacks.
-class BASE_EXPORT CallbackBaseCopyable : public CallbackBase {
+class CallbackBaseCopyable : public CallbackBase {
  public:
   CallbackBaseCopyable(const CallbackBaseCopyable& c);
-  CallbackBaseCopyable(CallbackBaseCopyable&& c);
+  CallbackBaseCopyable(CallbackBaseCopyable&& c) noexcept;
   CallbackBaseCopyable& operator=(const CallbackBaseCopyable& c);
-  CallbackBaseCopyable& operator=(CallbackBaseCopyable&& c);
+  CallbackBaseCopyable& operator=(CallbackBaseCopyable&& c) noexcept;
 
  protected:
+  constexpr CallbackBaseCopyable() = default;
   explicit CallbackBaseCopyable(BindStateBase* bind_state)
       : CallbackBase(bind_state) {}
-  ~CallbackBaseCopyable() {}
+  ~CallbackBaseCopyable() = default;
 };
 
 }  // namespace internal

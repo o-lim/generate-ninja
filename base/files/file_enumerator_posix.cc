@@ -11,8 +11,7 @@
 #include <string.h>
 
 #include "base/logging.h"
-#include "base/threading/thread_restrictions.h"
-#include "build/build_config.h"
+#include "util/build_config.h"
 
 namespace base {
 namespace {
@@ -50,8 +49,8 @@ int64_t FileEnumerator::FileInfo::GetSize() const {
   return stat_.st_size;
 }
 
-base::Time FileEnumerator::FileInfo::GetLastModifiedTime() const {
-  return base::Time::FromTimeT(stat_.st_mtime);
+Ticks FileEnumerator::FileInfo::GetLastModifiedTime() const {
+  return stat_.st_mtime;
 }
 
 // FileEnumerator --------------------------------------------------------------
@@ -92,12 +91,9 @@ FileEnumerator::FileEnumerator(const FilePath& root_path,
   pending_paths_.push(root_path);
 }
 
-FileEnumerator::~FileEnumerator() {
-}
+FileEnumerator::~FileEnumerator() = default;
 
 FilePath FileEnumerator::Next() {
-  AssertBlockingAllowed();
-
   ++current_directory_entry_;
 
   // While we've exhausted the entries in the current directory, do the next
@@ -114,21 +110,6 @@ FilePath FileEnumerator::Next() {
       continue;
 
     directory_entries_.clear();
-
-#if defined(OS_FUCHSIA)
-    // Fuchsia does not support .. on the file system server side, see
-    // https://fuchsia.googlesource.com/docs/+/master/dotdot.md and
-    // https://crbug.com/735540. However, for UI purposes, having the parent
-    // directory show up in directory listings makes sense, so we add it here to
-    // match the expectation on other operating systems. In cases where this
-    // is useful it should be resolvable locally.
-    FileInfo dotdot;
-    dotdot.stat_.st_mode = S_IFDIR;
-    dotdot.filename_ = FilePath("..");
-    if (!ShouldSkip(dotdot.filename_)) {
-      directory_entries_.push_back(std::move(dotdot));
-    }
-#endif  // OS_FUCHSIA
 
     current_directory_entry_ = 0;
     struct dirent* dent;

@@ -9,11 +9,9 @@ Tool::Tool()
       depsformat_(DEPS_GCC),
       precompiled_header_type_(PCH_NONE),
       restat_(false),
-      complete_(false) {
-}
+      complete_(false) {}
 
-Tool::~Tool() {
-}
+Tool::~Tool() = default;
 
 void Tool::SetComplete() {
   DCHECK(!complete_);

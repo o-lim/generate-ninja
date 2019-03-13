@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "testing/gtest/include/gtest/gtest.h"
+#include "tools/gn/scope.h"
+
 #include "tools/gn/input_file.h"
 #include "tools/gn/parse_tree.h"
-#include "tools/gn/scope.h"
+#include "tools/gn/source_file.h"
 #include "tools/gn/template.h"
 #include "tools/gn/test_with_scope.h"
+#include "util/test/test.h"
 
 namespace {
 
@@ -22,7 +24,24 @@ bool HasStringValueEqualTo(const Scope* scope,
   return value->string_value() == expected_value;
 }
 
+bool ContainsBuildDependencyFile(const Scope* scope,
+                                 const SourceFile& source_file) {
+  const auto& build_dependency_files = scope->build_dependency_files();
+  return build_dependency_files.end() !=
+         build_dependency_files.find(source_file);
+}
+
 }  // namespace
+
+TEST(Scope, InheritBuildDependencyFilesFromParent) {
+  TestWithScope setup;
+  SourceFile source_file = SourceFile("//a/BUILD.gn");
+  setup.scope()->AddBuildDependencyFile(source_file);
+
+  Scope new_scope(setup.scope());
+  EXPECT_EQ(1U, new_scope.build_dependency_files().size());
+  EXPECT_TRUE(ContainsBuildDependencyFile(&new_scope, source_file));
+}
 
 TEST(Scope, NonRecursiveMergeTo) {
   TestWithScope setup;
@@ -31,7 +50,7 @@ TEST(Scope, NonRecursiveMergeTo) {
   // given value.
   InputFile input_file(SourceFile("//foo"));
   Token assignment_token(Location(&input_file, 1, 1, 1), Token::STRING,
-      "\"hello\"");
+                         "\"hello\"");
   LiteralNode assignment;
   assignment.set_value(assignment_token);
 
@@ -57,8 +76,7 @@ TEST(Scope, NonRecursiveMergeTo) {
 
     Err err;
     EXPECT_FALSE(setup.scope()->NonRecursiveMergeTo(
-        &new_scope, Scope::MergeOptions(),
-        &assignment, "error", &err));
+        &new_scope, Scope::MergeOptions(), &assignment, "error", &err));
     EXPECT_TRUE(err.has_error());
   }
 
@@ -85,8 +103,8 @@ TEST(Scope, NonRecursiveMergeTo) {
     Err err;
     Scope::MergeOptions options;
     options.clobber_existing = true;
-    EXPECT_TRUE(setup.scope()->NonRecursiveMergeTo(
-        &new_scope, options, &assignment, "error", &err));
+    EXPECT_TRUE(setup.scope()->NonRecursiveMergeTo(&new_scope, options,
+                                                   &assignment, "error", &err));
     EXPECT_FALSE(err.has_error());
 
     const Value* found_value = new_scope.GetValue("v");
@@ -105,8 +123,8 @@ TEST(Scope, NonRecursiveMergeTo) {
     options.clobber_existing = true;
 
     Err err;
-    EXPECT_TRUE(setup.scope()->NonRecursiveMergeTo(
-        &new_scope, options, &assignment, "error", &err));
+    EXPECT_TRUE(setup.scope()->NonRecursiveMergeTo(&new_scope, options,
+                                                   &assignment, "error", &err));
     EXPECT_FALSE(err.has_error());
 
     const Template* found_value = new_scope.GetTemplate("templ");
@@ -159,8 +177,8 @@ TEST(Scope, NonRecursiveMergeTo) {
     Err err;
     Scope::MergeOptions options;
     options.skip_private_vars = true;
-    EXPECT_TRUE(setup.scope()->NonRecursiveMergeTo(
-        &new_scope, options, &assignment, "error", &err));
+    EXPECT_TRUE(setup.scope()->NonRecursiveMergeTo(&new_scope, options,
+                                                   &assignment, "error", &err));
     EXPECT_FALSE(err.has_error());
     EXPECT_FALSE(new_scope.GetValue(private_var_name));
     EXPECT_FALSE(new_scope.GetTemplate("_templ"));
@@ -172,8 +190,8 @@ TEST(Scope, NonRecursiveMergeTo) {
 
     Err err;
     Scope::MergeOptions options;
-    EXPECT_TRUE(setup.scope()->NonRecursiveMergeTo(
-        &new_scope, options, &assignment, "error", &err));
+    EXPECT_TRUE(setup.scope()->NonRecursiveMergeTo(&new_scope, options,
+                                                   &assignment, "error", &err));
     EXPECT_FALSE(err.has_error());
     EXPECT_FALSE(new_scope.CheckForUnusedVars(&err));
     EXPECT_TRUE(err.has_error());
@@ -186,11 +204,29 @@ TEST(Scope, NonRecursiveMergeTo) {
     Err err;
     Scope::MergeOptions options;
     options.mark_dest_used = true;
-    EXPECT_TRUE(setup.scope()->NonRecursiveMergeTo(
-        &new_scope, options, &assignment, "error", &err));
+    EXPECT_TRUE(setup.scope()->NonRecursiveMergeTo(&new_scope, options,
+                                                   &assignment, "error", &err));
     EXPECT_FALSE(err.has_error());
     EXPECT_TRUE(new_scope.CheckForUnusedVars(&err));
     EXPECT_FALSE(err.has_error());
+  }
+
+  // Build dependency files are merged.
+  {
+    Scope from_scope(setup.settings());
+    SourceFile source_file = SourceFile("//a/BUILD.gn");
+    from_scope.AddBuildDependencyFile(source_file);
+
+    Scope to_scope(setup.settings());
+    EXPECT_FALSE(ContainsBuildDependencyFile(&to_scope, source_file));
+
+    Scope::MergeOptions options;
+    Err err;
+    EXPECT_TRUE(from_scope.NonRecursiveMergeTo(&to_scope, options, &assignment,
+                                               "error", &err));
+    EXPECT_FALSE(err.has_error());
+    EXPECT_EQ(1U, to_scope.build_dependency_files().size());
+    EXPECT_TRUE(ContainsBuildDependencyFile(&to_scope, source_file));
   }
 }
 
@@ -202,11 +238,11 @@ TEST(Scope, MakeClosure) {
   // given value.
   InputFile input_file(SourceFile("//foo"));
   Token assignment_token(Location(&input_file, 1, 1, 1), Token::STRING,
-      "\"hello\"");
+                         "\"hello\"");
   LiteralNode assignment;
   assignment.set_value(assignment_token);
   setup.scope()->SetValue("on_root", Value(&assignment, "on_root"),
-                           &assignment);
+                          &assignment);
 
   // Root scope should be const from the nested caller's perspective.
   Scope nested1(static_cast<const Scope*>(setup.scope()));
@@ -218,7 +254,7 @@ TEST(Scope, MakeClosure) {
 
   // Making a closure from the root scope.
   std::unique_ptr<Scope> result = setup.scope()->MakeClosure();
-  EXPECT_FALSE(result->containing());  // Should have no containing scope.
+  EXPECT_FALSE(result->containing());        // Should have no containing scope.
   EXPECT_TRUE(result->GetValue("on_root"));  // Value should be copied.
 
   // Making a closure from the second nested scope.
@@ -237,7 +273,7 @@ TEST(Scope, GetMutableValue) {
   // given value.
   InputFile input_file(SourceFile("//foo"));
   Token assignment_token(Location(&input_file, 1, 1, 1), Token::STRING,
-      "\"hello\"");
+                         "\"hello\"");
   LiteralNode assignment;
   assignment.set_value(assignment_token);
 
@@ -262,12 +298,12 @@ TEST(Scope, GetMutableValue) {
 
   // Check getting root scope values.
   EXPECT_TRUE(mutable_scope2.GetValue(kOnConst, true));
-  EXPECT_FALSE(mutable_scope2.GetMutableValue(
-      kOnConst, Scope::SEARCH_NESTED, true));
+  EXPECT_FALSE(
+      mutable_scope2.GetMutableValue(kOnConst, Scope::SEARCH_NESTED, true));
 
   // Test reading a value from scope 1.
-  Value* mutable1_result = mutable_scope2.GetMutableValue(
-      kOnMutable1, Scope::SEARCH_NESTED, false);
+  Value* mutable1_result =
+      mutable_scope2.GetMutableValue(kOnMutable1, Scope::SEARCH_NESTED, false);
   ASSERT_TRUE(mutable1_result);
   EXPECT_TRUE(*mutable1_result == value);
 
@@ -275,15 +311,15 @@ TEST(Scope, GetMutableValue) {
   // used in the previous step).
   Err err;
   EXPECT_FALSE(mutable_scope1.CheckForUnusedVars(&err));
-  mutable1_result = mutable_scope2.GetMutableValue(
-      kOnMutable1, Scope::SEARCH_NESTED, true);
+  mutable1_result =
+      mutable_scope2.GetMutableValue(kOnMutable1, Scope::SEARCH_NESTED, true);
   EXPECT_TRUE(mutable1_result);
   err = Err();
   EXPECT_TRUE(mutable_scope1.CheckForUnusedVars(&err));
 
   // Test reading a value from scope 2.
-  Value* mutable2_result = mutable_scope2.GetMutableValue(
-      kOnMutable2, Scope::SEARCH_NESTED, true);
+  Value* mutable2_result =
+      mutable_scope2.GetMutableValue(kOnMutable2, Scope::SEARCH_NESTED, true);
   ASSERT_TRUE(mutable2_result);
   EXPECT_TRUE(*mutable2_result == value);
 }

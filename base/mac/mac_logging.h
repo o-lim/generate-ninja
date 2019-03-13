@@ -5,10 +5,9 @@
 #ifndef BASE_MAC_MAC_LOGGING_H_
 #define BASE_MAC_MAC_LOGGING_H_
 
-#include "base/base_export.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "build/build_config.h"
+#include "util/build_config.h"
 
 #if defined(OS_IOS)
 #include <MacTypes.h>
@@ -30,9 +29,9 @@
 namespace logging {
 
 // Returns a UTF8 description from an OS X Status error.
-BASE_EXPORT std::string DescriptionFromOSStatus(OSStatus err);
+std::string DescriptionFromOSStatus(OSStatus err);
 
-class BASE_EXPORT OSStatusLogMessage : public logging::LogMessage {
+class OSStatusLogMessage : public logging::LogMessage {
  public:
   OSStatusLogMessage(const char* file_path,
                      int line,
@@ -48,47 +47,24 @@ class BASE_EXPORT OSStatusLogMessage : public logging::LogMessage {
 
 }  // namespace logging
 
-#if defined(NDEBUG)
-#define MAC_DVLOG_IS_ON(verbose_level) 0
-#else
-#define MAC_DVLOG_IS_ON(verbose_level) VLOG_IS_ON(verbose_level)
-#endif
-
 #define OSSTATUS_LOG_STREAM(severity, status) \
-    COMPACT_GOOGLE_LOG_EX_ ## severity(OSStatusLogMessage, status).stream()
-#define OSSTATUS_VLOG_STREAM(verbose_level, status) \
-    logging::OSStatusLogMessage(__FILE__, __LINE__, \
-                                -verbose_level, status).stream()
+  COMPACT_GOOGLE_LOG_EX_##severity(OSStatusLogMessage, status).stream()
 
 #define OSSTATUS_LOG(severity, status) \
-    LAZY_STREAM(OSSTATUS_LOG_STREAM(severity, status), LOG_IS_ON(severity))
+  LAZY_STREAM(OSSTATUS_LOG_STREAM(severity, status), LOG_IS_ON(severity))
 #define OSSTATUS_LOG_IF(severity, condition, status) \
-    LAZY_STREAM(OSSTATUS_LOG_STREAM(severity, status), \
-                LOG_IS_ON(severity) && (condition))
+  LAZY_STREAM(OSSTATUS_LOG_STREAM(severity, status), \
+              LOG_IS_ON(severity) && (condition))
 
-#define OSSTATUS_VLOG(verbose_level, status) \
-    LAZY_STREAM(OSSTATUS_VLOG_STREAM(verbose_level, status), \
-                VLOG_IS_ON(verbose_level))
-#define OSSTATUS_VLOG_IF(verbose_level, condition, status) \
-    LAZY_STREAM(OSSTATUS_VLOG_STREAM(verbose_level, status), \
-                VLOG_IS_ON(verbose_level) && (condition))
-
-#define OSSTATUS_CHECK(condition, status) \
-    LAZY_STREAM(OSSTATUS_LOG_STREAM(FATAL, status), !(condition)) \
-    << "Check failed: " # condition << ". "
+#define OSSTATUS_CHECK(condition, status)                       \
+  LAZY_STREAM(OSSTATUS_LOG_STREAM(FATAL, status), !(condition)) \
+      << "Check failed: " #condition << ". "
 
 #define OSSTATUS_DLOG(severity, status) \
-    LAZY_STREAM(OSSTATUS_LOG_STREAM(severity, status), DLOG_IS_ON(severity))
+  LAZY_STREAM(OSSTATUS_LOG_STREAM(severity, status), DLOG_IS_ON(severity))
 #define OSSTATUS_DLOG_IF(severity, condition, status) \
-    LAZY_STREAM(OSSTATUS_LOG_STREAM(severity, status), \
-                DLOG_IS_ON(severity) && (condition))
-
-#define OSSTATUS_DVLOG(verbose_level, status) \
-    LAZY_STREAM(OSSTATUS_VLOG_STREAM(verbose_level, status), \
-                MAC_DVLOG_IS_ON(verbose_level))
-#define OSSTATUS_DVLOG_IF(verbose_level, condition, status) \
-    LAZY_STREAM(OSSTATUS_VLOG_STREAM(verbose_level, status), \
-                MAC_DVLOG_IS_ON(verbose_level) && (condition))
+  LAZY_STREAM(OSSTATUS_LOG_STREAM(severity, status),  \
+              DLOG_IS_ON(severity) && (condition))
 
 #define OSSTATUS_DCHECK(condition, status)        \
   LAZY_STREAM(OSSTATUS_LOG_STREAM(FATAL, status), \

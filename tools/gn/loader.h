@@ -11,9 +11,9 @@
 
 #include "base/callback.h"
 #include "base/memory/ref_counted.h"
-#include "base/single_thread_task_runner.h"
 #include "tools/gn/label.h"
 #include "tools/gn/scope.h"
+#include "util/msg_loop.h"
 
 class BuildSettings;
 class LocationRange;
@@ -75,7 +75,8 @@ class LoaderImpl : public Loader {
                               const BuildSettings*,
                               const SourceFile&,
                               const base::Callback<void(const ParseNode*)>&,
-                              Err*)> AsyncLoadFileCallback;
+                              Err*)>
+      AsyncLoadFileCallback;
 
   explicit LoaderImpl(const BuildSettings* build_settings);
 
@@ -90,10 +91,7 @@ class LoaderImpl : public Loader {
   // Sets the task runner corresponding to the main thread. By default this
   // class will use the thread active during construction, but there is not
   // a task runner active during construction all the time.
-  void set_task_runner(
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
-    task_runner_ = task_runner;
-  }
+  void set_task_runner(MsgLoop* task_runner) { task_runner_ = task_runner; }
 
   // The complete callback is called whenever there are no more pending loads.
   // Called on the main thread only. This may be called more than once if the
@@ -121,9 +119,8 @@ class LoaderImpl : public Loader {
   void ScheduleLoadFile(const Settings* settings,
                         const LocationRange& origin,
                         const SourceFile& file);
-  void ScheduleLoadBuildConfig(
-      Settings* settings,
-      const Scope::KeyValueMap& toolchain_overrides);
+  void ScheduleLoadBuildConfig(Settings* settings,
+                               const Scope::KeyValueMap& toolchain_overrides);
 
   // Runs the given file on the background thread. These are called by the
   // input file manager.
@@ -131,10 +128,9 @@ class LoaderImpl : public Loader {
                           const SourceFile& file_name,
                           const LocationRange& origin,
                           const ParseNode* root);
-  void BackgroundLoadBuildConfig(
-      Settings* settings,
-      const Scope::KeyValueMap& toolchain_overrides,
-      const ParseNode* root);
+  void BackgroundLoadBuildConfig(Settings* settings,
+                                 const Scope::KeyValueMap& toolchain_overrides,
+                                 const ParseNode* root);
 
   // Posted to the main thread when any file other than a build config file
   // file has completed running.
@@ -159,7 +155,7 @@ class LoaderImpl : public Loader {
                      const base::Callback<void(const ParseNode*)>& callback,
                      Err* err);
 
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  MsgLoop* task_runner_;
 
   int pending_loads_;
   base::Closure complete_callback_;

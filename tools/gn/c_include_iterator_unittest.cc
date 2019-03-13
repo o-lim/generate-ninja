@@ -4,15 +4,17 @@
 
 #include <stddef.h>
 
-#include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/c_include_iterator.h"
 #include "tools/gn/input_file.h"
 #include "tools/gn/location.h"
+#include "util/test/test.h"
 
 namespace {
 
 bool RangeIs(const LocationRange& range,
-             int line, int begin_char, int end_char) {
+             int line,
+             int begin_char,
+             int end_char) {
   return range.begin().line_number() == line &&
          range.end().line_number() == line &&
          range.begin().column_number() == begin_char &&
@@ -156,4 +158,21 @@ TEST(CIncludeIterator, CStyleComments) {
   CIncludeIterator iter(&file);
   EXPECT_TRUE(iter.GetNextIncludeString(&contents, &range));
   EXPECT_EQ("foo/bar.h", contents);
+}
+
+// Tests that spaces between the hash and directive are ignored.
+TEST(CIncludeIterator, SpacesAfterHash) {
+  std::string buffer("#     include \"foo/bar.h\"\n");
+
+  InputFile file(SourceFile("//foo.cc"));
+  file.SetContents(buffer);
+
+  base::StringPiece contents;
+  LocationRange range;
+
+  CIncludeIterator iter(&file);
+  EXPECT_TRUE(iter.GetNextIncludeString(&contents, &range));
+  EXPECT_EQ("foo/bar.h", contents);
+
+  EXPECT_FALSE(iter.GetNextIncludeString(&contents, &range));
 }

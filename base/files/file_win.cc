@@ -8,8 +8,8 @@
 #include <stdint.h>
 
 #include "base/logging.h"
-#include "base/metrics/histogram_macros.h"
-#include "base/threading/thread_restrictions.h"
+
+#include <windows.h>
 
 namespace base {
 
@@ -35,16 +35,11 @@ void File::Close() {
   if (!file_.IsValid())
     return;
 
-  AssertBlockingAllowed();
-  SCOPED_FILE_TRACE("Close");
   file_.Close();
 }
 
 int64_t File::Seek(Whence whence, int64_t offset) {
-  AssertBlockingAllowed();
   DCHECK(IsValid());
-
-  SCOPED_FILE_TRACE_WITH_SIZE("Seek", offset);
 
   LARGE_INTEGER distance, res;
   distance.QuadPart = offset;
@@ -55,13 +50,10 @@ int64_t File::Seek(Whence whence, int64_t offset) {
 }
 
 int File::Read(int64_t offset, char* data, int size) {
-  AssertBlockingAllowed();
   DCHECK(IsValid());
   DCHECK(!async_);
   if (size < 0)
     return -1;
-
-  SCOPED_FILE_TRACE_WITH_SIZE("Read", size);
 
   LARGE_INTEGER offset_li;
   offset_li.QuadPart = offset;
@@ -80,13 +72,10 @@ int File::Read(int64_t offset, char* data, int size) {
 }
 
 int File::ReadAtCurrentPos(char* data, int size) {
-  AssertBlockingAllowed();
   DCHECK(IsValid());
   DCHECK(!async_);
   if (size < 0)
     return -1;
-
-  SCOPED_FILE_TRACE_WITH_SIZE("ReadAtCurrentPos", size);
 
   DWORD bytes_read;
   if (::ReadFile(file_.Get(), data, size, &bytes_read, NULL))
@@ -108,11 +97,8 @@ int File::ReadAtCurrentPosNoBestEffort(char* data, int size) {
 }
 
 int File::Write(int64_t offset, const char* data, int size) {
-  AssertBlockingAllowed();
   DCHECK(IsValid());
   DCHECK(!async_);
-
-  SCOPED_FILE_TRACE_WITH_SIZE("Write", size);
 
   LARGE_INTEGER offset_li;
   offset_li.QuadPart = offset;
@@ -129,13 +115,10 @@ int File::Write(int64_t offset, const char* data, int size) {
 }
 
 int File::WriteAtCurrentPos(const char* data, int size) {
-  AssertBlockingAllowed();
   DCHECK(IsValid());
   DCHECK(!async_);
   if (size < 0)
     return -1;
-
-  SCOPED_FILE_TRACE_WITH_SIZE("WriteAtCurrentPos", size);
 
   DWORD bytes_written;
   if (::WriteFile(file_.Get(), data, size, &bytes_written, NULL))
@@ -149,10 +132,7 @@ int File::WriteAtCurrentPosNoBestEffort(const char* data, int size) {
 }
 
 int64_t File::GetLength() {
-  AssertBlockingAllowed();
   DCHECK(IsValid());
-
-  SCOPED_FILE_TRACE("GetLength");
 
   LARGE_INTEGER size;
   if (!::GetFileSizeEx(file_.Get(), &size))
@@ -162,10 +142,7 @@ int64_t File::GetLength() {
 }
 
 bool File::SetLength(int64_t length) {
-  AssertBlockingAllowed();
   DCHECK(IsValid());
-
-  SCOPED_FILE_TRACE_WITH_SIZE("SetLength", length);
 
   // Get the current file pointer.
   LARGE_INTEGER file_pointer;
@@ -192,23 +169,8 @@ bool File::SetLength(int64_t length) {
            FALSE));
 }
 
-bool File::SetTimes(Time last_access_time, Time last_modified_time) {
-  AssertBlockingAllowed();
-  DCHECK(IsValid());
-
-  SCOPED_FILE_TRACE("SetTimes");
-
-  FILETIME last_access_filetime = last_access_time.ToFileTime();
-  FILETIME last_modified_filetime = last_modified_time.ToFileTime();
-  return (::SetFileTime(file_.Get(), NULL, &last_access_filetime,
-                        &last_modified_filetime) != FALSE);
-}
-
 bool File::GetInfo(Info* info) {
-  AssertBlockingAllowed();
   DCHECK(IsValid());
-
-  SCOPED_FILE_TRACE("GetInfo");
 
   BY_HANDLE_FILE_INFORMATION file_info;
   if (!GetFileInformationByHandle(file_.Get(), &file_info))
@@ -221,31 +183,29 @@ bool File::GetInfo(Info* info) {
   info->is_directory =
       (file_info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
   info->is_symbolic_link = false;  // Windows doesn't have symbolic links.
-  info->last_modified = Time::FromFileTime(file_info.ftLastWriteTime);
-  info->last_accessed = Time::FromFileTime(file_info.ftLastAccessTime);
-  info->creation_time = Time::FromFileTime(file_info.ftCreationTime);
+  info->last_modified =
+      *reinterpret_cast<uint64_t*>(&file_info.ftLastWriteTime);
+  info->last_accessed =
+      *reinterpret_cast<uint64_t*>(&file_info.ftLastAccessTime);
+  info->creation_time = *reinterpret_cast<uint64_t*>(&file_info.ftCreationTime);
   return true;
 }
 
 File::Error File::Lock() {
   DCHECK(IsValid());
 
-  SCOPED_FILE_TRACE("Lock");
-
   BOOL result = LockFile(file_.Get(), 0, 0, MAXDWORD, MAXDWORD);
   if (!result)
-    return OSErrorToFileError(GetLastError());
+    return GetLastFileError();
   return FILE_OK;
 }
 
 File::Error File::Unlock() {
   DCHECK(IsValid());
 
-  SCOPED_FILE_TRACE("Unlock");
-
   BOOL result = UnlockFile(file_.Get(), 0, 0, MAXDWORD, MAXDWORD);
   if (!result)
-    return OSErrorToFileError(GetLastError());
+    return GetLastFileError();
   return FILE_OK;
 }
 
@@ -253,18 +213,16 @@ File File::Duplicate() const {
   if (!IsValid())
     return File();
 
-  SCOPED_FILE_TRACE("Duplicate");
-
   HANDLE other_handle = nullptr;
 
   if (!::DuplicateHandle(GetCurrentProcess(),  // hSourceProcessHandle
                          GetPlatformFile(),
                          GetCurrentProcess(),  // hTargetProcessHandle
                          &other_handle,
-                         0,  // dwDesiredAccess ignored due to SAME_ACCESS
+                         0,      // dwDesiredAccess ignored due to SAME_ACCESS
                          FALSE,  // !bInheritHandle
                          DUPLICATE_SAME_ACCESS)) {
-    return File(OSErrorToFileError(GetLastError()));
+    return File(GetLastFileError());
   }
 
   File other(other_handle);
@@ -284,6 +242,7 @@ File::Error File::OSErrorToFileError(DWORD last_error) {
   switch (last_error) {
     case ERROR_SHARING_VIOLATION:
       return FILE_ERROR_IN_USE;
+    case ERROR_ALREADY_EXISTS:
     case ERROR_FILE_EXISTS:
       return FILE_ERROR_EXISTS;
     case ERROR_FILE_NOT_FOUND:
@@ -310,14 +269,13 @@ File::Error File::OSErrorToFileError(DWORD last_error) {
     case ERROR_DISK_CORRUPT:
       return FILE_ERROR_IO;
     default:
-      UMA_HISTOGRAM_SPARSE_SLOWLY("PlatformFile.UnknownErrors.Windows",
-                                  last_error);
+      // This function should only be called for errors.
+      DCHECK_NE(static_cast<DWORD>(ERROR_SUCCESS), last_error);
       return FILE_ERROR_FAILED;
   }
 }
 
 void File::DoInitialize(const FilePath& path, uint32_t flags) {
-  AssertBlockingAllowed();
   DCHECK(!IsValid());
 
   DWORD disposition = 0;
@@ -348,6 +306,8 @@ void File::DoInitialize(const FilePath& path, uint32_t flags) {
   }
 
   if (!disposition) {
+    ::SetLastError(ERROR_INVALID_PARAMETER);
+    error_details_ = FILE_ERROR_FAILED;
     NOTREACHED();
     return;
   }
@@ -388,8 +348,8 @@ void File::DoInitialize(const FilePath& path, uint32_t flags) {
   if (flags & FLAG_SEQUENTIAL_SCAN)
     create_flags |= FILE_FLAG_SEQUENTIAL_SCAN;
 
-  file_.Set(CreateFile(path.value().c_str(), access, sharing, NULL,
-                       disposition, create_flags, NULL));
+  file_.Set(CreateFile(path.value().c_str(), access, sharing, NULL, disposition,
+                       create_flags, NULL));
 
   if (file_.IsValid()) {
     error_details_ = FILE_OK;
@@ -400,19 +360,22 @@ void File::DoInitialize(const FilePath& path, uint32_t flags) {
     else if (flags & (FLAG_CREATE_ALWAYS | FLAG_CREATE))
       created_ = true;
   } else {
-    error_details_ = OSErrorToFileError(GetLastError());
+    error_details_ = GetLastFileError();
   }
 }
 
 bool File::Flush() {
-  AssertBlockingAllowed();
   DCHECK(IsValid());
-  SCOPED_FILE_TRACE("Flush");
   return ::FlushFileBuffers(file_.Get()) != FALSE;
 }
 
 void File::SetPlatformFile(PlatformFile file) {
   file_.Set(file);
+}
+
+// static
+File::Error File::GetLastFileError() {
+  return File::OSErrorToFileError(GetLastError());
 }
 
 }  // namespace base

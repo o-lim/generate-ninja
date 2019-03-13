@@ -13,12 +13,7 @@
 
 #include "base/numerics/safe_conversions_impl.h"
 
-#if !defined(__native_client__) && (defined(__ARMEL__) || defined(__arch64__))
-#include "base/numerics/safe_conversions_arm_impl.h"
-#define BASE_HAS_OPTIMIZED_SAFE_CONVERSIONS (1)
-#else
 #define BASE_HAS_OPTIMIZED_SAFE_CONVERSIONS (0)
-#endif
 
 namespace base {
 namespace internal {
@@ -327,14 +322,14 @@ BASE_NUMERIC_COMPARISON_OPERATORS(Strict, IsNotEqual, !=);
 using internal::as_signed;
 using internal::as_unsigned;
 using internal::checked_cast;
-using internal::strict_cast;
-using internal::saturated_cast;
-using internal::SafeUnsignedAbs;
-using internal::StrictNumeric;
-using internal::MakeStrictNum;
-using internal::IsValueInRangeForNumericType;
 using internal::IsTypeInRangeForNumericType;
+using internal::IsValueInRangeForNumericType;
 using internal::IsValueNegative;
+using internal::MakeStrictNum;
+using internal::SafeUnsignedAbs;
+using internal::saturated_cast;
+using internal::strict_cast;
+using internal::StrictNumeric;
 
 // Explicitly make a shorter size_t alias for convenience.
 using SizeT = StrictNumeric<size_t>;

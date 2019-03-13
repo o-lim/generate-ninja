@@ -7,8 +7,8 @@
 #include "base/command_line.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/strings/string_util.h"
-#include "build/build_config.h"
-#include "testing/gtest/include/gtest/gtest.h"
+#include "util/build_config.h"
+#include "util/test/test.h"
 
 #if defined(OS_WIN)
 #include "base/strings/utf_string_conversions.h"
@@ -58,8 +58,7 @@ TEST(ExecProcessTest, TestExitCode) {
       ExecPython("import sys; sys.exit(253)", &std_out, &std_err, &exit_code));
   EXPECT_EQ(253, exit_code);
 
-  ASSERT_TRUE(
-      ExecPython("throw Exception()", &std_out, &std_err, &exit_code));
+  ASSERT_TRUE(ExecPython("throw Exception()", &std_out, &std_err, &exit_code));
   EXPECT_EQ(1, exit_code);
 }
 
@@ -68,26 +67,22 @@ TEST(ExecProcessTest, TestExitCode) {
 // byte buffer and, if stdout is non-blocking, python will throw an IOError when
 // a write exceeds the buffer size.
 TEST(ExecProcessTest, TestLargeOutput) {
-  base::ScopedTempDir temp_dir;
   std::string std_out, std_err;
   int exit_code;
 
-  ASSERT_TRUE(ExecPython(
-      "import sys; print 'o' * 1000000", &std_out, &std_err, &exit_code));
+  ASSERT_TRUE(ExecPython("import sys; print 'o' * 1000000", &std_out, &std_err,
+                         &exit_code));
   EXPECT_EQ(0, exit_code);
   EXPECT_EQ(1000001u, std_out.size());
 }
 
 TEST(ExecProcessTest, TestStdoutAndStderrOutput) {
-  base::ScopedTempDir temp_dir;
   std::string std_out, std_err;
   int exit_code;
 
   ASSERT_TRUE(ExecPython(
       "import sys; print 'o' * 10000; print >>sys.stderr, 'e' * 10000",
-      &std_out,
-      &std_err,
-      &exit_code));
+      &std_out, &std_err, &exit_code));
   EXPECT_EQ(0, exit_code);
   EXPECT_EQ(10001u, std_out.size());
   EXPECT_EQ(10001u, std_err.size());
@@ -96,9 +91,7 @@ TEST(ExecProcessTest, TestStdoutAndStderrOutput) {
   std_err.clear();
   ASSERT_TRUE(ExecPython(
       "import sys; print >>sys.stderr, 'e' * 10000; print 'o' * 10000",
-      &std_out,
-      &std_err,
-      &exit_code));
+      &std_out, &std_err, &exit_code));
   EXPECT_EQ(0, exit_code);
   EXPECT_EQ(10001u, std_out.size());
   EXPECT_EQ(10001u, std_err.size());
@@ -109,9 +102,7 @@ TEST(ExecProcessTest, TestOneOutputClosed) {
   int exit_code;
 
   ASSERT_TRUE(ExecPython("import sys; sys.stderr.close(); print 'o' * 10000",
-                         &std_out,
-                         &std_err,
-                         &exit_code));
+                         &std_out, &std_err, &exit_code));
   EXPECT_EQ(0, exit_code);
   EXPECT_EQ(10001u, std_out.size());
   EXPECT_EQ(std_err.size(), 0u);
@@ -120,9 +111,7 @@ TEST(ExecProcessTest, TestOneOutputClosed) {
   std_err.clear();
   ASSERT_TRUE(ExecPython(
       "import sys; sys.stdout.close(); print >>sys.stderr, 'e' * 10000",
-      &std_out,
-      &std_err,
-      &exit_code));
+      &std_out, &std_err, &exit_code));
   EXPECT_EQ(0, exit_code);
   EXPECT_EQ(0u, std_out.size());
   EXPECT_EQ(10001u, std_err.size());

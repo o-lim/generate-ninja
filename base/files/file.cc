@@ -4,27 +4,20 @@
 
 #include "base/files/file.h"
 #include "base/files/file_path.h"
-#include "base/files/file_tracing.h"
-#include "base/metrics/histogram.h"
-#include "base/timer/elapsed_timer.h"
-#include "build/build_config.h"
+#include "util/build_config.h"
+
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
+#include <errno.h>
+#endif
 
 namespace base {
 
-File::Info::Info()
-    : size(0),
-      is_directory(false),
-      is_symbolic_link(false) {
-}
+File::Info::Info() : size(0), is_directory(false), is_symbolic_link(false) {}
 
-File::Info::~Info() {
-}
+File::Info::~Info() = default;
 
 File::File()
-    : error_details_(FILE_ERROR_FAILED),
-      created_(false),
-      async_(false) {
-}
+    : error_details_(FILE_ERROR_FAILED), created_(false), async_(false) {}
 
 #if !defined(OS_NACL)
 File::File(const FilePath& path, uint32_t flags)
@@ -38,20 +31,16 @@ File::File(PlatformFile platform_file)
       error_details_(FILE_OK),
       created_(false),
       async_(false) {
-#if defined(OS_POSIX)
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
   DCHECK_GE(platform_file, -1);
 #endif
 }
 
 File::File(Error error_details)
-    : error_details_(error_details),
-      created_(false),
-      async_(false) {
-}
+    : error_details_(error_details), created_(false), async_(false) {}
 
 File::File(File&& other)
     : file_(other.TakePlatformFile()),
-      tracing_path_(other.tracing_path_),
       error_details_(other.error_details()),
       created_(other.created()),
       async_(other.async_) {}
@@ -73,7 +62,6 @@ File File::CreateForAsyncHandle(PlatformFile platform_file) {
 File& File::operator=(File&& other) {
   Close();
   SetPlatformFile(other.TakePlatformFile());
-  tracing_path_ = other.tracing_path_;
   error_details_ = other.error_details();
   created_ = other.created();
   async_ = other.async_;
@@ -83,12 +71,16 @@ File& File::operator=(File&& other) {
 #if !defined(OS_NACL)
 void File::Initialize(const FilePath& path, uint32_t flags) {
   if (path.ReferencesParent()) {
+#if defined(OS_WIN)
+    ::SetLastError(ERROR_ACCESS_DENIED);
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
+    errno = EACCES;
+#else
+#error Unsupported platform
+#endif
     error_details_ = FILE_ERROR_ACCESS_DENIED;
     return;
   }
-  if (FileTracing::IsCategoryEnabled())
-    tracing_path_ = path;
-  SCOPED_FILE_TRACE("Initialize");
   DoInitialize(path, flags);
 }
 #endif

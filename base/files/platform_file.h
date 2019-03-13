@@ -6,11 +6,11 @@
 #define BASE_FILES_PLATFORM_FILE_H_
 
 #include "base/files/scoped_file.h"
-#include "build/build_config.h"
+#include "util/build_config.h"
 
 #if defined(OS_WIN)
-#include <windows.h>
 #include "base/win/scoped_handle.h"
+#include "base/win/windows_types.h"
 #endif
 
 // This file defines platform-independent types for dealing with
@@ -29,7 +29,7 @@ using ScopedPlatformFile = ::base::win::ScopedHandle;
 // disallowed in constexpr. Visual Studio accepts this, however.
 const PlatformFile kInvalidPlatformFile = INVALID_HANDLE_VALUE;
 
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
 
 using PlatformFile = int;
 using ScopedPlatformFile = ::base::ScopedFD;
@@ -38,6 +38,6 @@ constexpr PlatformFile kInvalidPlatformFile = -1;
 
 #endif
 
-}  // namespace
+}  // namespace base
 
 #endif  // BASE_FILES_PLATFORM_FILE_H_

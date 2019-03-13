@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/functions.h"
 #include "tools/gn/test_with_scope.h"
+#include "util/test/test.h"
 
 namespace {
 
@@ -23,8 +23,8 @@ class GetLabelInfoTest : public testing::Test {
     args.push_back(Value(nullptr, what));
 
     Err err;
-    Value result = functions::RunGetLabelInfo(setup_.scope(), &function,
-                                              args, &err);
+    Value result =
+        functions::RunGetLabelInfo(setup_.scope(), &function, args, &err);
     if (err.has_error()) {
       EXPECT_TRUE(result.type() == Value::NONE);
       return std::string();

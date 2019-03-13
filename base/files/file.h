@@ -9,24 +9,23 @@
 
 #include <string>
 
-#include "base/base_export.h"
 #include "base/files/file_path.h"
-#include "base/files/file_tracing.h"
 #include "base/files/platform_file.h"
 #include "base/files/scoped_file.h"
 #include "base/macros.h"
-#include "base/time/time.h"
-#include "build/build_config.h"
+#include "util/build_config.h"
+#include "util/ticks.h"
 
-#if defined(OS_POSIX)
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
 #include <sys/stat.h>
 #endif
 
 namespace base {
 
-#if defined(OS_BSD) || defined(OS_MACOSX) || defined(OS_NACL)
+#if defined(OS_BSD) || defined(OS_MACOSX) || defined(OS_NACL) || \
+    defined(OS_ANDROID) && __ANDROID_API__ < 21
 typedef struct stat stat_wrapper_t;
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
 typedef struct stat64 stat_wrapper_t;
 #endif
 
@@ -40,7 +39,7 @@ typedef struct stat64 stat_wrapper_t;
 // obvious non-modifying way are marked as const. Any method that forward calls
 // to the OS is not considered const, even if there is no apparent change to
 // member variables.
-class BASE_EXPORT File {
+class File {
  public:
   // FLAG_(OPEN|CREATE).* are mutually exclusive. You should specify exactly one
   // of the five (possibly combining with other flags) when opening or creating
@@ -77,9 +76,9 @@ class BASE_EXPORT File {
                                          // See DeleteOnClose() for details.
   };
 
-  // This enum has been recorded in multiple histograms. If the order of the
-  // fields needs to change, please ensure that those histograms are obsolete or
-  // have been moved to a different enum.
+  // This enum has been recorded in multiple histograms using PlatformFileError
+  // enum. If the order of the fields needs to change, please ensure that those
+  // histograms are obsolete or have been moved to a different enum.
   //
   // FILE_ERROR_ACCESS_DENIED is returned when a call fails because of a
   // filesystem restriction. FILE_ERROR_SECURITY is returned when a browser
@@ -107,21 +106,17 @@ class BASE_EXPORT File {
   };
 
   // This explicit mapping matches both FILE_ on Windows and SEEK_ on Linux.
-  enum Whence {
-    FROM_BEGIN   = 0,
-    FROM_CURRENT = 1,
-    FROM_END     = 2
-  };
+  enum Whence { FROM_BEGIN = 0, FROM_CURRENT = 1, FROM_END = 2 };
 
   // Used to hold information about a given file.
   // If you add more fields to this structure (platform-specific fields are OK),
   // make sure to update all functions that use it in file_util_{win|posix}.cc,
   // too, and the ParamTraits<base::File::Info> implementation in
   // ipc/ipc_message_utils.cc.
-  struct BASE_EXPORT Info {
+  struct Info {
     Info();
     ~Info();
-#if defined(OS_POSIX)
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
     // Fills this struct with values from |stat_info|.
     void FromStat(const stat_wrapper_t& stat_info);
 #endif
@@ -137,13 +132,13 @@ class BASE_EXPORT File {
     bool is_symbolic_link;
 
     // The last modified time of a file.
-    Time last_modified;
+    Ticks last_modified;
 
     // The last accessed time of a file.
-    Time last_accessed;
+    Ticks last_accessed;
 
     // The creation time of a file.
-    Time creation_time;
+    Ticks creation_time;
   };
 
   File();
@@ -254,9 +249,6 @@ class BASE_EXPORT File {
   //  0.01 %  > 7.6 seconds
   bool Flush();
 
-  // Updates the file times.
-  bool SetTimes(Time last_access_time, Time last_modified_time);
-
   // Returns some basic information for the given file.
   bool GetInfo(Info* info);
 
@@ -330,16 +322,20 @@ class BASE_EXPORT File {
 
 #if defined(OS_WIN)
   static Error OSErrorToFileError(DWORD last_error);
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   static Error OSErrorToFileError(int saved_errno);
 #endif
+
+  // Gets the last global error (errno or GetLastError()) and converts it to the
+  // closest base::File::Error equivalent via OSErrorToFileError(). The returned
+  // value is only trustworthy immediately after another base::File method
+  // fails. base::File never resets the global error to zero.
+  static Error GetLastFileError();
 
   // Converts an error value to a human-readable form. Used for logging.
   static std::string ErrorToString(Error error);
 
  private:
-  friend class FileTracing::ScopedTrace;
-
   // Creates or opens the given file. Only called if |path| has no
   // traversal ('..') components.
   void DoInitialize(const FilePath& path, uint32_t flags);
@@ -347,13 +343,6 @@ class BASE_EXPORT File {
   void SetPlatformFile(PlatformFile file);
 
   ScopedPlatformFile file_;
-
-  // A path to use for tracing purposes. Set if file tracing is enabled during
-  // |Initialize()|.
-  FilePath tracing_path_;
-
-  // Object tied to the lifetime of |this| that enables/disables tracing.
-  FileTracing::ScopedEnabler trace_enabler_;
 
   Error error_details_;
   bool created_;
@@ -365,4 +354,3 @@ class BASE_EXPORT File {
 }  // namespace base
 
 #endif  // BASE_FILES_FILE_H_
-

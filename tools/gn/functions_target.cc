@@ -14,12 +14,12 @@
 #include "tools/gn/variables.h"
 
 #define DEPENDENT_CONFIG_VARS \
-    "  Dependent configs: all_dependent_configs, public_configs\n"
-#define DEPS_VARS \
-    "  Deps: data_deps, deps, public_deps\n"
-#define GENERAL_TARGET_VARS \
-    "  General: check_includes, configs, data, inputs, output_name,\n" \
-    "           output_extension, public, sources, testonly, visibility\n"
+  "  Dependent configs: all_dependent_configs, public_configs\n"
+#define DEPS_VARS "  Deps: data_deps, deps, public_deps\n"
+#define GENERAL_TARGET_VARS                                                \
+  "  General: check_includes, configs, data, friend, inputs, metadata,\n"  \
+  "           output_name, output_extension, public, sources, testonly,\n" \
+  "           visibility\n"
 
 namespace functions {
 
@@ -39,16 +39,16 @@ Value ExecuteGenericTarget(const char* target_type,
       !EnsureNotProcessingBuildConfig(function, scope, err))
     return Value();
   Scope block_scope(scope);
-  if (!FillTargetBlockScope(scope, function, target_type, block,
-                            args, &block_scope, err))
+  if (!FillTargetBlockScope(scope, function, target_type, block, args,
+                            &block_scope, err))
     return Value();
 
   block->Execute(&block_scope, err);
   if (err->has_error())
     return Value();
 
-  TargetGenerator::GenerateTarget(&block_scope, function, args,
-                                  target_type, err);
+  TargetGenerator::GenerateTarget(&block_scope, function, args, target_type,
+                                  err);
   if (err->has_error())
     return Value();
 
@@ -61,28 +61,31 @@ Value ExecuteGenericTarget(const char* target_type,
 // action ----------------------------------------------------------------------
 
 // Common help paragraph on script runtime execution directories.
-#define SCRIPT_EXECUTION_CONTEXT \
-    "  The script will be executed with the given arguments with the current\n"\
-    "  directory being that of the root build directory. If you pass files\n"\
-    "  to your script, see \"gn help rebase_path\" for how to convert\n" \
-    "  file names to be relative to the build directory (file names in the\n" \
-    "  sources, outputs, and inputs will be all treated as relative to the\n" \
-    "  current build file and converted as needed automatically).\n"
+#define SCRIPT_EXECUTION_CONTEXT                                              \
+  "\n"                                                                        \
+  "  The script will be executed with the given arguments with the current\n" \
+  "  directory being that of the root build directory. If you pass files\n"   \
+  "  to your script, see \"gn help rebase_path\" for how to convert\n"        \
+  "  file names to be relative to the build directory (file names in the\n"   \
+  "  sources, outputs, and inputs will be all treated as relative to the\n"   \
+  "  current build file and converted as needed automatically).\n"
 
 // Common help paragraph on script output directories.
-#define SCRIPT_EXECUTION_OUTPUTS \
-    "  All output files must be inside the output directory of the build.\n" \
-    "  You would generally use |$target_out_dir| or |$target_gen_dir| to\n" \
-    "  reference the output or generated intermediate file directories,\n" \
-    "  respectively.\n"
+#define SCRIPT_EXECUTION_OUTPUTS                                           \
+  "\n"                                                                     \
+  "  All output files must be inside the output directory of the build.\n" \
+  "  You would generally use |$target_out_dir| or |$target_gen_dir| to\n"  \
+  "  reference the output or generated intermediate file directories,\n"   \
+  "  respectively.\n"
 
-#define ACTION_DEPS \
-    "  The \"deps\" and \"public_deps\" for an action will always be\n" \
-    "  completed before any part of the action is run so it can depend on\n" \
-    "  the output of previous steps. The \"data_deps\" will be built if the\n" \
-    "  action is built, but may not have completed before all steps of the\n" \
-    "  action are started. This can give additional parallelism in the build\n"\
-    "  for runtime-only dependencies.\n"
+#define ACTION_DEPS                                                           \
+  "\n"                                                                        \
+  "  The \"deps\" and \"public_deps\" for an action will always be\n"         \
+  "  completed before any part of the action is run so it can depend on\n"    \
+  "  the output of previous steps. The \"data_deps\" will be built if the\n"  \
+  "  action is built, but may not have completed before all steps of the\n"   \
+  "  action are started. This can give additional parallelism in the build\n" \
+  "  for runtime-only dependencies.\n"
 
 const char kAction[] = "action";
 const char kAction_HelpShort[] =
@@ -116,27 +119,27 @@ Inputs
   variable.
 )"
 
-  ACTION_DEPS
+    ACTION_DEPS
 
-R"(
+    R"(
 Outputs
 
   You should specify files created by your script by specifying them in the
   "outputs".
 )"
 
-  SCRIPT_EXECUTION_CONTEXT
+    SCRIPT_EXECUTION_CONTEXT
 
-R"(
+    R"(
 File name handling
 )"
 
-  SCRIPT_EXECUTION_OUTPUTS
+    SCRIPT_EXECUTION_OUTPUTS
 
-R"(
+    R"(
 Variables
 
-  args, data, data_deps, depfile, deps, inputs, outputs*, pool,
+  args, data, data_deps, depfile, deps, inputs, metadata, outputs*, pool,
   response_file_contents, script*, sources
   * = required
 
@@ -162,8 +165,8 @@ Value RunAction(Scope* scope,
                 const std::vector<Value>& args,
                 BlockNode* block,
                 Err* err) {
-  return ExecuteGenericTarget(functions::kAction, scope, function, args,
-                              block, err);
+  return ExecuteGenericTarget(functions::kAction, scope, function, args, block,
+                              err);
 }
 
 // action_foreach --------------------------------------------------------------
@@ -196,20 +199,17 @@ Inputs
   You can dynamically write input dependencies (for incremental rebuilds if an
   input file changes) by writing a depfile when the script is run (see "gn help
   depfile"). This is more flexible than "inputs".
-)"
-  ACTION_DEPS
-R"(
+)" ACTION_DEPS
+    R"(
 Outputs
-)"
-  SCRIPT_EXECUTION_CONTEXT
-R"(
+)" SCRIPT_EXECUTION_CONTEXT
+    R"(
 File name handling
-)"
-  SCRIPT_EXECUTION_OUTPUTS
-R"(
+)" SCRIPT_EXECUTION_OUTPUTS
+    R"(
 Variables
 
-  args, data, data_deps, depfile, deps, inputs, outputs*, pool,
+  args, data, data_deps, depfile, deps, inputs, metadata, outputs*, pool,
   response_file_contents, script*, sources*
   * = required
 
@@ -273,7 +273,7 @@ const char kBundleData_Help[] =
 
 Variables
 
-  sources*, outputs*, deps, data_deps, public_deps, visibility
+  sources*, outputs*, deps, data_deps, metadata, public_deps, visibility
   * = required
 
 Examples
@@ -362,7 +362,8 @@ Variables
   bundle_executable_dir*, bundle_plugins_dir*, bundle_deps_filter, deps,
   data_deps, public_deps, visibility, product_type, code_signing_args,
   code_signing_script, code_signing_sources, code_signing_outputs,
-  xcode_extra_attributes, xcode_test_application_name, partial_info_plist
+  xcode_extra_attributes, xcode_test_application_name, partial_info_plist,
+  metadata
   * = required
 
 Example
@@ -478,8 +479,7 @@ Value RunCreateBundle(Scope* scope,
 // copy ------------------------------------------------------------------------
 
 const char kCopy[] = "copy";
-const char kCopy_HelpShort[] =
-    "copy: Declare a target that copies files.";
+const char kCopy_HelpShort[] = "copy: Declare a target that copies files.";
 const char kCopy_Help[] =
     R"(copy: Declare a target that copies files.
 
@@ -537,11 +537,7 @@ const char kExecutable_Help[] =
 
 Variables
 
-)"
-    CONFIG_VALUES_VARS_HELP
-    DEPS_VARS
-    DEPENDENT_CONFIG_VARS
-    GENERAL_TARGET_VARS;
+)" CONFIG_VALUES_VARS_HELP DEPS_VARS DEPENDENT_CONFIG_VARS GENERAL_TARGET_VARS;
 
 Value RunExecutable(Scope* scope,
                     const FunctionCallNode* function,
@@ -555,8 +551,7 @@ Value RunExecutable(Scope* scope,
 // group -----------------------------------------------------------------------
 
 const char kGroup[] = "group";
-const char kGroup_HelpShort[] =
-    "group: Declare a named group of targets.";
+const char kGroup_HelpShort[] = "group: Declare a named group of targets.";
 const char kGroup_Help[] =
     R"(group: Declare a named group of targets.
 
@@ -566,11 +561,9 @@ const char kGroup_Help[] =
 
 Variables
 
-)"
-    DEPS_VARS
-    DEPENDENT_CONFIG_VARS
+)" DEPS_VARS DEPENDENT_CONFIG_VARS
 
-R"(
+    R"(
 Example
 
   group("all") {
@@ -586,8 +579,8 @@ Value RunGroup(Scope* scope,
                const std::vector<Value>& args,
                BlockNode* block,
                Err* err) {
-  return ExecuteGenericTarget(functions::kGroup, scope, function, args,
-                              block, err);
+  return ExecuteGenericTarget(functions::kGroup, scope, function, args, block,
+                              err);
 }
 
 // loadable_module -------------------------------------------------------------
@@ -608,17 +601,13 @@ const char kLoadableModule_Help[] =
 
 Variables
 
-)"
-    CONFIG_VALUES_VARS_HELP
-    DEPS_VARS
-    DEPENDENT_CONFIG_VARS
-    GENERAL_TARGET_VARS;
+)" CONFIG_VALUES_VARS_HELP DEPS_VARS DEPENDENT_CONFIG_VARS GENERAL_TARGET_VARS;
 
 Value RunLoadableModule(Scope* scope,
-                       const FunctionCallNode* function,
-                       const std::vector<Value>& args,
-                       BlockNode* block,
-                       Err* err) {
+                        const FunctionCallNode* function,
+                        const std::vector<Value>& args,
+                        BlockNode* block,
+                        Err* err) {
   return ExecuteGenericTarget(functions::kLoadableModule, scope, function, args,
                               block, err);
 }
@@ -639,11 +628,7 @@ const char kSharedLibrary_Help[] =
 
 Variables
 
-)"
-    CONFIG_VALUES_VARS_HELP
-    DEPS_VARS
-    DEPENDENT_CONFIG_VARS
-    GENERAL_TARGET_VARS;
+)" CONFIG_VALUES_VARS_HELP DEPS_VARS DEPENDENT_CONFIG_VARS GENERAL_TARGET_VARS;
 
 Value RunSharedLibrary(Scope* scope,
                        const FunctionCallNode* function,
@@ -656,10 +641,9 @@ Value RunSharedLibrary(Scope* scope,
 
 // source_set ------------------------------------------------------------------
 
-extern const char kSourceSet[] = "source_set";
-extern const char kSourceSet_HelpShort[] =
-    "source_set: Declare a source set target.";
-extern const char kSourceSet_Help[] =
+const char kSourceSet[] = "source_set";
+const char kSourceSet_HelpShort[] = "source_set: Declare a source set target.";
+const char kSourceSet_Help[] =
     R"(source_set: Declare a source set target.
 
   A source set is a collection of sources that get compiled, but are not linked
@@ -678,18 +662,14 @@ extern const char kSourceSet_Help[] =
   code elimination to delete code not reachable from exported functions.
 
   A source set will not do this code elimination since there is no link step.
-  This allows you to link many sources sets into a shared library and have the
+  This allows you to link many source sets into a shared library and have the
   "exported symbol" notation indicate "export from the final shared library and
   not from the intermediate targets." There is no way to express this concept
   when linking multiple static libraries into a shared library.
 
 Variables
 
-)"
-    CONFIG_VALUES_VARS_HELP
-    DEPS_VARS
-    DEPENDENT_CONFIG_VARS
-    GENERAL_TARGET_VARS;
+)" CONFIG_VALUES_VARS_HELP DEPS_VARS DEPENDENT_CONFIG_VARS GENERAL_TARGET_VARS;
 
 Value RunSourceSet(Scope* scope,
                    const FunctionCallNode* function,
@@ -717,11 +697,7 @@ const char kStaticLibrary_Help[] =
 Variables
 
   complete_static_lib
-)"
-    CONFIG_VALUES_VARS_HELP
-    DEPS_VARS
-    DEPENDENT_CONFIG_VARS
-    GENERAL_TARGET_VARS;
+)" CONFIG_VALUES_VARS_HELP DEPS_VARS DEPENDENT_CONFIG_VARS GENERAL_TARGET_VARS;
 
 Value RunStaticLibrary(Scope* scope,
                        const FunctionCallNode* function,
@@ -793,6 +769,147 @@ Value RunTarget(Scope* scope,
 
   // Otherwise, assume the target is a built-in target type.
   return ExecuteGenericTarget(target_type.c_str(), scope, function, sub_args,
+                              block, err);
+}
+
+const char kGeneratedFile[] = "generated_file";
+const char kGeneratedFile_HelpShort[] =
+    "generated_file: Declare a generated_file target.";
+const char kGeneratedFile_Help[] =
+    R"(generated_file: Declare a generated_file target.
+
+  Writes data value(s) to disk on resolution. This target type mirrors some
+  functionality of the write_file() function, but also provides the ability to
+  collect metadata from its dependencies on resolution rather than writing out
+  parse time.
+
+  The `outputs` variable is required to be a list with a single element,
+  specifying the intended location of the output file.
+
+  The `output_conversion` variable specified the format to write the
+  value. See `gn help output_conversion`.
+
+  One of `contents` or `data_keys` must be specified; use of `data` will write
+  the contents of that value to file, while use of `data_keys` will trigger a
+  metadata collection walk based on the dependencies of the target and the
+  optional values of the `rebase` and `walk_keys` variables. See
+  `gn help metadata`.
+
+  Collected metadata, if specified, will be returned in postorder of
+  dependencies. See the example for details.
+
+Example (metadata collection)
+
+  Given the following targets defined in //base/BUILD.gn, where A depends on B
+  and B depends on C and D:
+
+    group("a") {
+      metadata = {
+        doom_melon = [ "enable" ]
+        my_files = [ "foo.cpp" ]
+
+        // Note: this is functionally equivalent to not defining `my_barrier`
+        // at all in this target's metadata.
+        my_barrier = [ "" ]
+      }
+
+      deps = [ ":b" ]
+    }
+
+    group("b") {
+      metadata = {
+        my_files = [ "bar.cpp" ]
+        my_barrier = [ ":c" ]
+      }
+
+      deps = [ ":c", ":d" ]
+    }
+
+    group("c") {
+      metadata = {
+        doom_melon = [ "disable" ]
+        my_files = [ "baz.cpp" ]
+      }
+    }
+
+    group("d") {
+      metadata = {
+        my_files = [ "missing.cpp" ]
+      }
+    }
+
+  If the following generated_file target is defined:
+
+    generated_file("my_files_metadata") {
+      outputs = [ "$root_build_dir/my_files.json" ]
+      data_keys = [ "my_files" ]
+
+      deps = [ "//base:a" ]
+    }
+
+  The following will be written to "$root_build_dir/my_files.json" (less the
+  comments):
+    [
+      "baz.cpp",  // from //base:c via //base:b
+      "missing.cpp"  // from //base:d via //base:b
+      "bar.cpp",  // from //base:b via //base:a
+      "foo.cpp",  // from //base:a
+    ]
+
+  Alternatively, as an example of using walk_keys, if the following
+  generated_file target is defined:
+
+  generated_file("my_files_metadata") {
+    outputs = [ "$root_build_dir/my_files.json" ]
+    data_keys = [ "my_files" ]
+    walk_keys = [ "my_barrier" ]
+
+    deps = [ "//base:a" ]
+  }
+
+  The following will be written to "$root_build_dir/my_files.json" (again less
+  the comments):
+    [
+      "baz.cpp",  // from //base:c via //base:b
+      "bar.cpp",  // from //base:b via //base:a
+      "foo.cpp",  // from //base:a
+    ]
+
+  If `rebase` is used in the following generated_file target:
+
+  generated_file("my_files_metadata") {
+    outputs = [ "$root_build_dir/my_files.json" ]
+    data_keys = [ "my_files" ]
+    walk_keys = [ "my_barrier" ]
+    rebase = root_build_dir
+
+    deps = [ "//base:a" ]
+  }
+
+  The following will be written to "$root_build_dir/my_files.json" (again less
+  the comments) (assuming root_build_dir = "//out"):
+    [
+      "../base/baz.cpp",  // from //base:c via //base:b
+      "../base/bar.cpp",  // from //base:b via //base:a
+      "../base/foo.cpp",  // from //base:a
+    ]
+
+
+Variables
+
+  contents
+  data_keys
+  rebase
+  walk_keys
+  output_conversion
+)" DEPS_VARS DEPENDENT_CONFIG_VARS;
+
+Value RunGeneratedFile(Scope* scope,
+                       const FunctionCallNode* function,
+                       const std::vector<Value>& args,
+                       BlockNode* block,
+                       Err* err) {
+  return ExecuteGenericTarget(functions::kGeneratedFile, scope, function, args,
                               block, err);
 }
 

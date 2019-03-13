@@ -7,11 +7,15 @@
 #include "base/logging.h"
 #include "tools/gn/settings.h"
 
-Item::Item(const Settings* settings, const Label& label)
-    : settings_(settings), label_(label), defined_from_(nullptr) {}
+Item::Item(const Settings* settings,
+           const Label& label,
+           const std::set<SourceFile>& build_dependency_files)
+    : settings_(settings),
+      label_(label),
+      build_dependency_files_(build_dependency_files),
+      defined_from_(nullptr) {}
 
-Item::~Item() {
-}
+Item::~Item() = default;
 
 Config* Item::AsConfig() {
   return nullptr;

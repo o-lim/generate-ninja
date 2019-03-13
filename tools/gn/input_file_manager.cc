@@ -4,6 +4,7 @@
 
 #include "tools/gn/input_file_manager.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -16,6 +17,17 @@
 #include "tools/gn/trace.h"
 
 namespace {
+
+// The opposite of std::lock_guard.
+struct ScopedUnlock {
+  ScopedUnlock(std::unique_lock<std::mutex>& lock) : lock_(lock) {
+    lock_.unlock();
+  }
+  ~ScopedUnlock() { lock_.lock(); }
+
+ private:
+  std::unique_lock<std::mutex>& lock_;
+};
 
 void InvokeFileLoadCallback(const InputFileManager::FileLoadCallback& cb,
                             const ParseNode* node) {
@@ -48,10 +60,10 @@ bool DoLoadFile(const LocationRange& origin,
           build_settings->GetFullPathSecondary(name);
       if (!file->Load(secondary_path)) {
         *err = Err(origin, "Can't load input file.",
-                   "Unable to load:\n  " +
-                   FilePathToUTF8(primary_path) + "\n"
-                   "I also checked in the secondary tree for:\n  " +
-                   FilePathToUTF8(secondary_path));
+                   "Unable to load:\n  " + FilePathToUTF8(primary_path) +
+                       "\n"
+                       "I also checked in the secondary tree for:\n  " +
+                       FilePathToUTF8(secondary_path));
         return false;
       }
     } else {
@@ -81,16 +93,11 @@ bool DoLoadFile(const LocationRange& origin,
 }  // namespace
 
 InputFileManager::InputFileData::InputFileData(const SourceFile& file_name)
-    : file(file_name),
-      loaded(false),
-      sync_invocation(false) {
-}
+    : file(file_name), loaded(false), sync_invocation(false) {}
 
-InputFileManager::InputFileData::~InputFileData() {
-}
+InputFileManager::InputFileData::~InputFileData() = default;
 
-InputFileManager::InputFileManager() {
-}
+InputFileManager::InputFileManager() = default;
 
 InputFileManager::~InputFileManager() {
   // Should be single-threaded by now.
@@ -104,21 +111,19 @@ bool InputFileManager::AsyncLoadFile(const LocationRange& origin,
   // Try not to schedule callbacks while holding the lock. All cases that don't
   // want to schedule should return early. Otherwise, this will be scheduled
   // after we leave the lock.
-  base::Closure schedule_this;
+  Task schedule_this;
   {
-    base::AutoLock lock(lock_);
+    std::lock_guard<std::mutex> lock(lock_);
 
     InputFileMap::const_iterator found = input_files_.find(file_name);
     if (found == input_files_.end()) {
       // New file, schedule load.
-      std::unique_ptr<InputFileData> data(new InputFileData(file_name));
+      std::unique_ptr<InputFileData> data =
+          std::make_unique<InputFileData>(file_name);
       data->scheduled_callbacks.push_back(callback);
-      schedule_this = base::Bind(&InputFileManager::BackgroundLoadFile,
-                                 this,
-                                 origin,
-                                 build_settings,
-                                 file_name,
-                                 &data->file);
+      schedule_this =
+          base::BindOnce(&InputFileManager::BackgroundLoadFile, this, origin,
+                         build_settings, file_name, &data->file);
       input_files_[file_name] = std::move(data);
 
     } else {
@@ -128,18 +133,21 @@ bool InputFileManager::AsyncLoadFile(const LocationRange& origin,
       if (data->sync_invocation) {
         g_scheduler->FailWithError(Err(
             origin, "Load type mismatch.",
-            "The file \"" + file_name.value() + "\" was previously loaded\n"
-            "synchronously (via an import) and now you're trying to load it "
-            "asynchronously\n(via a deps rule). This is a class 2 misdemeanor: "
-            "a single input file must\nbe loaded the same way each time to "
-            "avoid blowing my tiny, tiny mind."));
+            "The file \"" + file_name.value() +
+                "\" was previously loaded\n"
+                "synchronously (via an import) and now you're trying to load "
+                "it "
+                "asynchronously\n(via a deps rule). This is a class 2 "
+                "misdemeanor: "
+                "a single input file must\nbe loaded the same way each time to "
+                "avoid blowing my tiny, tiny mind."));
         return false;
       }
 
       if (data->loaded) {
         // Can just directly issue the callback on the background thread.
-        schedule_this = base::Bind(&InvokeFileLoadCallback, callback,
-                                   data->parsed_root.get());
+        schedule_this = base::BindOnce(&InvokeFileLoadCallback, callback,
+                                       data->parsed_root.get());
       } else {
         // Load is pending on this file, schedule the invoke.
         data->scheduled_callbacks.push_back(callback);
@@ -147,7 +155,7 @@ bool InputFileManager::AsyncLoadFile(const LocationRange& origin,
       }
     }
   }
-  g_scheduler->ScheduleWork(schedule_this);
+  g_scheduler->ScheduleWork(std::move(schedule_this));
   return true;
 }
 
@@ -156,18 +164,19 @@ const ParseNode* InputFileManager::SyncLoadFile(
     const BuildSettings* build_settings,
     const SourceFile& file_name,
     Err* err) {
-  base::AutoLock lock(lock_);
+  std::unique_lock<std::mutex> lock(lock_);
 
   InputFileData* data = nullptr;
   InputFileMap::iterator found = input_files_.find(file_name);
   if (found == input_files_.end()) {
     // Haven't seen this file yet, start loading right now.
-    std::unique_ptr<InputFileData> new_data(new InputFileData(file_name));
+    std::unique_ptr<InputFileData> new_data =
+        std::make_unique<InputFileData>(file_name);
     data = new_data.get();
     data->sync_invocation = true;
     input_files_[file_name] = std::move(new_data);
 
-    base::AutoUnlock unlock(lock_);
+    ScopedUnlock unlock(lock);
     if (!LoadFile(origin, build_settings, file_name, &data->file, err))
       return nullptr;
   } else {
@@ -189,25 +198,26 @@ const ParseNode* InputFileManager::SyncLoadFile(
       // I have no practical way to test this, and generally we should have
       // all include files processed synchronously and all build files
       // processed asynchronously, so it doesn't happen in practice.
-      *err = Err(
-          origin, "Load type mismatch.",
-          "The file \"" + file_name.value() + "\" was previously loaded\n"
-          "asynchronously (via a deps rule) and now you're trying to load it "
-          "synchronously.\nThis is a class 2 misdemeanor: a single input file "
-          "must be loaded the same way\neach time to avoid blowing my tiny, "
-          "tiny mind.");
+      *err = Err(origin, "Load type mismatch.",
+                 "The file \"" + file_name.value() +
+                     "\" was previously loaded\n"
+                     "asynchronously (via a deps rule) and now you're trying "
+                     "to load it "
+                     "synchronously.\nThis is a class 2 misdemeanor: a single "
+                     "input file "
+                     "must be loaded the same way\neach time to avoid blowing "
+                     "my tiny, "
+                     "tiny mind.");
       return nullptr;
     }
 
     if (!data->loaded) {
       // Wait for the already-pending sync load to complete.
       if (!data->completion_event) {
-        data->completion_event.reset(new base::WaitableEvent(
-            base::WaitableEvent::ResetPolicy::AUTOMATIC,
-            base::WaitableEvent::InitialState::NOT_SIGNALED));
+        data->completion_event = std::make_unique<AutoResetEvent>();
       }
       {
-        base::AutoUnlock unlock(lock_);
+        ScopedUnlock unlock(lock);
         data->completion_event->Wait();
       }
       // If there were multiple waiters on the same event, we now need to wake
@@ -230,24 +240,24 @@ void InputFileManager::AddDynamicInput(
     InputFile** file,
     std::vector<Token>** tokens,
     std::unique_ptr<ParseNode>** parse_root) {
-  std::unique_ptr<InputFileData> data(new InputFileData(name));
+  std::unique_ptr<InputFileData> data = std::make_unique<InputFileData>(name);
   *file = &data->file;
   *tokens = &data->tokens;
   *parse_root = &data->parsed_root;
   {
-    base::AutoLock lock(lock_);
+    std::lock_guard<std::mutex> lock(lock_);
     dynamic_inputs_.push_back(std::move(data));
   }
 }
 
 int InputFileManager::GetInputFileCount() const {
-  base::AutoLock lock(lock_);
+  std::lock_guard<std::mutex> lock(lock_);
   return static_cast<int>(input_files_.size());
 }
 
 void InputFileManager::GetAllPhysicalInputFileNames(
     std::vector<base::FilePath>* result) const {
-  base::AutoLock lock(lock_);
+  std::lock_guard<std::mutex> lock(lock_);
   result->reserve(input_files_.size());
   for (const auto& file : input_files_) {
     if (!file.second->file.physical_name().empty())
@@ -271,8 +281,8 @@ bool InputFileManager::LoadFile(const LocationRange& origin,
                                 Err* err) {
   std::vector<Token> tokens;
   std::unique_ptr<ParseNode> root;
-  bool success = DoLoadFile(origin, build_settings, name, file,
-                            &tokens, &root, err);
+  bool success =
+      DoLoadFile(origin, build_settings, name, file, &tokens, &root, err);
   // Can't return early. We have to ensure that the completion event is
   // signaled in all cases bacause another thread could be blocked on this one.
 
@@ -282,7 +292,7 @@ bool InputFileManager::LoadFile(const LocationRange& origin,
 
   std::vector<FileLoadCallback> callbacks;
   {
-    base::AutoLock lock(lock_);
+    std::lock_guard<std::mutex> lock(lock_);
     DCHECK(input_files_.find(name) != input_files_.end());
 
     InputFileData* data = input_files_[name].get();

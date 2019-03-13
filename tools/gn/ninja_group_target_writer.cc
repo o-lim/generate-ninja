@@ -12,11 +12,9 @@
 
 NinjaGroupTargetWriter::NinjaGroupTargetWriter(const Target* target,
                                                std::ostream& out)
-    : NinjaTargetWriter(target, out) {
-}
+    : NinjaTargetWriter(target, out) {}
 
-NinjaGroupTargetWriter::~NinjaGroupTargetWriter() {
-}
+NinjaGroupTargetWriter::~NinjaGroupTargetWriter() = default;
 
 void NinjaGroupTargetWriter::Run() {
   // A group rule just generates a stamp file with dependencies on each of

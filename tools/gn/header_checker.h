@@ -5,17 +5,18 @@
 #ifndef TOOLS_GN_HEADER_CHECKER_H_
 #define TOOLS_GN_HEADER_CHECKER_H_
 
+#include <condition_variable>
 #include <map>
-#include <set>
+#include <mutex>
 #include <vector>
 
+#include "base/atomic_ref_count.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/run_loop.h"
 #include "base/strings/string_piece.h"
-#include "base/synchronization/lock.h"
 #include "tools/gn/err.h"
+#include "tools/gn/source_dir.h"
 
 class BuildSettings;
 class InputFile;
@@ -24,7 +25,7 @@ class SourceFile;
 class Target;
 
 namespace base {
-class MessageLoop;
+class FilePath;
 }
 
 class HeaderChecker : public base::RefCountedThreadSafe<HeaderChecker> {
@@ -46,8 +47,12 @@ class HeaderChecker : public base::RefCountedThreadSafe<HeaderChecker> {
   };
   typedef std::vector<ChainLink> Chain;
 
+  // check_generated, if true, will also check generated
+  // files. Something that can only be done after running a build that
+  // has generated them.
   HeaderChecker(const BuildSettings* build_settings,
-                const std::vector<const Target*>& targets);
+                const std::vector<const Target*>& targets,
+                bool check_generated = false);
 
   // Runs the check. The targets in to_check will be checked.
   //
@@ -67,15 +72,17 @@ class HeaderChecker : public base::RefCountedThreadSafe<HeaderChecker> {
   FRIEND_TEST_ALL_PREFIXES(HeaderCheckerTest, CheckInclude);
   FRIEND_TEST_ALL_PREFIXES(HeaderCheckerTest, PublicFirst);
   FRIEND_TEST_ALL_PREFIXES(HeaderCheckerTest, CheckIncludeAllowCircular);
+  FRIEND_TEST_ALL_PREFIXES(HeaderCheckerTest, SourceFileForInclude);
+  FRIEND_TEST_ALL_PREFIXES(HeaderCheckerTest,
+                           SourceFileForInclude_FileNotFound);
+  FRIEND_TEST_ALL_PREFIXES(HeaderCheckerTest, Friend);
+
   ~HeaderChecker();
 
   struct TargetInfo {
     TargetInfo() : target(nullptr), is_public(false), is_generated(false) {}
     TargetInfo(const Target* t, bool is_pub, bool is_gen)
-        : target(t),
-          is_public(is_pub),
-          is_generated(is_gen) {
-    }
+        : target(t), is_public(is_pub), is_generated(is_gen) {}
 
     const Target* target;
 
@@ -88,6 +95,8 @@ class HeaderChecker : public base::RefCountedThreadSafe<HeaderChecker> {
 
   typedef std::vector<TargetInfo> TargetVector;
   typedef std::map<SourceFile, TargetVector> FileMap;
+  typedef base::RepeatingCallback<bool(const base::FilePath& path)>
+      PathExistsCallback;
 
   // Backend for Run() that takes the list of files to check. The errors_ list
   // will be populate on failure.
@@ -102,23 +111,27 @@ class HeaderChecker : public base::RefCountedThreadSafe<HeaderChecker> {
   bool IsFileInOuputDir(const SourceFile& file) const;
 
   // Resolves the contents of an include to a SourceFile.
-  SourceFile SourceFileForInclude(const base::StringPiece& input) const;
+  SourceFile SourceFileForInclude(const base::StringPiece& relative_file_path,
+                                  const std::vector<SourceDir>& include_dirs,
+                                  const InputFile& source_file,
+                                  const LocationRange& range,
+                                  Err* err) const;
 
   // from_target is the target the file was defined from. It will be used in
   // error messages.
   bool CheckFile(const Target* from_target,
                  const SourceFile& file,
-                 Err* err) const;
+                 std::vector<Err>* err) const;
 
-  // Checks that the given file in the given target can include the given
-  // include file. If disallowed, returns false and sets the error. The
-  // range indicates the location of the include in the file for error
-  // reporting.
-  bool CheckInclude(const Target* from_target,
+  // Checks that the given file in the given target can include the
+  // given include file. If disallowed, adds the error or errors to
+  // the errors array.  The range indicates the location of the
+  // include in the file for error reporting.
+  void CheckInclude(const Target* from_target,
                     const InputFile& source_file,
                     const SourceFile& include_file,
                     const LocationRange& range,
-                    Err* err) const;
+                    std::vector<Err>* errors) const;
 
   // Returns true if the given search_for target is a dependency of
   // search_from.
@@ -160,21 +173,27 @@ class HeaderChecker : public base::RefCountedThreadSafe<HeaderChecker> {
   // These are initialized during construction (which happens on one thread)
   // and are not modified after, so any thread can read these without locking.
 
-  base::MessageLoop* main_loop_;
-  base::RunLoop main_thread_runner_;
-
   const BuildSettings* build_settings_;
+
+  bool check_generated_;
 
   // Maps source files to targets it appears in (usually just one target).
   FileMap file_map_;
+
+  // Number of tasks posted by RunCheckOverFiles() that haven't completed their
+  // execution.
+  base::AtomicRefCount task_count_;
 
   // Locked variables ----------------------------------------------------------
   //
   // These are mutable during runtime and require locking.
 
-  base::Lock lock_;
+  std::mutex lock_;
 
   std::vector<Err> errors_;
+
+  // Signaled when |task_count_| becomes zero.
+  std::condition_variable task_count_cv_;
 
   DISALLOW_COPY_AND_ASSIGN(HeaderChecker);
 };

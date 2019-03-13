@@ -5,21 +5,21 @@
 #ifndef TOOLS_GN_INPUT_FILE_MANAGER_H_
 #define TOOLS_GN_INPUT_FILE_MANAGER_H_
 
+#include <mutex>
 #include <set>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include "base/callback.h"
-#include "base/containers/hash_tables.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/synchronization/lock.h"
-#include "base/synchronization/waitable_event.h"
 #include "tools/gn/build_settings.h"
 #include "tools/gn/input_file.h"
 #include "tools/gn/parse_tree.h"
 #include "tools/gn/settings.h"
+#include "util/auto_reset_event.h"
 
 class Err;
 class LocationRange;
@@ -111,7 +111,7 @@ class InputFileManager : public base::RefCountedThreadSafe<InputFileManager> {
     // Event to signal when the load is complete (or fails). This is lazily
     // created only when a thread is synchronously waiting for this load (which
     // only happens for imports).
-    std::unique_ptr<base::WaitableEvent> completion_event;
+    std::unique_ptr<AutoResetEvent> completion_event;
 
     std::vector<Token> tokens;
 
@@ -134,10 +134,10 @@ class InputFileManager : public base::RefCountedThreadSafe<InputFileManager> {
                 InputFile* file,
                 Err* err);
 
-  mutable base::Lock lock_;
+  mutable std::mutex lock_;
 
   // Maps repo-relative filenames to the corresponding owned pointer.
-  typedef base::hash_map<SourceFile, std::unique_ptr<InputFileData>>
+  typedef std::unordered_map<SourceFile, std::unique_ptr<InputFileData>>
       InputFileMap;
   InputFileMap input_files_;
 

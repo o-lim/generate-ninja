@@ -4,10 +4,10 @@
 
 #include "tools/gn/parser.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "tools/gn/functions.h"
 #include "tools/gn/operators.h"
 #include "tools/gn/token.h"
@@ -214,6 +214,11 @@ Scopes
 
     myvalues.foo += 2
     empty_scope.new_thing = [ 1, 2, 3 ]
+
+  Scope equality is defined as single-level scopes identical within the current
+  scope. That is, all values in the first scope must be present and identical
+  within the second, and vice versa. Note that this means inherited scopes are
+  always unequal by definition.
 )*";
 
 enum Precedence {
@@ -225,7 +230,7 @@ enum Precedence {
   PRECEDENCE_SUM = 6,
   PRECEDENCE_PREFIX = 7,
   PRECEDENCE_CALL = 8,
-  PRECEDENCE_DOT = 9,         // Highest precedence.
+  PRECEDENCE_DOT = 9,  // Highest precedence.
 };
 
 // The top-level for blocks/ifs is recursive descent, the expression parser is
@@ -238,7 +243,8 @@ enum Precedence {
 //
 // Refs:
 // - http://javascript.crockford.com/tdop/tdop.html
-// - http://journal.stuffwithstuff.com/2011/03/19/pratt-parsers-expression-parsing-made-easy/
+// -
+// http://journal.stuffwithstuff.com/2011/03/19/pratt-parsers-expression-parsing-made-easy/
 
 // Indexed by Token::Type.
 ParserHelper Parser::expressions_[] = {
@@ -299,8 +305,7 @@ Parser::Parser(const std::vector<Token>& tokens, Err* err)
   }
 }
 
-Parser::~Parser() {
-}
+Parser::~Parser() = default;
 
 // static
 std::unique_ptr<ParseNode> Parser::Parse(const std::vector<Token>& tokens,
@@ -378,7 +383,7 @@ bool Parser::Match(Token::Type type) {
 }
 
 const Token& Parser::Consume(Token::Type type, const char* error_message) {
-  Token::Type types[1] = { type };
+  Token::Type types[1] = {type};
   return Consume(types, 1, error_message);
 }
 
@@ -425,9 +430,8 @@ std::unique_ptr<ParseNode> Parser::ParseExpression(int precedence) {
   PrefixFunc prefix = expressions_[token.type()].prefix;
 
   if (prefix == nullptr) {
-    *err_ = Err(token,
-                std::string("Unexpected token '") + token.value().as_string() +
-                    std::string("'"));
+    *err_ = Err(token, std::string("Unexpected token '") +
+                           token.value().as_string() + std::string("'"));
     return std::unique_ptr<ParseNode>();
   }
 
@@ -460,7 +464,7 @@ std::unique_ptr<ParseNode> Parser::Block(const Token& token) {
 }
 
 std::unique_ptr<ParseNode> Parser::Literal(const Token& token) {
-  return base::MakeUnique<LiteralNode>(token);
+  return std::make_unique<LiteralNode>(token);
 }
 
 std::unique_ptr<ParseNode> Parser::Name(const Token& token) {
@@ -468,7 +472,8 @@ std::unique_ptr<ParseNode> Parser::Name(const Token& token) {
 }
 
 std::unique_ptr<ParseNode> Parser::BlockComment(const Token& token) {
-  std::unique_ptr<BlockCommentNode> comment(new BlockCommentNode());
+  std::unique_ptr<BlockCommentNode> comment =
+      std::make_unique<BlockCommentNode>();
   comment->set_comment(token);
   return std::move(comment);
 }
@@ -490,7 +495,7 @@ std::unique_ptr<ParseNode> Parser::Not(const Token& token) {
       *err_ = Err(token, "Expected right-hand side for '!'.");
     return std::unique_ptr<ParseNode>();
   }
-  std::unique_ptr<UnaryOpNode> unary_op(new UnaryOpNode);
+  std::unique_ptr<UnaryOpNode> unary_op = std::make_unique<UnaryOpNode>();
   unary_op->set_op(token);
   unary_op->set_operand(std::move(expr));
   return std::move(unary_op);
@@ -515,7 +520,7 @@ std::unique_ptr<ParseNode> Parser::BinaryOperator(
     }
     return std::unique_ptr<ParseNode>();
   }
-  std::unique_ptr<BinaryOpNode> binary_op(new BinaryOpNode);
+  std::unique_ptr<BinaryOpNode> binary_op = std::make_unique<BinaryOpNode>();
   binary_op->set_op(token);
   binary_op->set_left(std::move(left));
   binary_op->set_right(std::move(right));
@@ -525,9 +530,9 @@ std::unique_ptr<ParseNode> Parser::BinaryOperator(
 std::unique_ptr<ParseNode> Parser::IdentifierOrCall(
     std::unique_ptr<ParseNode> left,
     const Token& token) {
-  std::unique_ptr<ListNode> list(new ListNode);
+  std::unique_ptr<ListNode> list = std::make_unique<ListNode>();
   list->set_begin_token(token);
-  list->set_end(base::MakeUnique<EndNode>(token));
+  list->set_end(std::make_unique<EndNode>(token));
   std::unique_ptr<BlockNode> block;
   bool has_arg = false;
   if (LookAhead(Token::LEFT_PAREN)) {
@@ -552,9 +557,10 @@ std::unique_ptr<ParseNode> Parser::IdentifierOrCall(
 
   if (!left && !has_arg) {
     // Not a function call, just a standalone identifier.
-    return std::unique_ptr<ParseNode>(new IdentifierNode(token));
+    return std::make_unique<IdentifierNode>(token);
   }
-  std::unique_ptr<FunctionCallNode> func_call(new FunctionCallNode);
+  std::unique_ptr<FunctionCallNode> func_call =
+      std::make_unique<FunctionCallNode>();
   func_call->set_function(token);
   func_call->set_args(std::move(list));
   if (block)
@@ -566,8 +572,8 @@ std::unique_ptr<ParseNode> Parser::Assignment(std::unique_ptr<ParseNode> left,
                                               const Token& token) {
   if (left->AsIdentifier() == nullptr && left->AsAccessor() == nullptr) {
     *err_ = Err(left.get(),
-        "The left-hand side of an assignment must be an identifier, "
-        "scope access, or array access.");
+                "The left-hand side of an assignment must be an identifier, "
+                "scope access, or array access.");
     return std::unique_ptr<ParseNode>();
   }
   std::unique_ptr<ParseNode> value = ParseExpression(PRECEDENCE_ASSIGNMENT);
@@ -576,7 +582,7 @@ std::unique_ptr<ParseNode> Parser::Assignment(std::unique_ptr<ParseNode> left,
       *err_ = Err(token, "Expected right-hand side for assignment.");
     return std::unique_ptr<ParseNode>();
   }
-  std::unique_ptr<BinaryOpNode> assign(new BinaryOpNode);
+  std::unique_ptr<BinaryOpNode> assign = std::make_unique<BinaryOpNode>();
   assign->set_op(token);
   assign->set_left(std::move(left));
   assign->set_right(std::move(value));
@@ -588,7 +594,8 @@ std::unique_ptr<ParseNode> Parser::Subscript(std::unique_ptr<ParseNode> left,
   // TODO: Maybe support more complex expressions like a[0][0]. This would
   // require work on the evaluator too.
   if (left->AsIdentifier() == nullptr) {
-    *err_ = Err(left.get(), "May only subscript identifiers.",
+    *err_ = Err(
+        left.get(), "May only subscript identifiers.",
         "The thing on the left hand side of the [] must be an identifier\n"
         "and not an expression. If you need this, you'll have to assign the\n"
         "value to a temporary before subscripting. Sorry.");
@@ -596,7 +603,7 @@ std::unique_ptr<ParseNode> Parser::Subscript(std::unique_ptr<ParseNode> left,
   }
   std::unique_ptr<ParseNode> value = ParseExpression();
   Consume(Token::RIGHT_BRACKET, "Expecting ']' after subscript.");
-  std::unique_ptr<AccessorNode> accessor(new AccessorNode);
+  std::unique_ptr<AccessorNode> accessor = std::make_unique<AccessorNode>();
   accessor->set_base(left->AsIdentifier()->value());
   accessor->set_index(std::move(value));
   return std::move(accessor);
@@ -605,7 +612,8 @@ std::unique_ptr<ParseNode> Parser::Subscript(std::unique_ptr<ParseNode> left,
 std::unique_ptr<ParseNode> Parser::DotOperator(std::unique_ptr<ParseNode> left,
                                                const Token& token) {
   if (left->AsIdentifier() == nullptr) {
-    *err_ = Err(left.get(), "May only use \".\" for identifiers.",
+    *err_ = Err(
+        left.get(), "May only use \".\" for identifiers.",
         "The thing on the left hand side of the dot must be an identifier\n"
         "and not an expression. If you need this, you'll have to assign the\n"
         "value to a temporary first. Sorry.");
@@ -614,12 +622,13 @@ std::unique_ptr<ParseNode> Parser::DotOperator(std::unique_ptr<ParseNode> left,
 
   std::unique_ptr<ParseNode> right = ParseExpression(PRECEDENCE_DOT);
   if (!right || !right->AsIdentifier()) {
-    *err_ = Err(token, "Expected identifier for right-hand-side of \".\"",
+    *err_ = Err(
+        token, "Expected identifier for right-hand-side of \".\"",
         "Good: a.cookies\nBad: a.42\nLooks good but still bad: a.cookies()");
     return std::unique_ptr<ParseNode>();
   }
 
-  std::unique_ptr<AccessorNode> accessor(new AccessorNode);
+  std::unique_ptr<AccessorNode> accessor = std::make_unique<AccessorNode>();
   accessor->set_base(left->AsIdentifier()->value());
   accessor->set_member(std::unique_ptr<IdentifierNode>(
       static_cast<IdentifierNode*>(right.release())));
@@ -630,7 +639,7 @@ std::unique_ptr<ParseNode> Parser::DotOperator(std::unique_ptr<ParseNode> left,
 std::unique_ptr<ListNode> Parser::ParseList(const Token& start_token,
                                             Token::Type stop_before,
                                             bool allow_trailing_comma) {
-  std::unique_ptr<ListNode> list(new ListNode);
+  std::unique_ptr<ListNode> list = std::make_unique<ListNode>();
   list->set_begin_token(start_token);
   bool just_got_comma = false;
   bool first_time = true;
@@ -667,12 +676,13 @@ std::unique_ptr<ListNode> Parser::ParseList(const Token& start_token,
     *err_ = Err(cur_token(), "Trailing comma");
     return std::unique_ptr<ListNode>();
   }
-  list->set_end(base::MakeUnique<EndNode>(cur_token()));
+  list->set_end(std::make_unique<EndNode>(cur_token()));
   return list;
 }
 
 std::unique_ptr<ParseNode> Parser::ParseFile() {
-  std::unique_ptr<BlockNode> file(new BlockNode(BlockNode::DISCARDS_RESULT));
+  std::unique_ptr<BlockNode> file =
+      std::make_unique<BlockNode>(BlockNode::DISCARDS_RESULT);
   for (;;) {
     if (at_end())
       break;
@@ -721,12 +731,12 @@ std::unique_ptr<BlockNode> Parser::ParseBlock(
     BlockNode::ResultMode result_mode) {
   if (has_error())
     return std::unique_ptr<BlockNode>();
-  std::unique_ptr<BlockNode> block(new BlockNode(result_mode));
+  std::unique_ptr<BlockNode> block = std::make_unique<BlockNode>(result_mode);
   block->set_begin_token(begin_brace);
 
   for (;;) {
     if (LookAhead(Token::RIGHT_BRACE)) {
-      block->set_end(base::MakeUnique<EndNode>(Consume()));
+      block->set_end(std::make_unique<EndNode>(Consume()));
       break;
     }
 
@@ -739,7 +749,7 @@ std::unique_ptr<BlockNode> Parser::ParseBlock(
 }
 
 std::unique_ptr<ParseNode> Parser::ParseCondition() {
-  std::unique_ptr<ConditionNode> condition(new ConditionNode);
+  std::unique_ptr<ConditionNode> condition = std::make_unique<ConditionNode>();
   condition->set_if_token(Consume(Token::IF, "Expected 'if'"));
   Consume(Token::LEFT_PAREN, "Expected '(' after 'if'.");
   condition->set_condition(ParseExpression());
@@ -751,8 +761,8 @@ std::unique_ptr<ParseNode> Parser::ParseCondition() {
       BlockNode::DISCARDS_RESULT));
   if (Match(Token::ELSE)) {
     if (LookAhead(Token::LEFT_BRACE)) {
-      condition->set_if_false(ParseBlock(Consume(),
-                                         BlockNode::DISCARDS_RESULT));
+      condition->set_if_false(
+          ParseBlock(Consume(), BlockNode::DISCARDS_RESULT));
     } else if (LookAhead(Token::IF)) {
       condition->set_if_false(ParseStatement());
     } else {
@@ -844,8 +854,7 @@ void Parser::AssignComments(ParseNode* file) {
   // Assign suffix to syntax immediately before.
   cur_comment = static_cast<int>(suffix_comment_tokens_.size() - 1);
   for (std::vector<const ParseNode*>::const_reverse_iterator i = post.rbegin();
-       i != post.rend();
-       ++i) {
+       i != post.rend(); ++i) {
     // Don't assign suffix comments to the function, list, or block, but instead
     // to the last thing inside.
     if ((*i)->AsFunctionCall() || (*i)->AsList() || (*i)->AsBlock())
@@ -878,5 +887,51 @@ void Parser::AssignComments(ParseNode* file) {
     // the same node, they need to be reversed.
     if ((*i)->comments() && !(*i)->comments()->suffix().empty())
       const_cast<ParseNode*>(*i)->comments_mutable()->ReverseSuffix();
+  }
+}
+
+std::string IndentFor(int value) {
+  return std::string(value, ' ');
+}
+
+void RenderToText(const base::Value& node, int indent_level,
+    std::ostringstream& os) {
+  const base::Value* child = node.FindKey(std::string("child"));
+  std::string node_type(node.FindKey("type")->GetString());
+  if (node_type == "ACCESSOR") {
+    // AccessorNode is a bit special, in that it holds a Token, not a ParseNode
+    // for the base.
+    os << IndentFor(indent_level) << node_type << std::endl;
+    os << IndentFor(indent_level + 1) << node.FindKey("value")->GetString()
+        << std::endl;
+  } else {
+    os << IndentFor(indent_level) << node_type;
+    if (node.FindKey("value")) {
+      os << "(" << node.FindKey("value")->GetString() << ")";
+    }
+    os << std::endl;
+  }
+  if (node.FindKey(kJsonBeforeComment)) {
+    for (auto& v : node.FindKey(kJsonBeforeComment)->GetList()) {
+      os << IndentFor(indent_level + 1) <<
+          "+BEFORE_COMMENT(\"" << v.GetString() << "\")\n";
+    }
+  }
+  if (node.FindKey(kJsonSuffixComment)) {
+    for (auto& v : node.FindKey(kJsonSuffixComment)->GetList()) {
+      os << IndentFor(indent_level + 1) <<
+          "+SUFFIX_COMMENT(\"" << v.GetString() << "\")\n";
+    }
+  }
+  if (node.FindKey(kJsonAfterComment)) {
+    for (auto& v : node.FindKey(kJsonAfterComment)->GetList()) {
+      os << IndentFor(indent_level + 1) <<
+          "+AFTER_COMMENT(\"" << v.GetString() << "\")\n";
+    }
+  }
+  if (child) {
+    for (const base::Value& n : child->GetList()) {
+      RenderToText(n, indent_level + 1, os);
+    }
   }
 }
