@@ -1488,9 +1488,9 @@
 #### **Variables**
 
 ```
-  Flags: asmflags, cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
-         cppflags, cppflags_c, cppflags_cc, cppflags_objc, cppflags_objcc,
-         defines, include_dirs, ldflags, lib_dirs, libs,
+  Flags: arflags, asmflags, cflags, cflags_c, cflags_cc, cflags_objc,,
+         cflags_objcc cppflags, cppflags_c, cppflags_cc, cppflags_objc,
+         cppflags_objcc, defines, include_dirs, ldflags, lib_dirs, libs,
          precompiled_header, precompiled_source
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
@@ -1537,9 +1537,9 @@
 #### **Variables**
 
 ```
-  Flags: asmflags, cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
-         cppflags, cppflags_c, cppflags_cc, cppflags_objc, cppflags_objcc,
-         defines, include_dirs, ldflags, lib_dirs, libs,
+  Flags: arflags, asmflags, cflags, cflags_c, cflags_cc, cflags_objc,,
+         cflags_objcc cppflags, cppflags_c, cppflags_cc, cppflags_objc,
+         cppflags_objcc, defines, include_dirs, ldflags, lib_dirs, libs,
          precompiled_header, precompiled_source
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
@@ -1559,9 +1559,9 @@
 #### **Variables**
 
 ```
-  Flags: asmflags, cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
-         cppflags, cppflags_c, cppflags_cc, cppflags_objc, cppflags_objcc,
-         defines, include_dirs, ldflags, lib_dirs, libs,
+  Flags: arflags, asmflags, cflags, cflags_c, cflags_cc, cflags_objc,,
+         cflags_objcc cppflags, cppflags_c, cppflags_cc, cppflags_objc,
+         cppflags_objcc, defines, include_dirs, ldflags, lib_dirs, libs,
          precompiled_header, precompiled_source
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
@@ -1596,9 +1596,9 @@
 #### **Variables**
 
 ```
-  Flags: asmflags, cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
-         cppflags, cppflags_c, cppflags_cc, cppflags_objc, cppflags_objcc,
-         defines, include_dirs, ldflags, lib_dirs, libs,
+  Flags: arflags, asmflags, cflags, cflags_c, cflags_cc, cflags_objc,,
+         cflags_objcc cppflags, cppflags_c, cppflags_cc, cppflags_objc,
+         cppflags_objcc, defines, include_dirs, ldflags, lib_dirs, libs,
          precompiled_header, precompiled_source
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
@@ -1619,9 +1619,9 @@
 
 ```
   complete_static_lib
-  Flags: asmflags, cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
-         cppflags, cppflags_c, cppflags_cc, cppflags_objc, cppflags_objcc,
-         defines, include_dirs, ldflags, lib_dirs, libs,
+  Flags: arflags, asmflags, cflags, cflags_c, cflags_cc, cflags_objc,,
+         cflags_objcc cppflags, cppflags_c, cppflags_cc, cppflags_objc,
+         cppflags_objcc, defines, include_dirs, ldflags, lib_dirs, libs,
          precompiled_header, precompiled_source
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
@@ -1721,9 +1721,9 @@
 
 #### **Variables valid in a config definition**
 ```
-  Flags: asmflags, cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
-         cppflags, cppflags_c, cppflags_cc, cppflags_objc, cppflags_objcc,
-         defines, include_dirs, ldflags, lib_dirs, libs,
+  Flags: arflags, asmflags, cflags, cflags_c, cflags_cc, cflags_objc,,
+         cflags_objcc cppflags, cppflags_c, cppflags_cc, cppflags_objc,
+         cppflags_objcc, defines, include_dirs, ldflags, lib_dirs, libs,
          precompiled_header, precompiled_source
   Nested configs: configs
 ```
