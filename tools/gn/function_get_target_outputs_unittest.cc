@@ -2,21 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
 #include <utility>
 
-#include "base/memory/ptr_util.h"
-#include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/functions.h"
 #include "tools/gn/target.h"
 #include "tools/gn/test_with_scope.h"
+#include "util/test/test.h"
 
 namespace {
 
 class GetTargetOutputsTest : public testing::Test {
  public:
-  GetTargetOutputsTest() {
-    setup_.scope()->set_item_collector(&items_);
-  }
+  GetTargetOutputsTest() { setup_.scope()->set_item_collector(&items_); }
 
   Value GetTargetOutputs(const std::string& name, Err* err) {
     FunctionCallNode function;
@@ -61,7 +59,7 @@ class GetTargetOutputsTest : public testing::Test {
 
 TEST_F(GetTargetOutputsTest, Copy) {
   auto copy =
-      base::MakeUnique<Target>(setup_.settings(), GetLabel("//foo/", "bar"));
+      std::make_unique<Target>(setup_.settings(), GetLabel("//foo/", "bar"));
   copy->set_output_type(Target::COPY_FILES);
   copy->sources().push_back(SourceFile("//file.txt"));
   copy->action_values().outputs() =
@@ -77,11 +75,10 @@ TEST_F(GetTargetOutputsTest, Copy) {
 
 TEST_F(GetTargetOutputsTest, Action) {
   auto action =
-      base::MakeUnique<Target>(setup_.settings(), GetLabel("//foo/", "bar"));
+      std::make_unique<Target>(setup_.settings(), GetLabel("//foo/", "bar"));
   action->set_output_type(Target::ACTION);
-  action->action_values().outputs() = SubstitutionList::MakeForTest(
-      "//output1.txt",
-      "//output2.txt");
+  action->action_values().outputs() =
+      SubstitutionList::MakeForTest("//output1.txt", "//output2.txt");
 
   items_.push_back(std::move(action));
 
@@ -93,12 +90,12 @@ TEST_F(GetTargetOutputsTest, Action) {
 
 TEST_F(GetTargetOutputsTest, ActionForeach) {
   auto action =
-      base::MakeUnique<Target>(setup_.settings(), GetLabel("//foo/", "bar"));
+      std::make_unique<Target>(setup_.settings(), GetLabel("//foo/", "bar"));
   action->set_output_type(Target::ACTION_FOREACH);
   action->sources().push_back(SourceFile("//file.txt"));
-  action->action_values().outputs() = SubstitutionList::MakeForTest(
-      "//out/Debug/{{source_file_part}}.one",
-      "//out/Debug/{{source_file_part}}.two");
+  action->action_values().outputs() =
+      SubstitutionList::MakeForTest("//out/Debug/{{source_file_part}}.one",
+                                    "//out/Debug/{{source_file_part}}.two");
 
   items_.push_back(std::move(action));
 
@@ -111,7 +108,7 @@ TEST_F(GetTargetOutputsTest, ActionForeach) {
 
 TEST_F(GetTargetOutputsTest, SourceSet) {
   auto source_set =
-      base::MakeUnique<Target>(setup_.settings(), GetLabel("//foo/", "bar"));
+      std::make_unique<Target>(setup_.settings(), GetLabel("//foo/", "bar"));
   source_set->set_output_type(Target::SOURCE_SET);
   source_set->sources().push_back(SourceFile("//foo/file1.cc"));
   source_set->sources().push_back(SourceFile("//foo/file2.cc"));
@@ -127,7 +124,7 @@ TEST_F(GetTargetOutputsTest, SourceSet) {
 
 TEST_F(GetTargetOutputsTest, Executable) {
   auto executable =
-      base::MakeUnique<Target>(setup_.settings(), GetLabel("//foo/", "bar"));
+      std::make_unique<Target>(setup_.settings(), GetLabel("//foo/", "bar"));
   executable->set_output_type(Target::EXECUTABLE);
   executable->sources().push_back(SourceFile("//file.cc"));
 
@@ -141,7 +138,7 @@ TEST_F(GetTargetOutputsTest, Executable) {
 
 TEST_F(GetTargetOutputsTest, LoadableModule) {
   auto loadable_module =
-      base::MakeUnique<Target>(setup_.settings(), GetLabel("//foo/", "bar"));
+      std::make_unique<Target>(setup_.settings(), GetLabel("//foo/", "bar"));
   loadable_module->set_output_type(Target::LOADABLE_MODULE);
   loadable_module->sources().push_back(SourceFile("//file.cc"));
 
@@ -155,7 +152,7 @@ TEST_F(GetTargetOutputsTest, LoadableModule) {
 
 TEST_F(GetTargetOutputsTest, SharedLibrary) {
   auto shared_library =
-      base::MakeUnique<Target>(setup_.settings(), GetLabel("//foo/", "bar"));
+      std::make_unique<Target>(setup_.settings(), GetLabel("//foo/", "bar"));
   shared_library->set_output_type(Target::SHARED_LIBRARY);
   shared_library->sources().push_back(SourceFile("//file.cc"));
 
@@ -169,7 +166,7 @@ TEST_F(GetTargetOutputsTest, SharedLibrary) {
 
 TEST_F(GetTargetOutputsTest, StaticLibrary) {
   auto static_library =
-      base::MakeUnique<Target>(setup_.settings(), GetLabel("//foo/", "bar"));
+      std::make_unique<Target>(setup_.settings(), GetLabel("//foo/", "bar"));
   static_library->set_output_type(Target::STATIC_LIBRARY);
   static_library->sources().push_back(SourceFile("//file.cc"));
 

@@ -23,8 +23,7 @@
 #endif
 
 // Put this in the declarations for a class to be uncopyable.
-#define DISALLOW_COPY(TypeName) \
-  TypeName(const TypeName&) = delete
+#define DISALLOW_COPY(TypeName) TypeName(const TypeName&) = delete
 
 // Put this in the declarations for a class to be unassignable.
 #define DISALLOW_ASSIGN(TypeName) TypeName& operator=(const TypeName&) = delete
@@ -50,7 +49,11 @@
 // This template function declaration is used in defining arraysize.
 // Note that the function doesn't need an implementation, as we only
 // use its type.
-template <typename T, size_t N> char (&ArraySizeHelper(T (&array)[N]))[N];
+//
+// DEPRECATED, please use base::size(array) instead.
+// TODO(https://crbug.com/837308): Replace existing arraysize usages.
+template <typename T, size_t N>
+char (&ArraySizeHelper(T (&array)[N]))[N];
 #define arraysize(array) (sizeof(ArraySizeHelper(array)))
 
 // Used to explicitly mark the return value of a function as unused. If you are
@@ -61,18 +64,31 @@ template <typename T, size_t N> char (&ArraySizeHelper(T (&array)[N]))[N];
 //   if (TakeOwnership(my_var.get()) == SUCCESS)
 //     ignore_result(my_var.release());
 //
-template<typename T>
-inline void ignore_result(const T&) {
-}
+template <typename T>
+inline void ignore_result(const T&) {}
 
 namespace base {
 
 // Use these to declare and define a static local variable (static T;) so that
 // it is leaked so that its destructors are not called at exit.  This is
 // thread-safe.
+//
+// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! DEPRECATED !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+// Please don't use this macro. Use a function-local static of type
+// base::NoDestructor<T> instead:
+//
+// Factory& Factory::GetInstance() {
+//   static base::NoDestructor<Factory> instance;
+//   return *instance;
+// }
+// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 #define CR_DEFINE_STATIC_LOCAL(type, name, arguments) \
   static type& name = *new type arguments
 
-}  // base
+// Workaround for MSVC, which expands __VA_ARGS__ as one macro argument. To
+// work around this bug, wrap the entire expression in this macro...
+#define CR_EXPAND_ARG(arg) arg
+
+}  // namespace base
 
 #endif  // BASE_MACROS_H_

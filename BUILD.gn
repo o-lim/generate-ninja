@@ -9,12 +9,6 @@
 # file to your new one or GN won't know about it.
 
 import("//build/config/compiler/compiler.gni")
-declare_args() {
-  # A list of extra dependencies to add to the root target. This allows a
-  # checkout to add additional targets without explicitly changing any checked-
-  # in files.
-  root_extra_deps = []
-}
 
 if (is_official_build) {
   # An official (maximally optimized!) component (optimized for build times)
@@ -29,6 +23,4 @@ group("gn_all") {
     "//tools/gn",
     "//tools/gn:gn_unittests",
   ]
-
-  deps += root_extra_deps
 }

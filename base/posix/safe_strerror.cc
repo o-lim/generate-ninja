@@ -16,7 +16,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "build/build_config.h"
+#include "util/build_config.h"
 
 namespace base {
 
@@ -39,13 +39,13 @@ namespace base {
 // glibc has two strerror_r functions: a historical GNU-specific one that
 // returns type char *, and a POSIX.1-2001 compliant one available since 2.3.4
 // that returns int. This wraps the GNU-specific one.
-static void POSSIBLY_UNUSED wrap_posix_strerror_r(
-    char *(*strerror_r_ptr)(int, char *, size_t),
-    int err,
-    char *buf,
-    size_t len) {
+static void POSSIBLY_UNUSED
+wrap_posix_strerror_r(char* (*strerror_r_ptr)(int, char*, size_t),
+                      int err,
+                      char* buf,
+                      size_t len) {
   // GNU version.
-  char *rc = (*strerror_r_ptr)(err, buf, len);
+  char* rc = (*strerror_r_ptr)(err, buf, len);
   if (rc != buf) {
     // glibc did not use buf and returned a static string instead. Copy it
     // into buf.
@@ -62,11 +62,12 @@ static void POSSIBLY_UNUSED wrap_posix_strerror_r(
 // guarantee that they are handled. This is compiled on all POSIX platforms, but
 // it will only be used on Linux if the POSIX strerror_r implementation is
 // being used (see below).
-static void POSSIBLY_UNUSED wrap_posix_strerror_r(
-    int (*strerror_r_ptr)(int, char *, size_t),
-    int err,
-    char *buf,
-    size_t len) {
+static void POSSIBLY_UNUSED wrap_posix_strerror_r(int (*strerror_r_ptr)(int,
+                                                                        char*,
+                                                                        size_t),
+                                                  int err,
+                                                  char* buf,
+                                                  size_t len) {
   int old_errno = errno;
   // Have to cast since otherwise we get an error if this is the GNU version
   // (but in such a scenario this function is never called). Sadly we can't use
@@ -98,17 +99,14 @@ static void POSSIBLY_UNUSED wrap_posix_strerror_r(
       strerror_error = result;
     }
     // snprintf truncates and always null-terminates.
-    snprintf(buf,
-             len,
-             "Error %d while retrieving error %d",
-             strerror_error,
+    snprintf(buf, len, "Error %d while retrieving error %d", strerror_error,
              err);
   }
   errno = old_errno;
 }
 
-void safe_strerror_r(int err, char *buf, size_t len) {
-  if (buf == NULL || len <= 0) {
+void safe_strerror_r(int err, char* buf, size_t len) {
+  if (buf == nullptr || len <= 0) {
     return;
   }
   // If using glibc (i.e., Linux), the compiler will automatically select the

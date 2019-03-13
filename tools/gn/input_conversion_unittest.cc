@@ -2,28 +2,28 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "testing/gtest/include/gtest/gtest.h"
-#include "tools/gn/err.h"
 #include "tools/gn/input_conversion.h"
+
+#include "tools/gn/err.h"
 #include "tools/gn/input_file.h"
 #include "tools/gn/parse_tree.h"
 #include "tools/gn/scheduler.h"
+#include "tools/gn/test_with_scheduler.h"
 #include "tools/gn/test_with_scope.h"
 #include "tools/gn/value.h"
+#include "util/test/test.h"
 
 namespace {
 
 // InputConversion needs a global scheduler object.
-class InputConversionTest : public testing::Test {
+class InputConversionTest : public TestWithScheduler {
  public:
-  InputConversionTest() {}
+  InputConversionTest() = default;
 
   const Settings* settings() { return setup_.settings(); }
 
  private:
   TestWithScope setup_;
-
-  Scheduler scheduler_;
 };
 
 }  // namespace
@@ -53,10 +53,10 @@ TEST_F(InputConversionTest, ListLines) {
   EXPECT_FALSE(err.has_error());
   EXPECT_EQ(Value::LIST, result.type());
   ASSERT_EQ(4u, result.list_value().size());
-  EXPECT_EQ("",    result.list_value()[0].string_value());
+  EXPECT_EQ("", result.list_value()[0].string_value());
   EXPECT_EQ("foo", result.list_value()[1].string_value());
   EXPECT_EQ("bar", result.list_value()[2].string_value());
-  EXPECT_EQ("",    result.list_value()[3].string_value());
+  EXPECT_EQ("", result.list_value()[3].string_value());
 
   // Test with trimming.
   result = ConvertInputToValue(settings(), input, nullptr,
@@ -97,7 +97,7 @@ TEST_F(InputConversionTest, ValueList) {
   ASSERT_EQ(Value::LIST, result.type());
   ASSERT_EQ(2u, result.list_value().size());
   EXPECT_EQ("a", result.list_value()[0].string_value());
-  EXPECT_EQ(5,   result.list_value()[1].int_value());
+  EXPECT_EQ(5, result.list_value()[1].int_value());
 }
 
 TEST_F(InputConversionTest, ValueDict) {
@@ -130,6 +130,99 @@ TEST_F(InputConversionTest, ValueDict) {
 
   const InputFile* a_file = a_range.begin().file();
   EXPECT_EQ(input, a_file->contents());
+}
+
+TEST_F(InputConversionTest, ValueJSON) {
+  Err err;
+  std::string input(R"*({
+  "a": 5,
+  "b": "foo",
+  "c": {
+    "d": true,
+    "e": [
+      {
+        "f": "bar"
+      }
+    ]
+  }
+})*");
+  Value result = ConvertInputToValue(settings(), input, nullptr,
+                                     Value(nullptr, "json"), &err);
+  EXPECT_FALSE(err.has_error());
+  ASSERT_EQ(Value::SCOPE, result.type());
+
+  const Value* a_value = result.scope_value()->GetValue("a");
+  ASSERT_TRUE(a_value);
+  EXPECT_EQ(5, a_value->int_value());
+
+  const Value* b_value = result.scope_value()->GetValue("b");
+  ASSERT_TRUE(b_value);
+  EXPECT_EQ("foo", b_value->string_value());
+
+  const Value* c_value = result.scope_value()->GetValue("c");
+  ASSERT_TRUE(c_value);
+  ASSERT_EQ(Value::SCOPE, c_value->type());
+
+  const Value* d_value = c_value->scope_value()->GetValue("d");
+  ASSERT_TRUE(d_value);
+  EXPECT_EQ(true, d_value->boolean_value());
+
+  const Value* e_value = c_value->scope_value()->GetValue("e");
+  ASSERT_TRUE(e_value);
+  ASSERT_EQ(Value::LIST, e_value->type());
+
+  EXPECT_EQ(1u, e_value->list_value().size());
+  ASSERT_EQ(Value::SCOPE, e_value->list_value()[0].type());
+  const Value* f_value = e_value->list_value()[0].scope_value()->GetValue("f");
+  ASSERT_TRUE(f_value);
+  EXPECT_EQ("bar", f_value->string_value());
+}
+
+TEST_F(InputConversionTest, ValueJSONInvalidInput) {
+  Err err;
+  std::string input(R"*({
+  "a": 5,
+  "b":
+})*");
+  Value result = ConvertInputToValue(settings(), input, nullptr,
+                                     Value(nullptr, "json"), &err);
+  EXPECT_TRUE(err.has_error());
+  EXPECT_EQ("Input is not a valid JSON: Line: 4, column: 2, Unexpected token.",
+            err.message());
+}
+
+TEST_F(InputConversionTest, ValueJSONUnsupportedValue) {
+  Err err;
+  std::string input(R"*({
+  "a": null
+})*");
+  Value result = ConvertInputToValue(settings(), input, nullptr,
+                                     Value(nullptr, "json"), &err);
+  EXPECT_TRUE(err.has_error());
+  EXPECT_EQ("Null values are not supported.", err.message());
+}
+
+TEST_F(InputConversionTest, ValueJSONInvalidVariable) {
+  Err err;
+  std::string input(R"*({
+  "a\\x0001b": 5
+})*");
+  Value result = ConvertInputToValue(settings(), input, nullptr,
+                                     Value(nullptr, "json"), &err);
+  EXPECT_TRUE(err.has_error());
+  EXPECT_EQ("Invalid identifier \"a\\x0001b\".", err.message());
+}
+
+TEST_F(InputConversionTest, ValueJSONUnsupported) {
+  Err err;
+  std::string input(R"*({
+  "d": 0.0
+})*");
+  Value result = ConvertInputToValue(settings(), input, nullptr,
+                                     Value(nullptr, "json"), &err);
+  EXPECT_TRUE(err.has_error());
+  // Doubles aren't supported.
+  EXPECT_EQ("Input is not a valid JSON: ", err.message());
 }
 
 TEST_F(InputConversionTest, ValueEmpty) {

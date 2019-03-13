@@ -20,21 +20,20 @@
 #include <string>
 #include <vector>
 
-#include "base/base_export.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
-#include "build/build_config.h"
+#include "util/build_config.h"
 
 namespace base {
 
 class FilePath;
 
-class BASE_EXPORT CommandLine {
+class CommandLine {
  public:
 #if defined(OS_WIN)
   // The native command line string type.
   using StringType = string16;
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   using StringType = std::string;
 #endif
 
@@ -154,6 +153,13 @@ class BASE_EXPORT CommandLine {
   FilePath GetProgram() const;
   void SetProgram(const FilePath& program);
 
+  // Enables/disables the parsing of switches for future argument appending.
+  // True by default, but can be set to false to ensure that no re-ordering
+  // is done.
+  void SetParseSwitches(bool parse_switches) {
+    parse_switches_ = parse_switches;
+  }
+
   // Returns true if this command line contains the given switch.
   // Switch names must be lowercase.
   // The second override provides an optimized version to avoid inlining codegen
@@ -175,8 +181,7 @@ class BASE_EXPORT CommandLine {
   // Append a switch [with optional value] to the command line.
   // Note: Switches will precede arguments regardless of appending order.
   void AppendSwitch(const std::string& switch_string);
-  void AppendSwitchPath(const std::string& switch_string,
-                        const FilePath& path);
+  void AppendSwitchPath(const std::string& switch_string, const FilePath& path);
   void AppendSwitchNative(const std::string& switch_string,
                           const StringType& value);
   void AppendSwitchASCII(const std::string& switch_string,
@@ -204,7 +209,7 @@ class BASE_EXPORT CommandLine {
   void AppendArguments(const CommandLine& other, bool include_program);
 
   // Insert a command before the current command.
-  // Common for debuggers, like "valgrind" or "gdb --args".
+  // Common for debuggers, like "gdb --args".
   void PrependWrapper(const StringType& wrapper);
 
 #if defined(OS_WIN)
@@ -215,7 +220,7 @@ class BASE_EXPORT CommandLine {
 
  private:
   // Disallow default constructor; a program name must be explicitly specified.
-  CommandLine();
+  CommandLine() = delete;
   // Allow the copy constructor. A common pattern is to copy of the current
   // process's command line and then add some flags to it. For example:
   //   CommandLine cl(*CommandLine::ForCurrentProcess());
@@ -240,6 +245,9 @@ class BASE_EXPORT CommandLine {
 
   // The index after the program and switches, any arguments start here.
   size_t begin_args_;
+
+  // Whether or not to parse arguments that look like switches as switches.
+  bool parse_switches_;
 };
 
 }  // namespace base

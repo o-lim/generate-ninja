@@ -12,10 +12,10 @@
 
 // An ordered set of items. Only appending is supported. Iteration is designed
 // to be by index.
-template<typename T>
+template <typename T>
 class OrderedSet {
  private:
-  typedef std::unordered_set<T, BASE_HASH_NAMESPACE::hash<T> > set_type;
+  typedef std::unordered_set<T> set_type;
   typedef typename set_type::const_iterator set_iterator;
   typedef std::deque<set_iterator> vector_type;
 
@@ -25,19 +25,11 @@ class OrderedSet {
   OrderedSet() {}
   ~OrderedSet() {}
 
-  const T& operator[](size_t index) const {
-    return *ordering_[index];
-  }
-  size_t size() const {
-    return ordering_.size();
-  }
-  bool empty() const {
-    return ordering_.empty();
-  }
+  const T& operator[](size_t index) const { return *ordering_[index]; }
+  size_t size() const { return ordering_.size(); }
+  bool empty() const { return ordering_.empty(); }
 
-  bool has_item(const T& t) const {
-    return set_.find(t) != set_.end();
-  }
+  bool has_item(const T& t) const { return set_.find(t) != set_.end(); }
 
   // Returns true if the item was inserted. False if it was already in the
   // set.
@@ -58,7 +50,7 @@ class OrderedSet {
   }
 
   // Appends a range of items, skipping ones that already exist.
-  template<class InputIterator>
+  template <class InputIterator>
   void append(const InputIterator& insert_begin,
               const InputIterator& insert_end) {
     for (InputIterator i = insert_begin; i != insert_end; ++i) {

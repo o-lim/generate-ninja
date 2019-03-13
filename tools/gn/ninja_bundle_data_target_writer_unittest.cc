@@ -7,9 +7,9 @@
 #include <algorithm>
 #include <sstream>
 
-#include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/target.h"
 #include "tools/gn/test_with_scope.h"
+#include "util/test/test.h"
 
 TEST(NinjaBundleDataTargetWriter, Run) {
   Err err;
@@ -40,13 +40,13 @@ TEST(NinjaBundleDataTargetWriter, Run) {
 
   const char expected[] =
       "build obj/foo/data.stamp: stamp "
-          "../../foo/input1.txt "
-          "../../foo/input2.txt "
-          "../../foo/Foo.xcassets/Contents.json "
-          "../../foo/Foo.xcassets/foo.imageset/Contents.json "
-          "../../foo/Foo.xcassets/foo.imageset/FooIcon-29.png "
-          "../../foo/Foo.xcassets/foo.imageset/FooIcon-29@2x.png "
-          "../../foo/Foo.xcassets/foo.imageset/FooIcon-29@3x.png\n";
+      "../../foo/input1.txt "
+      "../../foo/input2.txt "
+      "../../foo/Foo.xcassets/Contents.json "
+      "../../foo/Foo.xcassets/foo.imageset/Contents.json "
+      "../../foo/Foo.xcassets/foo.imageset/FooIcon-29.png "
+      "../../foo/Foo.xcassets/foo.imageset/FooIcon-29@2x.png "
+      "../../foo/Foo.xcassets/foo.imageset/FooIcon-29@3x.png\n";
   std::string out_str = out.str();
   EXPECT_EQ(expected, out_str);
 }

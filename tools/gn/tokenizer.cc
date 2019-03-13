@@ -11,8 +11,8 @@
 namespace {
 
 bool CouldBeTwoCharOperatorBegin(char c) {
-  return c == '<' || c == '>' || c == '!' || c == '=' || c == '-' ||
-         c == '+' || c == '|' || c == '&';
+  return c == '<' || c == '>' || c == '!' || c == '=' || c == '-' || c == '+' ||
+         c == '|' || c == '&';
 }
 
 bool CouldBeTwoCharOperatorEnd(char c) {
@@ -20,8 +20,8 @@ bool CouldBeTwoCharOperatorEnd(char c) {
 }
 
 bool CouldBeOneCharOperator(char c) {
-  return c == '=' || c == '<' || c == '>' || c == '+' || c == '!' ||
-         c == ':' || c == '|' || c == '&' || c == '-';
+  return c == '=' || c == '<' || c == '>' || c == '+' || c == '!' || c == ':' ||
+         c == '|' || c == '&' || c == '-';
 }
 
 bool CouldBeOperator(char c) {
@@ -74,11 +74,9 @@ Tokenizer::Tokenizer(const InputFile* input_file, Err* err)
       err_(err),
       cur_(0),
       line_number_(1),
-      column_number_(1) {
-}
+      column_number_(1) {}
 
-Tokenizer::~Tokenizer() {
-}
+Tokenizer::~Tokenizer() = default;
 
 // static
 std::vector<Token> Tokenizer::Tokenize(const InputFile* input_file, Err* err) {
@@ -130,7 +128,7 @@ std::vector<Token> Tokenizer::Run() {
                location.column_number())) {
         type = Token::LINE_COMMENT;
         if (!at_end())  // Could be EOF.
-          Advance();  // The current \n.
+          Advance();    // The current \n.
         // If this comment is separated from the next syntax element, then we
         // want to tag it as a block comment. This will become a standalone
         // statement at the parser level to keep this comment separate, rather
@@ -259,11 +257,9 @@ void Tokenizer::AdvanceToEndOfToken(const Location& location,
         // Require the char after a number to be some kind of space, scope,
         // or operator.
         char c = cur_char();
-        if (!IsCurrentWhitespace() && !CouldBeOperator(c) &&
-            !IsScoperChar(c) && c != ',') {
-          *err_ = Err(GetCurrentLocation(),
-                      "This is not a valid number.",
-                      "Learn to count.");
+        if (!IsCurrentWhitespace() && !CouldBeOperator(c) && !IsScoperChar(c) &&
+            c != ',') {
+          *err_ = Err(GetCurrentLocation(), "This is not a valid number.");
           // Highlight the number.
           err_->AppendRange(LocationRange(location, GetCurrentLocation()));
         }
@@ -357,7 +353,7 @@ bool Tokenizer::IsCurrentStringTerminator(char quote_char) const {
     return false;
 
   // Check for escaping. \" is not a string terminator, but \\" is. Count
-  // the number of preceeding backslashes.
+  // the number of preceding backslashes.
   int num_backslashes = 0;
   for (int i = static_cast<int>(cur_) - 1; i >= 0 && input_[i] == '\\'; i--)
     num_backslashes++;
@@ -383,8 +379,8 @@ void Tokenizer::Advance() {
 }
 
 Location Tokenizer::GetCurrentLocation() const {
-  return Location(
-      input_file_, line_number_, column_number_, static_cast<int>(cur_));
+  return Location(input_file_, line_number_, column_number_,
+                  static_cast<int>(cur_));
 }
 
 Err Tokenizer::GetErrorForInvalidToken(const Location& location) const {
@@ -394,10 +390,11 @@ Err Tokenizer::GetErrorForInvalidToken(const Location& location) const {
     help = "Semicolons are not needed, delete this one.";
   } else if (cur_char() == '\t') {
     // Tab.
-    help = "You got a tab character in here. Tabs are evil. "
-           "Convert to spaces.";
+    help =
+        "You got a tab character in here. Tabs are evil. "
+        "Convert to spaces.";
   } else if (cur_char() == '/' && cur_ + 1 < input_.size() &&
-      (input_[cur_ + 1] == '/' || input_[cur_ + 1] == '*')) {
+             (input_[cur_ + 1] == '/' || input_[cur_ + 1] == '*')) {
     // Different types of comments.
     help = "Comments should start with # instead";
   } else if (cur_char() == '\'') {

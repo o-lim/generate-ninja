@@ -2,11 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build_overrides/build.gni")
-import("//build/config/chrome_build.gni")
-import("//build/config/chromecast_build.gni")
 import("//build/config/clang/clang.gni")
-import("//build/config/sanitizers/sanitizers.gni")
 import("//build/toolchain/toolchain.gni")
 
 if (is_ios) {

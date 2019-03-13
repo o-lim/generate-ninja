@@ -4,9 +4,9 @@
 
 #include <sstream>
 
-#include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/ninja_toolchain_writer.h"
 #include "tools/gn/test_with_scope.h"
+#include "util/test/test.h"
 
 TEST(NinjaToolchainWriter, WriteToolRule) {
   TestWithScope setup;
@@ -20,6 +20,6 @@ TEST(NinjaToolchainWriter, WriteToolRule) {
   EXPECT_EQ(
       "rule prefix_cc\n"
       "  command = cc ${in} ${cflags} ${cflags_c} ${cppflags} ${cppflags_c} ${defines} ${include_dirs} "
-          "-o ${out}\n",
+      "-o ${out}\n",
       stream.str());
 }

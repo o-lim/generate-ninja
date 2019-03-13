@@ -69,6 +69,11 @@ extern const char kHelp_HelpShort[];
 extern const char kHelp_Help[];
 int RunHelp(const std::vector<std::string>& args);
 
+extern const char kMeta[];
+extern const char kMeta_HelpShort[];
+extern const char kMeta_Help[];
+int RunMeta(const std::vector<std::string>& args);
+
 extern const char kLs[];
 extern const char kLs_HelpShort[];
 extern const char kLs_Help[];
@@ -131,12 +136,16 @@ bool ResolveFromCommandLineInput(
 // force_check, if true, will override targets opting out of header checking
 // with "check_includes = false" and will check them anyway.
 //
+// Generated files are normally not checked since they do not exist
+// unless a build has been run, but passing true for |check_generated|
+// will attempt to check them anyway, assuming they exist.
+//
 // On success, returns true. If the check fails, the error(s) will be printed
 // to stdout and false will be returned.
 bool CheckPublicHeaders(const BuildSettings* build_settings,
                         const std::vector<const Target*>& all_targets,
                         const std::vector<const Target*>& to_check,
-                        bool force_check);
+                        bool force_check, bool check_generated);
 
 // Filters the given list of targets by the given pattern list.
 void FilterTargetsByPatterns(const std::vector<const Target*>& input,
@@ -155,28 +164,28 @@ bool FilterPatternsFromString(const BuildSettings* build_settings,
 // These are the documentation strings for the command-line flags used by
 // FilterAndPrintTargets. Commands that call that function should incorporate
 // these into their help.
-#define TARGET_PRINTING_MODE_COMMAND_LINE_HELP \
-    "  --as=(buildfile|label|output)\n"\
-    "      How to print targets.\n"\
-    "\n"\
-    "      buildfile\n"\
-    "          Prints the build files where the given target was declared as\n"\
-    "          file names.\n"\
-    "      label  (default)\n"\
-    "          Prints the label of the target.\n"\
-    "      output\n"\
-    "          Prints the first output file for the target relative to the\n"\
-    "          root build directory.\n"
-#define TARGET_TYPE_FILTER_COMMAND_LINE_HELP \
-    "  --type=(action|copy|executable|group|loadable_module|shared_library|\n"\
-    "          source_set|static_library)\n"\
-    "      Restrict outputs to targets matching the given type. If\n"\
-    "      unspecified, no filtering will be performed.\n"
-#define TARGET_TESTONLY_FILTER_COMMAND_LINE_HELP \
-    "  --testonly=(true|false)\n"\
-    "      Restrict outputs to targets with the testonly flag set\n"\
-    "      accordingly. When unspecified, the target's testonly flags are\n"\
-    "      ignored.\n"
+#define TARGET_PRINTING_MODE_COMMAND_LINE_HELP                                \
+  "  --as=(buildfile|label|output)\n"                                         \
+  "      How to print targets.\n"                                             \
+  "\n"                                                                        \
+  "      buildfile\n"                                                         \
+  "          Prints the build files where the given target was declared as\n" \
+  "          file names.\n"                                                   \
+  "      label  (default)\n"                                                  \
+  "          Prints the label of the target.\n"                               \
+  "      output\n"                                                            \
+  "          Prints the first output file for the target relative to the\n"   \
+  "          root build directory.\n"
+#define TARGET_TYPE_FILTER_COMMAND_LINE_HELP                                 \
+  "  --type=(action|copy|executable|group|loadable_module|shared_library|\n" \
+  "          source_set|static_library)\n"                                   \
+  "      Restrict outputs to targets matching the given type. If\n"          \
+  "      unspecified, no filtering will be performed.\n"
+#define TARGET_TESTONLY_FILTER_COMMAND_LINE_HELP                           \
+  "  --testonly=(true|false)\n"                                            \
+  "      Restrict outputs to targets with the testonly flag set\n"         \
+  "      accordingly. When unspecified, the target's testonly flags are\n" \
+  "      ignored.\n"
 
 // Applies any testonly and type filters specified on the command line,
 // and prints the targets as specified by the --as command line flag.

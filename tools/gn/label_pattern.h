@@ -20,8 +20,8 @@ extern const char kLabelPattern_Help[];
 class LabelPattern {
  public:
   enum Type {
-    MATCH = 1,  // Exact match for a given target.
-    DIRECTORY,  // Only targets in the file in the given directory.
+    MATCH = 1,           // Exact match for a given target.
+    DIRECTORY,           // Only targets in the file in the given directory.
     RECURSIVE_DIRECTORY  // The given directory and any subdir.
                          // (also indicates "public" when dir is empty).
   };
@@ -45,6 +45,10 @@ class LabelPattern {
 
   // Returns true if this pattern matches the given label.
   bool Matches(const Label& label) const;
+
+  // Returns true if any of the patterns in the vector match the label.
+  static bool VectorMatches(const std::vector<LabelPattern>& patterns,
+                            const Label& label);
 
   // Returns a string representation of this pattern.
   std::string Describe() const;

@@ -5,13 +5,13 @@
 #include <algorithm>
 #include <sstream>
 
-#include "build/build_config.h"
-#include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/ninja_action_target_writer.h"
 #include "tools/gn/pool.h"
 #include "tools/gn/substitution_list.h"
 #include "tools/gn/target.h"
 #include "tools/gn/test_with_scope.h"
+#include "util/build_config.h"
+#include "util/test/test.h"
 
 TEST(NinjaActionTargetWriter, WriteOutputFilesForBuildLine) {
   Err err;
@@ -19,9 +19,9 @@ TEST(NinjaActionTargetWriter, WriteOutputFilesForBuildLine) {
 
   Target target(setup.settings(), Label(SourceDir("//foo/"), "bar"));
   target.set_output_type(Target::ACTION_FOREACH);
-  target.action_values().outputs() = SubstitutionList::MakeForTest(
-      "//out/Debug/gen/a b{{source_name_part}}.h",
-      "//out/Debug/gen/{{source_name_part}}.cc");
+  target.action_values().outputs() =
+      SubstitutionList::MakeForTest("//out/Debug/gen/a b{{source_name_part}}.h",
+                                    "//out/Debug/gen/{{source_name_part}}.cc");
 
   ASSERT_TRUE(target.OnResolved(&err));
 
@@ -44,34 +44,32 @@ TEST(NinjaActionTargetWriter, ActionNoSources) {
   target.set_output_type(Target::ACTION);
 
   target.action_values().set_script(SourceFile("//foo/script.py"));
-  target.inputs().push_back(SourceFile("//foo/included.txt"));
+  target.config_values().inputs().push_back(SourceFile("//foo/included.txt"));
 
   target.action_values().outputs() =
       SubstitutionList::MakeForTest("//out/Debug/foo.out");
 
   ASSERT_TRUE(target.OnResolved(&err));
 
-  setup.build_settings()->set_python_path(base::FilePath(FILE_PATH_LITERAL(
-      "/usr/bin/python")));
+  setup.build_settings()->set_python_path(
+      base::FilePath(FILE_PATH_LITERAL("/usr/bin/python")));
 
   std::ostringstream out;
   NinjaActionTargetWriter writer(&target, out);
   writer.Run();
 
-  const char expected[] =
-      "rule __foo_bar___rule\n"
-      "  command = /usr/bin/python ../../foo/script.py\n"
-      "  description = ACTION //foo:bar()\n"
-      "  restat = 1\n"
-      "build obj/foo/bar.inputdeps.stamp: stamp ../../foo/script.py "
-          "../../foo/included.txt\n"
-      "\n"
-      "build foo.out: __foo_bar___rule | obj/foo/bar.inputdeps.stamp\n"
-      "\n"
-      "build obj/foo/bar.stamp: stamp foo.out\n";
+  const char* expected = 1 /* skip initial newline */ + R"(
+rule __foo_bar___rule
+  command = /usr/bin/python ../../foo/script.py
+  description = ACTION //foo:bar()
+  restat = 1
+
+build foo.out: __foo_bar___rule | ../../foo/script.py ../../foo/included.txt
+
+build obj/foo/bar.stamp: stamp foo.out
+)";
   EXPECT_EQ(expected, out.str());
 }
-
 
 // Tests an action with no sources and console pool
 TEST(NinjaActionTargetWriter, ActionNoSourcesConsolePool) {
@@ -82,7 +80,7 @@ TEST(NinjaActionTargetWriter, ActionNoSourcesConsolePool) {
   target.set_output_type(Target::ACTION);
 
   target.action_values().set_script(SourceFile("//foo/script.py"));
-  target.inputs().push_back(SourceFile("//foo/included.txt"));
+  target.config_values().inputs().push_back(SourceFile("//foo/included.txt"));
 
   target.action_values().outputs() =
       SubstitutionList::MakeForTest("//out/Debug/foo.out");
@@ -105,10 +103,9 @@ TEST(NinjaActionTargetWriter, ActionNoSourcesConsolePool) {
       "  command = /usr/bin/python ../../foo/script.py\n"
       "  description = ACTION //foo:bar()\n"
       "  restat = 1\n"
-      "build obj/foo/bar.inputdeps.stamp: stamp ../../foo/script.py "
-          "../../foo/included.txt\n"
       "\n"
-      "build foo.out: __foo_bar___rule | obj/foo/bar.inputdeps.stamp\n"
+      "build foo.out: __foo_bar___rule | ../../foo/script.py "
+      "../../foo/included.txt\n"
       "  pool = console\n"
       "\n"
       "build obj/foo/bar.stamp: stamp foo.out\n";
@@ -116,7 +113,7 @@ TEST(NinjaActionTargetWriter, ActionNoSourcesConsolePool) {
 }
 
 // Tests an action with no sources and pool
-TEST(NinjaActionTargetWriter, ActionNoSourcesPool) {
+TEST(NinjaActionTargetWriter, ActionNoSourcesConsole) {
   Err err;
   TestWithScope setup;
 
@@ -124,38 +121,39 @@ TEST(NinjaActionTargetWriter, ActionNoSourcesPool) {
   target.set_output_type(Target::ACTION);
 
   target.action_values().set_script(SourceFile("//foo/script.py"));
-  target.inputs().push_back(SourceFile("//foo/included.txt"));
+  target.config_values().inputs().push_back(SourceFile("//foo/included.txt"));
 
   target.action_values().outputs() =
       SubstitutionList::MakeForTest("//out/Debug/foo.out");
 
   Pool pool(setup.settings(),
-            Label(SourceDir("//foo/"), "pool", setup.toolchain()->label().dir(),
+            Label(SourceDir("//"), "console", setup.toolchain()->label().dir(),
                   setup.toolchain()->label().name()));
-  pool.set_depth(5);
+  pool.set_depth(1);
   target.action_values().set_pool(LabelPtrPair<Pool>(&pool));
 
   ASSERT_TRUE(target.OnResolved(&err));
 
-  setup.build_settings()->set_python_path(base::FilePath(FILE_PATH_LITERAL(
-      "/usr/bin/python")));
+  setup.build_settings()->set_python_path(
+      base::FilePath(FILE_PATH_LITERAL("/usr/bin/python")));
 
   std::ostringstream out;
   NinjaActionTargetWriter writer(&target, out);
   writer.Run();
 
-  const char expected[] =
-      "rule __foo_bar___rule\n"
-      "  command = /usr/bin/python ../../foo/script.py\n"
-      "  description = ACTION //foo:bar()\n"
-      "  restat = 1\n"
-      "build obj/foo/bar.inputdeps.stamp: stamp ../../foo/script.py "
-          "../../foo/included.txt\n"
-      "\n"
-      "build foo.out: __foo_bar___rule | obj/foo/bar.inputdeps.stamp\n"
-      "  pool = foo_pool\n"
-      "\n"
-      "build obj/foo/bar.stamp: stamp foo.out\n";
+  // The console pool's name must be mapped exactly to the string "console"
+  // which is a special pre-defined pool name in ninja.
+  const char* expected = 1 /* skip initial newline */ + R"(
+rule __foo_bar___rule
+  command = /usr/bin/python ../../foo/script.py
+  description = ACTION //foo:bar()
+  restat = 1
+
+build foo.out: __foo_bar___rule | ../../foo/script.py ../../foo/included.txt
+  pool = console
+
+build obj/foo/bar.stamp: stamp foo.out
+)";
   EXPECT_EQ(expected, out.str());
 }
 
@@ -171,15 +169,15 @@ TEST(NinjaActionTargetWriter, ActionWithSources) {
   target.action_values().set_script(SourceFile("//foo/script.py"));
 
   target.sources().push_back(SourceFile("//foo/source.txt"));
-  target.inputs().push_back(SourceFile("//foo/included.txt"));
+  target.config_values().inputs().push_back(SourceFile("//foo/included.txt"));
 
   target.action_values().outputs() =
       SubstitutionList::MakeForTest("//out/Debug/foo.out");
 
   ASSERT_TRUE(target.OnResolved(&err));
 
-  setup.build_settings()->set_python_path(base::FilePath(FILE_PATH_LITERAL(
-      "/usr/bin/python")));
+  setup.build_settings()->set_python_path(
+      base::FilePath(FILE_PATH_LITERAL("/usr/bin/python")));
 
   std::ostringstream out;
   NinjaActionTargetWriter writer(&target, out);
@@ -190,10 +188,9 @@ TEST(NinjaActionTargetWriter, ActionWithSources) {
       "  command = /usr/bin/python ../../foo/script.py\n"
       "  description = ACTION //foo:bar()\n"
       "  restat = 1\n"
-      "build obj/foo/bar.inputdeps.stamp: stamp ../../foo/script.py "
-          "../../foo/included.txt ../../foo/source.txt\n"
       "\n"
-      "build foo.out: __foo_bar___rule | obj/foo/bar.inputdeps.stamp\n"
+      "build foo.out: __foo_bar___rule | ../../foo/script.py "
+      "../../foo/included.txt ../../foo/source.txt\n"
       "\n"
       "build obj/foo/bar.stamp: stamp foo.out\n";
   EXPECT_EQ(expected_linux, out.str());
@@ -216,7 +213,7 @@ TEST(NinjaActionTargetWriter, ActionWithCommandAndDescription) {
   target.action_values().set_description(desc);
 
   target.sources().push_back(SourceFile("//foo/source.txt"));
-  target.inputs().push_back(SourceFile("//foo/included.txt"));
+  target.config_values().inputs().push_back(SourceFile("//foo/included.txt"));
 
   target.action_values().outputs() =
       SubstitutionList::MakeForTest("//out/Debug/foo.out");
@@ -235,10 +232,9 @@ TEST(NinjaActionTargetWriter, ActionWithCommandAndDescription) {
       "  command = cmd ${in}\n"
       "  description = CMD ACTION ${out}\n"
       "  restat = 1\n"
-      "build obj/foo/bar.inputdeps.stamp: stamp "
-          "../../foo/included.txt ../../foo/source.txt\n"
       "\n"
-      "build foo.out: __foo_bar___rule | obj/foo/bar.inputdeps.stamp\n"
+      "build foo.out: __foo_bar___rule | ../../foo/included.txt "
+      "../../foo/source.txt\n"
       "\n"
       "build obj/foo/bar.stamp: stamp foo.out\n";
   EXPECT_EQ(expected_linux, out.str());
@@ -257,7 +253,7 @@ TEST(NinjaActionTargetWriter, ActionWithInterpreter) {
   target.action_values().set_script(SourceFile("//foo/script.lua"));
 
   target.sources().push_back(SourceFile("//foo/source.txt"));
-  target.inputs().push_back(SourceFile("//foo/included.txt"));
+  target.config_values().inputs().push_back(SourceFile("//foo/included.txt"));
 
   target.action_values().outputs() =
       SubstitutionList::MakeForTest("//out/Debug/foo.out");
@@ -276,10 +272,9 @@ TEST(NinjaActionTargetWriter, ActionWithInterpreter) {
       "  command = lua ../../foo/script.lua\n"
       "  description = ACTION //foo:bar()\n"
       "  restat = 1\n"
-      "build obj/foo/bar.inputdeps.stamp: stamp ../../foo/script.lua "
-          "../../foo/included.txt ../../foo/source.txt\n"
       "\n"
-      "build foo.out: __foo_bar___rule | obj/foo/bar.inputdeps.stamp\n"
+      "build foo.out: __foo_bar___rule | ../../foo/script.lua "
+      "../../foo/included.txt ../../foo/source.txt\n"
       "\n"
       "build obj/foo/bar.stamp: stamp foo.out\n";
   EXPECT_EQ(expected_linux, out.str());
@@ -314,18 +309,16 @@ TEST(NinjaActionTargetWriter, ForEach) {
   target.action_values().set_script(SourceFile("//foo/script.py"));
 
   target.action_values().args() = SubstitutionList::MakeForTest(
-      "-i",
-      "{{source}}",
-      "--out=foo bar{{source_name_part}}.o");
-  target.action_values().outputs() = SubstitutionList::MakeForTest(
-      "//out/Debug/{{source_name_part}}.out");
+      "-i", "{{source}}", "--out=foo bar{{source_name_part}}.o");
+  target.action_values().outputs() =
+      SubstitutionList::MakeForTest("//out/Debug/{{source_name_part}}.out");
 
-  target.inputs().push_back(SourceFile("//foo/included.txt"));
+  target.config_values().inputs().push_back(SourceFile("//foo/included.txt"));
 
   ASSERT_TRUE(target.OnResolved(&err));
 
-  setup.build_settings()->set_python_path(base::FilePath(FILE_PATH_LITERAL(
-      "/usr/bin/python")));
+  setup.build_settings()->set_python_path(
+      base::FilePath(FILE_PATH_LITERAL("/usr/bin/python")));
 
   std::ostringstream out;
   NinjaActionTargetWriter writer(&target, out);
@@ -334,26 +327,26 @@ TEST(NinjaActionTargetWriter, ForEach) {
   const char expected_linux[] =
       "rule __foo_bar___rule\n"
       "  command = /usr/bin/python ../../foo/script.py -i ${in} "
-          // Escaping is different between Windows and Posix.
+// Escaping is different between Windows and Posix.
 #if defined(OS_WIN)
-          "\"--out=foo$ bar${source_name_part}.o\"\n"
+      "\"--out=foo$ bar${source_name_part}.o\"\n"
 #else
-          "--out=foo\\$ bar${source_name_part}.o\n"
+      "--out=foo\\$ bar${source_name_part}.o\n"
 #endif
       "  description = ACTION //foo:bar()\n"
       "  restat = 1\n"
       "build obj/foo/bar.inputdeps.stamp: stamp ../../foo/script.py "
-          "../../foo/included.txt obj/foo/dep.stamp\n"
+      "../../foo/included.txt obj/foo/dep.stamp\n"
       "\n"
       "build input1.out: __foo_bar___rule ../../foo/input1.txt | "
-          "obj/foo/bar.inputdeps.stamp\n"
+      "obj/foo/bar.inputdeps.stamp\n"
       "  source_name_part = input1\n"
       "build input2.out: __foo_bar___rule ../../foo/input2.txt | "
-          "obj/foo/bar.inputdeps.stamp\n"
+      "obj/foo/bar.inputdeps.stamp\n"
       "  source_name_part = input2\n"
       "\n"
       "build obj/foo/bar.stamp: "
-          "stamp input1.out input2.out || obj/foo/datadep.stamp\n";
+      "stamp input1.out input2.out || obj/foo/datadep.stamp\n";
 
   std::string out_str = out.str();
 #if defined(OS_WIN)
@@ -382,16 +375,14 @@ TEST(NinjaActionTargetWriter, ForEachWithDepfile) {
   target.action_values().set_depfile(depfile);
 
   target.action_values().args() = SubstitutionList::MakeForTest(
-      "-i",
-      "{{source}}",
-      "--out=foo bar{{source_name_part}}.o");
-  target.action_values().outputs() = SubstitutionList::MakeForTest(
-      "//out/Debug/{{source_name_part}}.out");
+      "-i", "{{source}}", "--out=foo bar{{source_name_part}}.o");
+  target.action_values().outputs() =
+      SubstitutionList::MakeForTest("//out/Debug/{{source_name_part}}.out");
 
-  target.inputs().push_back(SourceFile("//foo/included.txt"));
+  target.config_values().inputs().push_back(SourceFile("//foo/included.txt"));
 
-  setup.build_settings()->set_python_path(base::FilePath(FILE_PATH_LITERAL(
-      "/usr/bin/python")));
+  setup.build_settings()->set_python_path(
+      base::FilePath(FILE_PATH_LITERAL("/usr/bin/python")));
 
   std::ostringstream out;
   NinjaActionTargetWriter writer(&target, out);
@@ -401,21 +392,21 @@ TEST(NinjaActionTargetWriter, ForEachWithDepfile) {
       "rule __foo_bar___rule\n"
       "  command = /usr/bin/python ../../foo/script.py -i ${in} "
 #if defined(OS_WIN)
-          "\"--out=foo$ bar${source_name_part}.o\"\n"
+      "\"--out=foo$ bar${source_name_part}.o\"\n"
 #else
-          "--out=foo\\$ bar${source_name_part}.o\n"
+      "--out=foo\\$ bar${source_name_part}.o\n"
 #endif
       "  description = ACTION //foo:bar()\n"
       "  restat = 1\n"
       "build obj/foo/bar.inputdeps.stamp: stamp ../../foo/script.py "
-          "../../foo/included.txt\n"
+      "../../foo/included.txt\n"
       "\n"
       "build input1.out: __foo_bar___rule ../../foo/input1.txt"
-          " | obj/foo/bar.inputdeps.stamp\n"
+      " | obj/foo/bar.inputdeps.stamp\n"
       "  source_name_part = input1\n"
       "  depfile = gen/input1.d\n"
       "build input2.out: __foo_bar___rule ../../foo/input2.txt"
-          " | obj/foo/bar.inputdeps.stamp\n"
+      " | obj/foo/bar.inputdeps.stamp\n"
       "  source_name_part = input2\n"
       "  depfile = gen/input2.d\n"
       "\n"
@@ -438,17 +429,14 @@ TEST(NinjaActionTargetWriter, ForEachWithResponseFile) {
   // Make sure we get interesting substitutions for both the args and the
   // response file contents.
   target.action_values().args() = SubstitutionList::MakeForTest(
-      "{{source}}",
-      "{{source_file_part}}",
-      "{{response_file_name}}");
-  target.action_values().rsp_file_contents() = SubstitutionList::MakeForTest(
-      "-j",
-      "{{source_name_part}}");
-  target.action_values().outputs() = SubstitutionList::MakeForTest(
-      "//out/Debug/{{source_name_part}}.out");
+      "{{source}}", "{{source_file_part}}", "{{response_file_name}}");
+  target.action_values().rsp_file_contents() =
+      SubstitutionList::MakeForTest("-j", "{{source_name_part}}");
+  target.action_values().outputs() =
+      SubstitutionList::MakeForTest("//out/Debug/{{source_name_part}}.out");
 
-  setup.build_settings()->set_python_path(base::FilePath(FILE_PATH_LITERAL(
-      "/usr/bin/python")));
+  setup.build_settings()->set_python_path(
+      base::FilePath(FILE_PATH_LITERAL("/usr/bin/python")));
 
   std::ostringstream out;
   NinjaActionTargetWriter writer(&target, out);
@@ -462,12 +450,12 @@ TEST(NinjaActionTargetWriter, ForEachWithResponseFile) {
       "  rspfile_content = -j ${source_name_part}\n"
       // These come from the args.
       "  command = /usr/bin/python ../../foo/script.py ${in} "
-          "${source_file_part} ${rspfile}\n"
+      "${source_file_part} ${rspfile}\n"
       "  description = ACTION //foo:bar()\n"
       "  restat = 1\n"
       "\n"
       "build input1.out: __foo_bar___rule ../../foo/input1.txt"
-          " | ../../foo/script.py\n"
+      " | ../../foo/script.py\n"
       // Necessary for the rspfile defined in the rule.
       "  unique_name = 0\n"
       // Substitution for the args.
@@ -477,4 +465,125 @@ TEST(NinjaActionTargetWriter, ForEachWithResponseFile) {
       "\n"
       "build obj/foo/bar.stamp: stamp input1.out\n";
   EXPECT_EQ(expected_linux, out.str());
+}
+
+TEST(NinjaActionTargetWriter, ForEachWithPool) {
+  Err err;
+  TestWithScope setup;
+
+  Target target(setup.settings(), Label(SourceDir("//foo/"), "bar"));
+  target.set_output_type(Target::ACTION_FOREACH);
+
+  target.sources().push_back(SourceFile("//foo/input1.txt"));
+  target.action_values().set_script(SourceFile("//foo/script.py"));
+
+  Pool pool(setup.settings(),
+            Label(SourceDir("//foo/"), "pool", setup.toolchain()->label().dir(),
+                  setup.toolchain()->label().name()));
+  pool.set_depth(5);
+  target.action_values().set_pool(LabelPtrPair<Pool>(&pool));
+
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  // Make sure we get interesting substitutions for both the args and the
+  // response file contents.
+  target.action_values().args() =
+      SubstitutionList::MakeForTest("{{source}}", "{{source_file_part}}");
+  target.action_values().outputs() =
+      SubstitutionList::MakeForTest("//out/Debug/{{source_name_part}}.out");
+
+  setup.build_settings()->set_python_path(
+      base::FilePath(FILE_PATH_LITERAL("/usr/bin/python")));
+
+  std::ostringstream out;
+  NinjaActionTargetWriter writer(&target, out);
+  writer.Run();
+
+  const char expected_linux[] =
+      "rule __foo_bar___rule\n"
+      // These come from the args.
+      "  command = /usr/bin/python ../../foo/script.py ${in} "
+      "${source_file_part}\n"
+      "  description = ACTION //foo:bar()\n"
+      "  restat = 1\n"
+      "\n"
+      "build input1.out: __foo_bar___rule ../../foo/input1.txt"
+      " | ../../foo/script.py\n"
+      // Substitution for the args.
+      "  source_file_part = input1.txt\n"
+      "  pool = foo_pool\n"
+      "\n"
+      "build obj/foo/bar.stamp: stamp input1.out\n";
+  EXPECT_EQ(expected_linux, out.str());
+}
+
+TEST(NinjaActionTargetWriter, NoTransitiveHardDeps) {
+  Err err;
+  TestWithScope setup;
+
+  setup.build_settings()->set_python_path(
+      base::FilePath(FILE_PATH_LITERAL("/usr/bin/python")));
+
+  Target dep(setup.settings(), Label(SourceDir("//foo/"), "dep"));
+  dep.set_output_type(Target::ACTION);
+  dep.visibility().SetPublic();
+  ASSERT_TRUE(dep.OnResolved(&err));
+
+  Target foo(setup.settings(), Label(SourceDir("//foo/"), "foo"));
+  foo.set_output_type(Target::ACTION);
+  foo.visibility().SetPublic();
+  foo.sources().push_back(SourceFile("//foo/input1.txt"));
+  foo.action_values().set_script(SourceFile("//foo/script.py"));
+  foo.private_deps().push_back(LabelTargetPair(&dep));
+  foo.action_values().outputs() =
+      SubstitutionList::MakeForTest("//out/Debug/foo.out");
+  ASSERT_TRUE(foo.OnResolved(&err));
+
+  {
+    std::ostringstream out;
+    NinjaActionTargetWriter writer(&foo, out);
+    writer.Run();
+
+    const char expected_linux[] =
+        "rule __foo_foo___rule\n"
+        // These come from the args.
+        "  command = /usr/bin/python ../../foo/script.py\n"
+        "  description = ACTION //foo:foo()\n"
+        "  restat = 1\n"
+        "\n"
+        "build foo.out: __foo_foo___rule | ../../foo/script.py"
+        " ../../foo/input1.txt obj/foo/dep.stamp\n"
+        "\n"
+        "build obj/foo/foo.stamp: stamp foo.out\n";
+    EXPECT_EQ(expected_linux, out.str());
+  }
+
+  Target bar(setup.settings(), Label(SourceDir("//bar/"), "bar"));
+  bar.set_output_type(Target::ACTION);
+  bar.sources().push_back(SourceFile("//bar/input1.txt"));
+  bar.action_values().set_script(SourceFile("//bar/script.py"));
+  bar.private_deps().push_back(LabelTargetPair(&foo));
+  bar.action_values().outputs() =
+      SubstitutionList::MakeForTest("//out/Debug/bar.out");
+  ASSERT_TRUE(bar.OnResolved(&err)) << err.message();
+
+  {
+    std::ostringstream out;
+    NinjaActionTargetWriter writer(&bar, out);
+    writer.Run();
+
+    const char expected_linux[] =
+        "rule __bar_bar___rule\n"
+        // These come from the args.
+        "  command = /usr/bin/python ../../bar/script.py\n"
+        "  description = ACTION //bar:bar()\n"
+        "  restat = 1\n"
+        "\n"
+        // Do not have obj/foo/dep.stamp as dependency.
+        "build bar.out: __bar_bar___rule | ../../bar/script.py"
+        " ../../bar/input1.txt obj/foo/foo.stamp\n"
+        "\n"
+        "build obj/bar/bar.stamp: stamp bar.out\n";
+    EXPECT_EQ(expected_linux, out.str());
+  }
 }

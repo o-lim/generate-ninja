@@ -5,14 +5,12 @@
 #ifndef BASE_WIN_REGISTRY_H_
 #define BASE_WIN_REGISTRY_H_
 
-#include <windows.h>
 #include <stdint.h>
 #include <string>
 #include <vector>
+#include "base/win/windows_types.h"
 
-#include "base/base_export.h"
 #include "base/macros.h"
-#include "base/win/object_watcher.h"
 #include "base/win/scoped_handle.h"
 
 namespace base {
@@ -27,11 +25,8 @@ namespace win {
 //    is not touched in case of failure.
 //  * Functions returning LONG indicate success as ERROR_SUCCESS or an
 //    error as a (non-zero) win32 error code.
-class BASE_EXPORT RegKey {
+class RegKey {
  public:
-  // Called from the MessageLoop when the key changes.
-  typedef base::Callback<void()> ChangeCallback;
-
   RegKey();
   explicit RegKey(HKEY key);
   RegKey(HKEY rootkey, const wchar_t* subkey, REGSAM access);
@@ -39,8 +34,10 @@ class BASE_EXPORT RegKey {
 
   LONG Create(HKEY rootkey, const wchar_t* subkey, REGSAM access);
 
-  LONG CreateWithDisposition(HKEY rootkey, const wchar_t* subkey,
-                             DWORD* disposition, REGSAM access);
+  LONG CreateWithDisposition(HKEY rootkey,
+                             const wchar_t* subkey,
+                             DWORD* disposition,
+                             REGSAM access);
 
   // Creates a subkey or open it if it already exists.
   LONG CreateKey(const wchar_t* name, REGSAM access);
@@ -125,18 +122,9 @@ class BASE_EXPORT RegKey {
                   DWORD dsize,
                   DWORD dtype);
 
-  // Starts watching the key to see if any of its values have changed.
-  // The key must have been opened with the KEY_NOTIFY access privilege.
-  // Returns true on success.
-  // To stop watching, delete this RegKey object. To continue watching the
-  // object after the callback is invoked, call StartWatching again.
-  bool StartWatching(const ChangeCallback& callback);
-
   HKEY Handle() const { return key_; }
 
  private:
-  class Watcher;
-
   // Calls RegDeleteKeyEx on supported platforms, alternatively falls back to
   // RegDeleteKey.
   static LONG RegDeleteKeyExWrapper(HKEY hKey,
@@ -151,13 +139,12 @@ class BASE_EXPORT RegKey {
 
   HKEY key_;  // The registry key being iterated.
   REGSAM wow64access_;
-  std::unique_ptr<Watcher> key_watcher_;
 
   DISALLOW_COPY_AND_ASSIGN(RegKey);
 };
 
 // Iterates the entries found in a particular folder on the registry.
-class BASE_EXPORT RegistryValueIterator {
+class RegistryValueIterator {
  public:
   // Constructs a Registry Value Iterator with default WOW64 access.
   RegistryValueIterator(HKEY root_key, const wchar_t* folder_key);
@@ -210,7 +197,7 @@ class BASE_EXPORT RegistryValueIterator {
   DISALLOW_COPY_AND_ASSIGN(RegistryValueIterator);
 };
 
-class BASE_EXPORT RegistryKeyIterator {
+class RegistryKeyIterator {
  public:
   // Constructs a Registry Key Iterator with default WOW64 access.
   RegistryKeyIterator(HKEY root_key, const wchar_t* folder_key);

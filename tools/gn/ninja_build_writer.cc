@@ -9,14 +9,12 @@
 #include <fstream>
 #include <map>
 #include <sstream>
+#include <unordered_set>
 
 #include "base/command_line.h"
 #include "base/files/file_util.h"
-#include "base/path_service.h"
-#include "base/process/process_handle.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "build/build_config.h"
 #include "tools/gn/build_settings.h"
 #include "tools/gn/builder.h"
 #include "tools/gn/err.h"
@@ -30,6 +28,8 @@
 #include "tools/gn/switches.h"
 #include "tools/gn/target.h"
 #include "tools/gn/trace.h"
+#include "util/build_config.h"
+#include "util/exe_path.h"
 
 #if defined(OS_WIN)
 #include <windows.h>
@@ -47,11 +47,18 @@ struct Counts {
   const Target* last_seen;
 };
 
-std::string GetSelfInvocationCommand(const BuildSettings* build_settings) {
-  base::FilePath executable;
-  PathService::Get(base::FILE_EXE, &executable);
+} // namespace
 
-  base::CommandLine cmdline(executable.NormalizePathSeparatorsTo('/'));
+base::CommandLine GetSelfInvocationCommandLine(
+    const BuildSettings* build_settings) {
+  const base::FilePath build_path =
+      build_settings->build_dir().Resolve(build_settings->root_path());
+
+  base::FilePath exe_path = GetExePath();
+  if (build_path.IsAbsolute())
+    exe_path = MakeAbsoluteFilePathRelativeIfPossible(build_path, exe_path);
+
+  base::CommandLine cmdline(exe_path.NormalizePathSeparatorsTo('/'));
 
   // Use "." for the directory to generate. When Ninja runs the command it
   // will have the build directory as the current one. Coding it explicitly
@@ -59,8 +66,12 @@ std::string GetSelfInvocationCommand(const BuildSettings* build_settings) {
   cmdline.AppendArg("gen");
   cmdline.AppendArg(".");
 
+  base::FilePath root_path = build_settings->root_path();
+  if (build_path.IsAbsolute())
+    root_path = MakeAbsoluteFilePathRelativeIfPossible(build_path, root_path);
+
   cmdline.AppendSwitchPath(std::string("--") + switches::kRoot,
-                           build_settings->root_path());
+                           root_path.NormalizePathSeparatorsTo('/'));
   // Successful automatic invocations shouldn't print output.
   cmdline.AppendSwitch(std::string("-") + switches::kQuiet);
 
@@ -73,6 +84,18 @@ std::string GetSelfInvocationCommand(const BuildSettings* build_settings) {
   escape_shell.inhibit_quoting = true;
 #endif
 
+  // If both --root and --dotfile are passed, make sure the --dotfile is
+  // made relative to the build dir here.
+  base::FilePath dotfile_path = build_settings->dotfile_name();
+  if (!dotfile_path.empty()) {
+    if (build_path.IsAbsolute()) {
+      dotfile_path =
+          MakeAbsoluteFilePathRelativeIfPossible(build_path, dotfile_path);
+    }
+    cmdline.AppendSwitchPath(std::string("--") + switches::kDotfile,
+                             dotfile_path.NormalizePathSeparatorsTo('/'));
+  }
+
   const base::CommandLine& our_cmdline =
       *base::CommandLine::ForCurrentProcess();
   const base::CommandLine::SwitchMap& switches = our_cmdline.GetSwitches();
@@ -82,15 +105,22 @@ std::string GetSelfInvocationCommand(const BuildSettings* build_settings) {
     // since those will have been written to the file and will be used
     // implicitly in the future. Keeping --args would mean changes to the file
     // would be ignored.
-    if (i->first != switches::kQuiet &&
-        i->first != switches::kRoot &&
-        i->first != switches::kArgs) {
+    if (i->first != switches::kQuiet && i->first != switches::kRoot &&
+        i->first != switches::kDotfile && i->first != switches::kArgs) {
       std::string escaped_value =
           EscapeString(FilePathToUTF8(i->second), escape_shell, nullptr);
       cmdline.AppendSwitchASCII(i->first, escaped_value);
     }
   }
 
+  return cmdline;
+}
+
+namespace {
+
+std::string GetSelfInvocationCommand(const BuildSettings* build_settings) {
+  base::CommandLine cmdline = GetSelfInvocationCommandLine(
+      build_settings);
 #if defined(OS_WIN)
   return base::WideToUTF8(cmdline.GetCommandLineString());
 #else
@@ -120,11 +150,14 @@ Err GetDuplicateOutputError(const std::vector<const Target*>& all_targets,
     matches_string += "  " + target->label().GetUserVisibleName(false) + "\n";
 
   Err result(matches[0]->defined_from(), "Duplicate output file.",
-      "Two or more targets generate the same output:\n  " +
-      bad_output.value() + "\n\n"
-      "This is can often be fixed by changing one of the target names, or by \n"
-      "setting an output_name on one of them.\n"
-      "\nCollisions:\n" + matches_string);
+             "Two or more targets generate the same output:\n  " +
+                 bad_output.value() +
+                 "\n\n"
+                 "This is can often be fixed by changing one of the target "
+                 "names, or by \n"
+                 "setting an output_name on one of them.\n"
+                 "\nCollisions:\n" +
+                 matches_string);
   for (size_t i = 1; i < matches.size(); i++)
     result.AppendSubErr(Err(matches[i]->defined_from(), "Collision."));
   return result;
@@ -135,11 +168,13 @@ Err GetDuplicateOutputError(const std::vector<const Target*>& all_targets,
 Err GetDuplicateToolchainError(const SourceFile& source_file,
                                const Toolchain* previous_toolchain,
                                const Toolchain* toolchain) {
-  Err result(toolchain->defined_from(), "Duplicate toolchain.",
+  Err result(
+      toolchain->defined_from(), "Duplicate toolchain.",
       "Two or more toolchains write to the same directory:\n  " +
-      source_file.GetDir().value() + "\n\n"
-      "This can be fixed by making sure that distinct toolchains have\n"
-      "distinct names.\n");
+          source_file.GetDir().value() +
+          "\n\n"
+          "This can be fixed by making sure that distinct toolchains have\n"
+          "distinct names.\n");
   result.AppendSubErr(
       Err(previous_toolchain->defined_from(), "Previous toolchain."));
   return result;
@@ -151,12 +186,14 @@ NinjaBuildWriter::NinjaBuildWriter(
     const BuildSettings* build_settings,
     const std::unordered_map<const Settings*, const Toolchain*>&
         used_toolchains,
+    const std::vector<const Target*>& all_targets,
     const Toolchain* default_toolchain,
     const std::vector<const Target*>& default_toolchain_targets,
     std::ostream& out,
     std::ostream& dep_out)
     : build_settings_(build_settings),
       used_toolchains_(used_toolchains),
+      all_targets_(all_targets),
       default_toolchain_(default_toolchain),
       default_toolchain_targets_(default_toolchain_targets),
       out_(out),
@@ -165,8 +202,7 @@ NinjaBuildWriter::NinjaBuildWriter(
                    build_settings->root_path_utf8(),
                    ESCAPE_NINJA) {}
 
-NinjaBuildWriter::~NinjaBuildWriter() {
-}
+NinjaBuildWriter::~NinjaBuildWriter() = default;
 
 bool NinjaBuildWriter::Run(Err* err) {
   WriteNinjaRules();
@@ -175,10 +211,9 @@ bool NinjaBuildWriter::Run(Err* err) {
 }
 
 // static
-bool NinjaBuildWriter::RunAndWriteFile(
-    const BuildSettings* build_settings,
-    const Builder& builder,
-    Err* err) {
+bool NinjaBuildWriter::RunAndWriteFile(const BuildSettings* build_settings,
+                                       const Builder& builder,
+                                       Err* err) {
   ScopedTrace trace(TraceItem::TRACE_FILE_WRITE, "build.ninja");
 
   std::vector<const Target*> all_targets = builder.GetAllResolvedTargets();
@@ -211,8 +246,9 @@ bool NinjaBuildWriter::RunAndWriteFile(
 
   std::stringstream file;
   std::stringstream depfile;
-  NinjaBuildWriter gen(build_settings, used_toolchains, default_toolchain,
-                       default_toolchain_targets, file, depfile);
+  NinjaBuildWriter gen(build_settings, used_toolchains, all_targets,
+                       default_toolchain, default_toolchain_targets,
+                       file, depfile);
   if (!gen.Run(err))
     return false;
 
@@ -270,8 +306,13 @@ void NinjaBuildWriter::WriteNinjaRules() {
   std::set<base::FilePath> fileset(input_files.begin(), input_files.end());
   fileset.insert(other_files.begin(), other_files.end());
 
-  for (const auto& other_file : fileset)
-    dep_out_ << " " << FilePathToUTF8(other_file);
+  const base::FilePath build_path =
+      build_settings_->build_dir().Resolve(build_settings_->root_path());
+  for (const auto& other_file : fileset) {
+    const base::FilePath file =
+        MakeAbsoluteFilePathRelativeIfPossible(build_path, other_file);
+    dep_out_ << " " << FilePathToUTF8(file.NormalizePathSeparatorsTo('/'));
+  }
 
   out_ << std::endl;
 }
@@ -288,7 +329,7 @@ void NinjaBuildWriter::WriteAllPools() {
     }
   }
 
-  for (const Target* target : default_toolchain_targets_) {
+  for (const Target* target : all_targets_) {
     if (target->output_type() == Target::ACTION) {
       const LabelPtrPair<Pool>& pool = target->action_values().pool();
       if (pool.ptr)
@@ -306,7 +347,10 @@ void NinjaBuildWriter::WriteAllPools() {
               return pool_name(a) < pool_name(b);
             });
   for (const Pool* pool : sorted_pools) {
-    out_ << "pool " << pool_name(pool) << std::endl
+    std::string name = pool_name(pool);
+    if (name == "console")
+      continue;
+    out_ << "pool " << name << std::endl
          << "  depth = " << pool->depth() << std::endl
          << std::endl;
   }
@@ -404,7 +448,7 @@ bool NinjaBuildWriter::WritePhonyAndAllRules(Err* err) {
   // Track rules as we generate them so we don't accidentally write a phony
   // rule that collides with something else.
   // GN internally generates an "all" target, so don't duplicate it.
-  base::hash_set<std::string> written_rules;
+  std::unordered_set<std::string> written_rules;
   written_rules.insert("all");
 
   // Set if we encounter a target named "//:default".
@@ -448,14 +492,14 @@ bool NinjaBuildWriter::WritePhonyAndAllRules(Err* err) {
 
     // Find targets in "important" directories.
     const std::string& dir_string = label.dir().value();
-    if (dir_string.size() == 2 &&
-        dir_string[0] == '/' && dir_string[1] == '/') {
+    if (dir_string.size() == 2 && dir_string[0] == '/' &&
+        dir_string[1] == '/') {
       toplevel_targets.push_back(target);
-    } else if (
-        dir_string.size() == label.name().size() + 3 &&  // Size matches.
-        dir_string[0] == '/' && dir_string[1] == '/' &&  // "//" at beginning.
-        dir_string[dir_string.size() - 1] == '/' &&  // "/" at end.
-        dir_string.compare(2, label.name().size(), label.name()) == 0) {
+    } else if (dir_string.size() == label.name().size() + 3 &&  // Size matches.
+               dir_string[0] == '/' &&
+               dir_string[1] == '/' &&  // "//" at beginning.
+               dir_string[dir_string.size() - 1] == '/' &&  // "/" at end.
+               dir_string.compare(2, label.name().size(), label.name()) == 0) {
       toplevel_dir_targets.push_back(target);
     }
 

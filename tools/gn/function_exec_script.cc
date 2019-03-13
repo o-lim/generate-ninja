@@ -7,8 +7,6 @@
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/time/time.h"
-#include "build/build_config.h"
 #include "tools/gn/err.h"
 #include "tools/gn/exec_process.h"
 #include "tools/gn/filesystem_utils.h"
@@ -19,6 +17,8 @@
 #include "tools/gn/scheduler.h"
 #include "tools/gn/trace.h"
 #include "tools/gn/value.h"
+#include "util/build_config.h"
+#include "util/ticks.h"
 
 namespace functions {
 
@@ -41,7 +41,8 @@ bool CheckExecScriptPermissions(const BuildSettings* build_settings,
     return true;  // Whitelisted, this is OK.
 
   // Disallowed case.
-  *err = Err(function, "Disallowed exec_script call.",
+  *err = Err(
+      function, "Disallowed exec_script call.",
       "The use of exec_script use is restricted in this build. exec_script\n"
       "is discouraged because it can slow down the GN run and is easily\n"
       "abused.\n"
@@ -80,11 +81,15 @@ const char kExecScript_Help[] =
   rebase_path() function to make file names relative to this path (see "gn help
   rebase_path").
 
+  The default script interpreter is Python ("python" on POSIX, "python.exe" or
+  "python.bat" on Windows). This can be configured by the script_executable
+  variable, see "gn help dotfile".
+
 Arguments:
 
   filename:
-      File name of the script to execute. Non-absolute names will be treated
-      as relative to the current build file.
+      File name of script to execute. Non-absolute names will be treated as
+      relative to the current build file.
 
   arguments:
       A list of strings to be passed to the script as arguments. May be
@@ -141,19 +146,21 @@ Value RunExecScript(Scope* scope,
     return Value();
 
   // Find the script to run.
-  SourceFile script_source =
-      cur_dir.ResolveRelativeFile(args[0], err,
-          scope->settings()->build_settings()->root_path_utf8());
+  std::string script_source_path = cur_dir.ResolveRelativeAs(
+      true, args[0], err,
+      scope->settings()->build_settings()->root_path_utf8());
   if (err->has_error())
     return Value();
-  base::FilePath script_path = build_settings->GetFullPath(script_source);
+  base::FilePath script_path =
+      build_settings->GetFullPath(script_source_path, true);
   if (!build_settings->secondary_source_path().empty() &&
       !base::PathExists(script_path)) {
     // Fall back to secondary source root when the file doesn't exist.
-    script_path = build_settings->GetFullPathSecondary(script_source);
+    script_path =
+        build_settings->GetFullPathSecondary(script_source_path, true);
   }
 
-  ScopedTrace trace(TraceItem::TRACE_SCRIPT_EXECUTE, script_source.value());
+  ScopedTrace trace(TraceItem::TRACE_SCRIPT_EXECUTE, script_source_path);
   trace.SetToolchain(settings->toolchain_label());
 
   // Add all dependencies of this script, including the script itself, to the
@@ -167,10 +174,11 @@ Value RunExecScript(Scope* scope,
     for (const auto& dep : deps_value.list_value()) {
       if (!dep.VerifyTypeIs(Value::STRING, err))
         return Value();
-      g_scheduler->AddGenDependency(
-          build_settings->GetFullPath(cur_dir.ResolveRelativeFile(
-              dep, err,
-              scope->settings()->build_settings()->root_path_utf8())));
+      g_scheduler->AddGenDependency(build_settings->GetFullPath(
+          cur_dir.ResolveRelativeAs(
+              true, dep, err,
+              scope->settings()->build_settings()->root_path_utf8()),
+          true));
       if (err->has_error())
         return Value();
     }
@@ -194,12 +202,9 @@ Value RunExecScript(Scope* scope,
   // Make the command line.
   base::CommandLine cmdline(interpreter_path);
 
-  // CommandLine tries to interpret arguments by default.  Passing "--" disables
-  // this for everything following the "--", so pass this as the very first
-  // thing to the interpreter.  Script interpreters (i.e. Python) should ignore
-  // a -- before the script file, and this makes CommandLine let through
-  // arguments without modifying them.
-  cmdline.AppendArg("--");
+  // CommandLine tries to interpret arguments by default.  Disable that so
+  // that the arguments will be passed through exactly as specified.
+  cmdline.SetParseSwitches(false);
 
   cmdline.AppendArgPath(script_path);
 
@@ -217,15 +222,15 @@ Value RunExecScript(Scope* scope,
 
   // Log command line for debugging help.
   trace.SetCommandLine(cmdline);
-  base::TimeTicks begin_exec;
+  Ticks begin_exec = 0;
   if (g_scheduler->verbose_logging()) {
 #if defined(OS_WIN)
-    g_scheduler->Log("Scripting",
+    g_scheduler->Log("Executing",
                      base::UTF16ToUTF8(cmdline.GetCommandLineString()));
 #else
-    g_scheduler->Log("Scripting", cmdline.GetCommandLineString());
+    g_scheduler->Log("Executing", cmdline.GetCommandLineString());
 #endif
-    begin_exec = base::TimeTicks::Now();
+    begin_exec = TicksNow();
   }
 
   base::FilePath startup_dir =
@@ -244,21 +249,28 @@ Value RunExecScript(Scope* scope,
   std::string output;
   std::string stderr_output;
   int exit_code = 0;
-  if (!internal::ExecProcess(
-          cmdline, startup_dir, &output, &stderr_output, &exit_code)) {
-    *err = Err(function->function(), "Could not execute script.",
-        "I was trying to execute \"" + FilePathToUTF8(interpreter_path) + "\".");
-    return Value();
+  {
+    if (!internal::ExecProcess(cmdline, startup_dir, &output, &stderr_output,
+                               &exit_code)) {
+      *err = Err(
+          function->function(), "Could not execute interpreter.",
+          "I was trying to execute \"" + FilePathToUTF8(interpreter_path) +
+          "\".");
+      return Value();
+    }
   }
   if (g_scheduler->verbose_logging()) {
-    g_scheduler->Log("Scripting", script_source.value() + " took " +
-        base::Int64ToString(
-            (base::TimeTicks::Now() - begin_exec).InMilliseconds()) +
-        "ms");
+    g_scheduler->Log(
+        "Executing",
+        script_source_path + " took " +
+            base::Int64ToString(
+                TicksDelta(TicksNow(), begin_exec).InMilliseconds()) +
+            "ms");
   }
 
   if (exit_code != 0) {
-    std::string msg = "Current dir: " + FilePathToUTF8(startup_dir) +
+    std::string msg =
+        "Current dir: " + FilePathToUTF8(startup_dir) +
         "\nCommand: " + FilePathToUTF8(cmdline.GetCommandLineString()) +
         "\nReturned " + base::IntToString(exit_code);
     if (!output.empty())
@@ -268,8 +280,8 @@ Value RunExecScript(Scope* scope,
     if (!stderr_output.empty())
       msg += "\nstderr:\n\n" + stderr_output;
 
-    *err = Err(function->function(), "Script returned non-zero exit code.",
-               msg);
+    *err =
+        Err(function->function(), "Script returned non-zero exit code.", msg);
     return Value();
   }
 

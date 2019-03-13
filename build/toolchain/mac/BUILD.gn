@@ -6,7 +6,6 @@
 # some enhancements since the commands on Mac are slightly different than on
 # Linux.
 
-import("../goma.gni")
 import("//build/config/clang/clang.gni")
 if (is_ios) {
   import("//build/config/ios/ios_sdk.gni")
@@ -17,8 +16,6 @@ import("//build/config/mac/symbols.gni")
 assert(host_os == "mac")
 
 import("//build/toolchain/cc_wrapper.gni")
-import("//build/toolchain/clang_static_analyzer.gni")
-import("//build/toolchain/goma.gni")
 import("//build/toolchain/toolchain.gni")
 import("//build/toolchain/concurrent_links.gni")
 
@@ -94,15 +91,6 @@ template("mac_toolchain") {
     _cc = "${prefix}clang"
     _cxx = "${prefix}clang++"
 
-    # When the invoker has explicitly overridden use_goma or cc_wrapper in the
-    # toolchain args, use those values, otherwise default to the global one.
-    # This works because the only reasonable override that toolchains might
-    # supply for these values are to force-disable them.
-    if (defined(toolchain_args.use_goma)) {
-      toolchain_uses_goma = toolchain_args.use_goma
-    } else {
-      toolchain_uses_goma = use_goma
-    }
     if (defined(toolchain_args.cc_wrapper)) {
       toolchain_cc_wrapper = toolchain_args.cc_wrapper
     } else {
@@ -110,11 +98,7 @@ template("mac_toolchain") {
     }
 
     # Compute the compiler prefix.
-    if (toolchain_uses_goma) {
-      assert(toolchain_cc_wrapper == "",
-             "Goma and cc_wrapper can't be used together.")
-      compiler_prefix = "$goma_dir/gomacc "
-    } else if (toolchain_cc_wrapper != "") {
+    if (toolchain_cc_wrapper != "") {
       compiler_prefix = toolchain_cc_wrapper + " "
     } else {
       compiler_prefix = ""
@@ -123,27 +107,6 @@ template("mac_toolchain") {
     cc = compiler_prefix + _cc
     cxx = compiler_prefix + _cxx
     ld = _cxx
-
-    if (use_clang_static_analyzer) {
-      # Static analysis isn't supported under GOMA. See crbug.com/687245
-      # for progress on this issue.
-      assert(!use_goma, "'use_clang_static_analyzer' cannot be used with GOMA.")
-
-      # Call "ccc-analyzer" or "c++-analyzer" instead of directly calling Clang.
-      # |wrapper_tool| sets the environment variables which are read by the
-      # analyzer tools.
-      analyzer_wrapper =
-          rebase_path("//build/toolchain/clang_static_analyzer_wrapper.py",
-                      root_build_dir)
-      cc = analyzer_wrapper + " --clang-cc-path=${cc} --analyzer=" +
-           rebase_path("//third_party/scan-build/src/libexec/ccc-analyzer",
-                       root_build_dir)
-      cxx = analyzer_wrapper + " --clang-cxx-path=${cxx} --analyzer=" +
-            rebase_path("//third_party/scan-build/src/libexec/c++-analyzer",
-                        root_build_dir)
-
-      ld = cxx
-    }
 
     linker_driver =
         "TOOL_VERSION=${tool_versions.linker_driver} " +
@@ -460,13 +423,6 @@ mac_toolchain("clang_x64") {
   toolchain_args = {
     current_cpu = "x64"
     current_os = "mac"
-
-    if (target_os == "ios") {
-      # TODO(crbug.com/753445): the use_sanitizer_coverage arg is currently
-      # not supported by the Chromium mac_clang_x64 toolchain on iOS
-      # distribution.
-      use_sanitizer_coverage = false
-    }
   }
 }
 

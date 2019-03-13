@@ -53,8 +53,7 @@ More information
 )";
 
 const char kCheck[] = "check";
-const char kCheck_HelpShort[] =
-    "check: Check header dependencies.";
+const char kCheck_HelpShort[] = "check: Check header dependencies.";
 const char kCheck_Help[] =
     R"(gn check: Check header dependencies.
   gn check <out_dir> [<label_pattern>] [--force]
@@ -78,9 +77,9 @@ Command-specific switches
 
 What gets checked
 
-  The .gn file may specify a list of targets to be checked. Only these targets
-  will be checked if no label_pattern is specified on the command line.
-  Otherwise, the command-line list is used instead. See "gn help dotfile".
+  The .gn file may specify a list of targets to be checked in the list
+  check_targets (see "gn help dotfile"). If a label pattern is specified
+  on the command line, check_targets is not used.
 
   Targets can opt-out from checking with "check_includes = false" (see
   "gn help check_includes").
@@ -96,10 +95,8 @@ What gets checked
     - Only includes using "quotes" are checked. <brackets> are assumed to be
       system includes.
 
-    - Include paths are assumed to be relative to either the source root or the
-      "root_gen_dir" and must include all the path components. (It might be
-      nice in the future to incorporate GN's knowledge of the include path to
-      handle other include styles.)
+    - Include paths are assumed to be relative to any of the "include_dirs" for
+      the target (including the implicit current dir).
 
     - GN does not run the preprocessor so will not understand conditional
       includes.
@@ -123,7 +120,7 @@ What gets checked
       included by other targets. Anything in the sources will be considered
       private and will not be includable regardless of dependency paths.
 
-    - Ouptuts from actions are treated like public sources on that target.
+    - Outputs from actions are treated like public sources on that target.
 
     - A target can include headers from a target that depends on it if the
       other target is annotated accordingly. See "gn help
@@ -131,9 +128,9 @@ What gets checked
 
 Advice on fixing problems
 
-  If you have a third party project that uses relative includes, it's generally
-  best to exclude that target from checking altogether via
-  "check_includes = false".
+  If you have a third party project that is difficult to fix or doesn't care
+  about include checks it's generally best to exclude that target from checking
+  altogether via "check_includes = false".
 
   If you have conditional includes, make sure the build conditions and the
   preprocessor conditions match, and annotate the line with "nogncheck" (see
@@ -169,7 +166,8 @@ Examples
 int RunCheck(const std::vector<std::string>& args) {
   if (args.size() != 1 && args.size() != 2) {
     Err(Location(), "You're holding it wrong.",
-        "Usage: \"gn check <out_dir> [<target_label>]\"").PrintToStdout();
+        "Usage: \"gn check <out_dir> [<target_label>]\"")
+        .PrintToStdout();
     return 1;
   }
 
@@ -192,17 +190,17 @@ int RunCheck(const std::vector<std::string>& args) {
     UniqueVector<const Config*> config_matches;
     UniqueVector<const Toolchain*> toolchain_matches;
     UniqueVector<SourceFile> file_matches;
-    if (!ResolveFromCommandLineInput(setup, inputs, false,
-                                     &target_matches, &config_matches,
-                                     &toolchain_matches, &file_matches))
+    if (!ResolveFromCommandLineInput(setup, inputs, false, &target_matches,
+                                     &config_matches, &toolchain_matches,
+                                     &file_matches))
       return 1;
 
     if (target_matches.size() == 0) {
       OutputString("No matching targets.\n");
       return 1;
     }
-    targets_to_check.insert(targets_to_check.begin(),
-                            target_matches.begin(), target_matches.end());
+    targets_to_check.insert(targets_to_check.begin(), target_matches.begin(),
+                            target_matches.end());
   } else {
     // No argument means to check everything allowed by the filter in
     // the build config file.
@@ -218,9 +216,10 @@ int RunCheck(const std::vector<std::string>& args) {
 
   const base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
   bool force = cmdline->HasSwitch("force");
+  bool check_generated = cmdline->HasSwitch("check-generated");
 
   if (!CheckPublicHeaders(&setup->build_settings(), all_targets,
-                          targets_to_check, force))
+                          targets_to_check, force, check_generated))
     return 1;
 
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kQuiet)) {
@@ -240,11 +239,11 @@ int RunCheck(const std::vector<std::string>& args) {
 bool CheckPublicHeaders(const BuildSettings* build_settings,
                         const std::vector<const Target*>& all_targets,
                         const std::vector<const Target*>& to_check,
-                        bool force_check) {
+                        bool force_check, bool check_generated) {
   ScopedTrace trace(TraceItem::TRACE_CHECK_HEADERS, "Check headers");
 
   scoped_refptr<HeaderChecker> header_checker(
-      new HeaderChecker(build_settings, all_targets));
+      new HeaderChecker(build_settings, all_targets, check_generated));
 
   std::vector<Err> header_errors;
   header_checker->Run(to_check, force_check, &header_errors);

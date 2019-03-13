@@ -5,10 +5,10 @@
 #include <algorithm>
 #include <sstream>
 
-#include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/ninja_copy_target_writer.h"
 #include "tools/gn/target.h"
 #include "tools/gn/test_with_scope.h"
+#include "util/test/test.h"
 
 // Tests multiple files with an output pattern and no toolchain dependency.
 TEST(NinjaCopyTargetWriter, Run) {
@@ -75,7 +75,7 @@ TEST(NinjaCopyTargetWriter, OrderOnlyDeps) {
   target.sources().push_back(SourceFile("//foo/input1.txt"));
   target.action_values().outputs() =
       SubstitutionList::MakeForTest("//out/Debug/{{source_name_part}}.out");
-  target.inputs().push_back(SourceFile("//foo/script.py"));
+  target.config_values().inputs().push_back(SourceFile("//foo/script.py"));
   ASSERT_TRUE(target.OnResolved(&err));
 
   std::ostringstream out;

@@ -4,11 +4,14 @@
 
 #include "tools/gn/import_manager.h"
 
+#include <memory>
+
 #include "tools/gn/err.h"
 #include "tools/gn/parse_tree.h"
 #include "tools/gn/scheduler.h"
 #include "tools/gn/scope_per_file_provider.h"
 #include "tools/gn/trace.h"
+#include "util/ticks.h"
 
 namespace {
 
@@ -24,7 +27,8 @@ std::unique_ptr<Scope> UncachedImport(const Settings* settings,
   if (!node)
     return nullptr;
 
-  std::unique_ptr<Scope> scope(new Scope(settings->base_config()));
+  std::unique_ptr<Scope> scope =
+      std::make_unique<Scope>(settings->base_config());
   scope->set_source_dir(file.GetDir());
 
   // Don't allow ScopePerFileProvider to provide target-related variables.
@@ -48,12 +52,12 @@ std::unique_ptr<Scope> UncachedImport(const Settings* settings,
 }  // namespace
 
 struct ImportManager::ImportInfo {
-  ImportInfo() {}
-  ~ImportInfo() {}
+  ImportInfo() = default;
+  ~ImportInfo() = default;
 
   // This lock protects the unique_ptr. Once the scope is computed,
   // it is const and can be accessed read-only outside of the lock.
-  base::Lock load_lock;
+  std::mutex load_lock;
 
   std::unique_ptr<const Scope> scope;
 
@@ -63,35 +67,44 @@ struct ImportManager::ImportInfo {
   Err load_result;
 };
 
-ImportManager::ImportManager() {
-}
+ImportManager::ImportManager() = default;
 
-ImportManager::~ImportManager() {
-}
+ImportManager::~ImportManager() = default;
 
 bool ImportManager::DoImport(const SourceFile& file,
                              const ParseNode* node_for_err,
                              Scope* scope,
                              Err* err) {
+  // Key for the current import on the current thread in imports_in_progress_.
+  std::stringstream ss;
+  ss << std::this_thread::get_id() << file.value();
+  std::string key = ss.str();
+
   // See if we have a cached import, but be careful to actually do the scope
   // copying outside of the lock.
   ImportInfo* import_info = nullptr;
   {
-    base::AutoLock lock(imports_lock_);
+    std::lock_guard<std::mutex> lock(imports_lock_);
     std::unique_ptr<ImportInfo>& info_ptr = imports_[file];
     if (!info_ptr)
-      info_ptr.reset(new ImportInfo);
+      info_ptr = std::make_unique<ImportInfo>();
 
     // Promote the ImportInfo to outside of the imports lock.
     import_info = info_ptr.get();
+
+    if (imports_in_progress_.find(key) != imports_in_progress_.end()) {
+      *err = Err(Location(), file.value() + " is part of an import loop.");
+      return false;
+    }
+    imports_in_progress_.insert(key);
   }
 
   // Now use the per-import-file lock to block this thread if another thread
   // is already processing the import.
   const Scope* import_scope = nullptr;
   {
-    base::TimeTicks import_block_begin = base::TimeTicks::Now();
-    base::AutoLock lock(import_info->load_lock);
+    Ticks import_block_begin = TicksNow();
+    std::lock_guard<std::mutex> lock(import_info->load_lock);
 
     if (!import_info->scope) {
       // Only load if the import hasn't already failed.
@@ -106,14 +119,14 @@ bool ImportManager::DoImport(const SourceFile& file,
     } else {
       // Add trace if this thread was blocked for a long period of time and did
       // not load the import itself.
-      base::TimeTicks import_block_end = base::TimeTicks::Now();
-      constexpr auto kImportBlockTraceThreshold =
-          base::TimeDelta::FromMilliseconds(20);
+      Ticks import_block_end = TicksNow();
+      constexpr auto kImportBlockTraceThresholdMS = 20;
       if (TracingEnabled() &&
-          import_block_end - import_block_begin > kImportBlockTraceThreshold) {
+          TicksDelta(import_block_end, import_block_begin).InMilliseconds() >
+              kImportBlockTraceThresholdMS) {
         auto* import_block_trace =
             new TraceItem(TraceItem::TRACE_IMPORT_BLOCK, file.value(),
-                          base::PlatformThread::CurrentId());
+                          std::this_thread::get_id());
         import_block_trace->set_begin(import_block_begin);
         import_block_trace->set_end(import_block_end);
         AddTrace(import_block_trace);
@@ -127,6 +140,12 @@ bool ImportManager::DoImport(const SourceFile& file,
   Scope::MergeOptions options;
   options.skip_private_vars = true;
   options.mark_dest_used = true;  // Don't require all imported values be used.
+
+  {
+    std::lock_guard<std::mutex> lock(imports_lock_);
+    imports_in_progress_.erase(key);
+  }
+
   return import_scope->NonRecursiveMergeTo(scope, options, node_for_err,
                                            "import", err);
 }

@@ -11,8 +11,7 @@
 //
 // IN PARTICULAR this means that there is no support for int64_t or unsigned
 // numbers. Writing JSON with such types would violate the spec. If you need
-// something like this, either use a double or make a string value containing
-// the number you want.
+// something like this, make a string value containing the number you want.
 //
 // NOTE: A Value parameter that is always a Value::STRING should just be passed
 // as a std::string. Similarly for Values that are always Value::DICTIONARY
@@ -31,7 +30,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/base_export.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/span.h"
 #include "base/macros.h"
@@ -78,7 +76,7 @@ class Value;
 //     dict.SetKey("mykey", base::Value(foo));
 //     return dict;
 //   }
-class BASE_EXPORT Value {
+class Value {
  public:
   using BlobStorage = std::vector<char>;
   using DictStorage = flat_map<std::string, std::unique_ptr<Value>>;
@@ -88,7 +86,6 @@ class BASE_EXPORT Value {
     NONE = 0,
     BOOLEAN,
     INTEGER,
-    DOUBLE,
     STRING,
     BINARY,
     DICTIONARY,
@@ -118,7 +115,6 @@ class BASE_EXPORT Value {
   explicit Value(Type type);
   explicit Value(bool in_bool);
   explicit Value(int in_int);
-  explicit Value(double in_double);
 
   // Value(const char*) and Value(const char16*) are required despite
   // Value(StringPiece) and Value(StringPiece16) because otherwise the
@@ -147,15 +143,12 @@ class BASE_EXPORT Value {
   static const char* GetTypeName(Type type);
 
   // Returns the type of the value stored by the current Value object.
-  Type GetType() const { return type_; }  // DEPRECATED, use type().
   Type type() const { return type_; }
 
   // Returns true if the current object represents a given type.
-  bool IsType(Type type) const { return type == type_; }
   bool is_none() const { return type() == Type::NONE; }
   bool is_bool() const { return type() == Type::BOOLEAN; }
   bool is_int() const { return type() == Type::INTEGER; }
-  bool is_double() const { return type() == Type::DOUBLE; }
   bool is_string() const { return type() == Type::STRING; }
   bool is_blob() const { return type() == Type::BINARY; }
   bool is_dict() const { return type() == Type::DICTIONARY; }
@@ -164,7 +157,6 @@ class BASE_EXPORT Value {
   // These will all fatally assert if the type doesn't match.
   bool GetBool() const;
   int GetInt() const;
-  double GetDouble() const;  // Implicitly converts from int if necessary.
   const std::string& GetString() const;
   const BlobStorage& GetBlob() const;
 
@@ -190,7 +182,7 @@ class BASE_EXPORT Value {
   // Note: This fatally asserts if type() is not Type::DICTIONARY.
   //
   // Example:
-  //   auto* found = FindKey("foo", Type::DOUBLE);
+  //   auto* found = FindKey("foo", Type::INTEGER);
   Value* FindKeyOfType(StringPiece key, Type type);
   const Value* FindKeyOfType(StringPiece key, Type type) const;
 
@@ -298,6 +290,11 @@ class BASE_EXPORT Value {
   dict_iterator_proxy DictItems();
   const_dict_iterator_proxy DictItems() const;
 
+  // Returns the size of the dictionary, and if the dictionary is empty.
+  // Note: This fatally asserts if type() is not Type::DICTIONARY.
+  size_t DictSize() const;
+  bool DictEmpty() const;
+
   // These methods allow the convenient retrieval of the contents of the Value.
   // If the current object can be converted into the given type, the value is
   // returned through the |out_value| parameter and true is returned;
@@ -306,8 +303,6 @@ class BASE_EXPORT Value {
   bool GetAsBoolean(bool* out_value) const;
   // DEPRECATED, use GetInt() instead.
   bool GetAsInteger(int* out_value) const;
-  // DEPRECATED, use GetDouble() instead.
-  bool GetAsDouble(double* out_value) const;
   // DEPRECATED, use GetString() instead.
   bool GetAsString(std::string* out_value) const;
   bool GetAsString(string16* out_value) const;
@@ -335,17 +330,21 @@ class BASE_EXPORT Value {
 
   // Comparison operators so that Values can easily be used with standard
   // library algorithms and associative containers.
-  BASE_EXPORT friend bool operator==(const Value& lhs, const Value& rhs);
-  BASE_EXPORT friend bool operator!=(const Value& lhs, const Value& rhs);
-  BASE_EXPORT friend bool operator<(const Value& lhs, const Value& rhs);
-  BASE_EXPORT friend bool operator>(const Value& lhs, const Value& rhs);
-  BASE_EXPORT friend bool operator<=(const Value& lhs, const Value& rhs);
-  BASE_EXPORT friend bool operator>=(const Value& lhs, const Value& rhs);
+  friend bool operator==(const Value& lhs, const Value& rhs);
+  friend bool operator!=(const Value& lhs, const Value& rhs);
+  friend bool operator<(const Value& lhs, const Value& rhs);
+  friend bool operator>(const Value& lhs, const Value& rhs);
+  friend bool operator<=(const Value& lhs, const Value& rhs);
+  friend bool operator>=(const Value& lhs, const Value& rhs);
 
   // Compares if two Value objects have equal contents.
   // DEPRECATED, use operator==(const Value& lhs, const Value& rhs) instead.
   // TODO(crbug.com/646113): Delete this and migrate callsites.
   bool Equals(const Value* other) const;
+
+  // Estimates dynamic memory usage.
+  // See base/trace_event/memory_usage_estimator.h for more info.
+  size_t EstimateMemoryUsage() const;
 
  protected:
   // TODO(crbug.com/646113): Make these private once DictionaryValue and
@@ -355,7 +354,6 @@ class BASE_EXPORT Value {
   union {
     bool bool_value_;
     int int_value_;
-    double double_value_;
     std::string string_value_;
     BlobStorage binary_value_;
     DictStorage dict_;
@@ -372,7 +370,7 @@ class BASE_EXPORT Value {
 // DictionaryValue provides a key-value dictionary with (optional) "path"
 // parsing for recursive access; see the comment at the top of the file. Keys
 // are |std::string|s and should be UTF-8 encoded.
-class BASE_EXPORT DictionaryValue : public Value {
+class DictionaryValue : public Value {
  public:
   using const_iterator = DictStorage::const_iterator;
   using iterator = DictStorage::iterator;
@@ -414,8 +412,6 @@ class BASE_EXPORT DictionaryValue : public Value {
   Value* SetBoolean(StringPiece path, bool in_value);
   // DEPRECATED, use Value::SetPath(path, Value(int)) instead.
   Value* SetInteger(StringPiece path, int in_value);
-  // DEPRECATED, use Value::SetPath(path, Value(double)) instead.
-  Value* SetDouble(StringPiece path, double in_value);
   // DEPRECATED, use Value::SetPath(path, Value(StringPiece)) instead.
   Value* SetString(StringPiece path, StringPiece in_value);
   // DEPRECATED, use Value::SetPath(path, Value(const string& 16)) instead.
@@ -431,15 +427,6 @@ class BASE_EXPORT DictionaryValue : public Value {
   // DEPRECATED, use Value::SetKey(key, value) instead.
   Value* SetWithoutPathExpansion(StringPiece key,
                                  std::unique_ptr<Value> in_value);
-
-  // Convenience forms of SetWithoutPathExpansion().
-  // DEPRECATED, use Value::SetKey(key, Value(Type::DICTIONARY)) instead.
-  DictionaryValue* SetDictionaryWithoutPathExpansion(
-      StringPiece path,
-      std::unique_ptr<DictionaryValue> in_value);
-  // DEPRECATED, use Value::SetKey(key, Value(Type::LIST)) instead.
-  ListValue* SetListWithoutPathExpansion(StringPiece path,
-                                         std::unique_ptr<ListValue> in_value);
 
   // Gets the Value associated with the given path starting from this object.
   // A path has the form "<key>" or "<key>.<key>.[...]", where "." indexes
@@ -462,10 +449,6 @@ class BASE_EXPORT DictionaryValue : public Value {
   bool GetBoolean(StringPiece path, bool* out_value) const;
   // DEPRECATED, use Value::FindPath(path) and Value::GetInt() instead.
   bool GetInteger(StringPiece path, int* out_value) const;
-  // Values of both type Type::INTEGER and Type::DOUBLE can be obtained as
-  // doubles.
-  // DEPRECATED, use Value::FindPath(path) and Value::GetDouble() instead.
-  bool GetDouble(StringPiece path, double* out_value) const;
   // DEPRECATED, use Value::FindPath(path) and Value::GetString() instead.
   bool GetString(StringPiece path, std::string* out_value) const;
   // DEPRECATED, use Value::FindPath(path) and Value::GetString() instead.
@@ -477,8 +460,7 @@ class BASE_EXPORT DictionaryValue : public Value {
   // DEPRECATED, use Value::FindPath(path) and Value::GetBlob() instead.
   bool GetBinary(StringPiece path, Value** out_value);
   // DEPRECATED, use Value::FindPath(path) and Value's Dictionary API instead.
-  bool GetDictionary(StringPiece path,
-                     const DictionaryValue** out_value) const;
+  bool GetDictionary(StringPiece path, const DictionaryValue** out_value) const;
   // DEPRECATED, use Value::FindPath(path) and Value's Dictionary API instead.
   bool GetDictionary(StringPiece path, DictionaryValue** out_value);
   // DEPRECATED, use Value::FindPath(path) and Value::GetList() instead.
@@ -496,8 +478,6 @@ class BASE_EXPORT DictionaryValue : public Value {
   bool GetBooleanWithoutPathExpansion(StringPiece key, bool* out_value) const;
   // DEPRECATED, use Value::FindKey(key) and Value::GetInt() instead.
   bool GetIntegerWithoutPathExpansion(StringPiece key, int* out_value) const;
-  // DEPRECATED, use Value::FindKey(key) and Value::GetDouble() instead.
-  bool GetDoubleWithoutPathExpansion(StringPiece key, double* out_value) const;
   // DEPRECATED, use Value::FindKey(key) and Value::GetString() instead.
   bool GetStringWithoutPathExpansion(StringPiece key,
                                      std::string* out_value) const;
@@ -556,7 +536,7 @@ class BASE_EXPORT DictionaryValue : public Value {
   // This class provides an iterator over both keys and values in the
   // dictionary.  It can't be used to modify the dictionary.
   // DEPRECATED, use Value::DictItems() instead.
-  class BASE_EXPORT Iterator {
+  class Iterator {
    public:
     explicit Iterator(const DictionaryValue& target);
     Iterator(const Iterator& other);
@@ -591,7 +571,7 @@ class BASE_EXPORT DictionaryValue : public Value {
 };
 
 // This type of Value represents a list of other Value values.
-class BASE_EXPORT ListValue : public Value {
+class ListValue : public Value {
  public:
   using const_iterator = ListStorage::const_iterator;
   using iterator = ListStorage::iterator;
@@ -610,10 +590,6 @@ class BASE_EXPORT ListValue : public Value {
   // Returns the number of Values in this list.
   // DEPRECATED, use GetList()::size() instead.
   size_t GetSize() const { return list_.size(); }
-
-  // Returns the capacity of storage for Values in this list.
-  // DEPRECATED, use GetList()::capacity() instead.
-  size_t capacity() const { return list_.capacity(); }
 
   // Returns whether the list is empty.
   // DEPRECATED, use GetList()::empty() instead.
@@ -647,16 +623,9 @@ class BASE_EXPORT ListValue : public Value {
   bool GetBoolean(size_t index, bool* out_value) const;
   // DEPRECATED, use GetList()::operator[]::GetInt() instead.
   bool GetInteger(size_t index, int* out_value) const;
-  // Values of both type Type::INTEGER and Type::DOUBLE can be obtained as
-  // doubles.
-  // DEPRECATED, use GetList()::operator[]::GetDouble() instead.
-  bool GetDouble(size_t index, double* out_value) const;
   // DEPRECATED, use GetList()::operator[]::GetString() instead.
   bool GetString(size_t index, std::string* out_value) const;
   bool GetString(size_t index, string16* out_value) const;
-  // DEPRECATED, use GetList()::operator[]::GetBlob() instead.
-  bool GetBinary(size_t index, const Value** out_value) const;
-  bool GetBinary(size_t index, Value** out_value);
 
   bool GetDictionary(size_t index, const DictionaryValue** out_value) const;
   bool GetDictionary(size_t index, DictionaryValue** out_value);
@@ -695,7 +664,6 @@ class BASE_EXPORT ListValue : public Value {
   // DEPRECATED, use GetList()::emplace_back() instead.
   void AppendBoolean(bool in_value);
   void AppendInteger(int in_value);
-  void AppendDouble(double in_value);
   void AppendString(StringPiece in_value);
   void AppendString(const string16& in_value);
   // DEPRECATED, use GetList()::emplace_back() in a loop instead.
@@ -743,7 +711,7 @@ class BASE_EXPORT ListValue : public Value {
 
 // This interface is implemented by classes that know how to serialize
 // Value objects.
-class BASE_EXPORT ValueSerializer {
+class ValueSerializer {
  public:
   virtual ~ValueSerializer();
 
@@ -752,7 +720,7 @@ class BASE_EXPORT ValueSerializer {
 
 // This interface is implemented by classes that know how to deserialize Value
 // objects.
-class BASE_EXPORT ValueDeserializer {
+class ValueDeserializer {
  public:
   virtual ~ValueDeserializer();
 
@@ -770,21 +738,19 @@ class BASE_EXPORT ValueDeserializer {
 // gtest uses this operator to print readable output on test failures, we must
 // override each specific type. Otherwise, the default template implementation
 // is preferred over an upcast.
-BASE_EXPORT std::ostream& operator<<(std::ostream& out, const Value& value);
+std::ostream& operator<<(std::ostream& out, const Value& value);
 
-BASE_EXPORT inline std::ostream& operator<<(std::ostream& out,
-                                            const DictionaryValue& value) {
+inline std::ostream& operator<<(std::ostream& out,
+                                const DictionaryValue& value) {
   return out << static_cast<const Value&>(value);
 }
 
-BASE_EXPORT inline std::ostream& operator<<(std::ostream& out,
-                                            const ListValue& value) {
+inline std::ostream& operator<<(std::ostream& out, const ListValue& value) {
   return out << static_cast<const Value&>(value);
 }
 
 // Stream operator so that enum class Types can be used in log statements.
-BASE_EXPORT std::ostream& operator<<(std::ostream& out,
-                                     const Value::Type& type);
+std::ostream& operator<<(std::ostream& out, const Value::Type& type);
 
 }  // namespace base
 

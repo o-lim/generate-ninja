@@ -79,7 +79,7 @@ const char kVersionStringVs2013[] = "Visual Studio 2013";  // Visual Studio 2013
 const char kVersionStringVs2015[] = "Visual Studio 2015";  // Visual Studio 2015
 const char kVersionStringVs2017[] = "Visual Studio 2017";  // Visual Studio 2017
 const char kWindowsKitsVersion[] = "10";                   // Windows 10 SDK
-const char kWindowsKitsDefaultVersion[] = "10.0.15063.0";  // Windows 10 SDK
+const char kWindowsKitsDefaultVersion[] = "10.0.17134.0";  // Windows 10 SDK
 
 const char kGuidTypeProject[] = "{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}";
 const char kGuidTypeFolder[] = "{2150E333-8FDC-42A3-9474-1A3956D46DE8}";
@@ -306,8 +306,7 @@ VisualStudioWriter::VisualStudioWriter(const BuildSettings* build_settings,
   windows_kits_include_dirs_ = GetWindowsKitsIncludeDirs(win_kit);
 }
 
-VisualStudioWriter::~VisualStudioWriter() {
-}
+VisualStudioWriter::~VisualStudioWriter() = default;
 
 // static
 bool VisualStudioWriter::RunAndWriteFiles(const BuildSettings* build_settings,
@@ -397,7 +396,7 @@ bool VisualStudioWriter::WriteProjectFiles(const Target* target,
   base::FilePath vcxproj_path = build_settings_->GetFullPath(target_file);
   std::string vcxproj_path_str = FilePathToUTF8(vcxproj_path);
 
-  projects_.emplace_back(new SolutionProject(
+  projects_.push_back(std::make_unique<SolutionProject>(
       project_name, vcxproj_path_str,
       MakeGuid(vcxproj_path_str, kGuidSeedProject),
       FilePathToUTF8(build_settings_->GetFullPath(target->label().dir())),
@@ -513,6 +512,8 @@ bool VisualStudioWriter::WriteProjectFileContents(
 
   project.SubElement("PropertyGroup", XmlAttributes("Label", "UserMacros"));
 
+  std::string ninja_target = GetNinjaTarget(target);
+
   {
     std::unique_ptr<XmlElementWriter> properties =
         project.SubElement("PropertyGroup");
@@ -525,8 +526,7 @@ bool VisualStudioWriter::WriteProjectFileContents(
     }
     properties->SubElement("TargetName")->Text("$(ProjectName)");
     if (target->output_type() != Target::GROUP) {
-      properties->SubElement("TargetPath")
-          ->Text("$(OutDir)\\$(ProjectName)$(TargetExt)");
+      properties->SubElement("TargetPath")->Text("$(OutDir)\\" + ninja_target);
     }
   }
 
@@ -636,8 +636,6 @@ bool VisualStudioWriter::WriteProjectFileContents(
       XmlAttributes("Project",
                     "$(VCTargetsPath)\\BuildCustomizations\\masm.targets"));
   project.SubElement("ImportGroup", XmlAttributes("Label", "ExtensionTargets"));
-
-  std::string ninja_target = GetNinjaTarget(target);
 
   {
     std::unique_ptr<XmlElementWriter> build =
@@ -817,9 +815,9 @@ void VisualStudioWriter::ResolveSolutionFolders() {
       project->parent_folder = it->second;
     } else {
       std::string folder_path_str = folder_path.as_string();
-      std::unique_ptr<SolutionEntry> folder(new SolutionEntry(
+      std::unique_ptr<SolutionEntry> folder = std::make_unique<SolutionEntry>(
           FindLastDirComponent(SourceDir(folder_path)).as_string(),
-          folder_path_str, MakeGuid(folder_path_str, kGuidSeedFolder)));
+          folder_path_str, MakeGuid(folder_path_str, kGuidSeedFolder));
       project->parent_folder = folder.get();
       processed_paths[folder_path] = folder.get();
       folders_.push_back(std::move(folder));
@@ -862,10 +860,11 @@ void VisualStudioWriter::ResolveSolutionFolders() {
       if (it != processed_paths.end()) {
         folder = it->second;
       } else {
-        std::unique_ptr<SolutionEntry> new_folder(new SolutionEntry(
-            FindLastDirComponent(SourceDir(parent_path)).as_string(),
-            parent_path.as_string(),
-            MakeGuid(parent_path.as_string(), kGuidSeedFolder)));
+        std::unique_ptr<SolutionEntry> new_folder =
+            std::make_unique<SolutionEntry>(
+                FindLastDirComponent(SourceDir(parent_path)).as_string(),
+                parent_path.as_string(),
+                MakeGuid(parent_path.as_string(), kGuidSeedFolder));
         processed_paths[parent_path] = new_folder.get();
         folder = new_folder.get();
         additional_folders.push_back(std::move(new_folder));
@@ -905,5 +904,8 @@ std::string VisualStudioWriter::GetNinjaTarget(const Target* target) {
   DCHECK(!target->dependency_output_file().value().empty());
   ninja_path_output_.WriteFile(ninja_target_out,
                                target->dependency_output_file());
-  return ninja_target_out.str();
+  std::string s = ninja_target_out.str();
+  if (s.compare(0, 2, "./") == 0)
+    s = s.substr(2);
+  return s;
 }

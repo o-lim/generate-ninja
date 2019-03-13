@@ -50,7 +50,7 @@ bool ShouldCountTowardNonIncludeLines(const base::StringPiece& line) {
     return false;  // Don't count preprocessor.
   if (base::ContainsOnlyChars(line, base::kWhitespaceASCII))
     return false;  // Don't count whitespace lines.
-  return true;  // Count everything else.
+  return true;     // Count everything else.
 }
 
 // Given a line, checks to see if it looks like an include or import and
@@ -62,14 +62,19 @@ bool ShouldCountTowardNonIncludeLines(const base::StringPiece& line) {
 IncludeType ExtractInclude(const base::StringPiece& line,
                            base::StringPiece* path,
                            int* begin_char) {
-  static const char kInclude[] = "#include";
+  static const char kInclude[] = "include";
   static const size_t kIncludeLen = arraysize(kInclude) - 1;  // No null.
-  static const char kImport[] = "#import";
+  static const char kImport[] = "import";
   static const size_t kImportLen = arraysize(kImport) - 1;  // No null.
 
   base::StringPiece trimmed = TrimLeadingWhitespace(line);
   if (trimmed.empty())
     return INCLUDE_NONE;
+
+  if (trimmed[0] != '#')
+    return INCLUDE_NONE;
+
+  trimmed = TrimLeadingWhitespace(trimmed.substr(1));
 
   base::StringPiece contents;
   if (base::StartsWith(trimmed, base::StringPiece(kInclude, kIncludeLen),
@@ -119,11 +124,9 @@ CIncludeIterator::CIncludeIterator(const InputFile* input)
       file_(input->contents()),
       offset_(0),
       line_number_(0),
-      lines_since_last_include_(0) {
-}
+      lines_since_last_include_(0) {}
 
-CIncludeIterator::~CIncludeIterator() {
-}
+CIncludeIterator::~CIncludeIterator() = default;
 
 bool CIncludeIterator::GetNextIncludeString(base::StringPiece* out,
                                             LocationRange* location) {
@@ -138,12 +141,9 @@ bool CIncludeIterator::GetNextIncludeString(base::StringPiece* out,
       // Only count user includes for now.
       *out = include_contents;
       *location = LocationRange(
-          Location(input_file_,
-                   cur_line_number,
-                   begin_char,
+          Location(input_file_, cur_line_number, begin_char,
                    -1 /* TODO(scottmg): Is this important? */),
-          Location(input_file_,
-                   cur_line_number,
+          Location(input_file_, cur_line_number,
                    begin_char + static_cast<int>(include_contents.size()),
                    -1 /* TODO(scottmg): Is this important? */));
 

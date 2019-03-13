@@ -8,10 +8,10 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
-#include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "tools/gn/err.h"
@@ -22,6 +22,7 @@
 class Item;
 class ParseNode;
 class Settings;
+class SourceFile;
 class Template;
 
 // Scope for the script execution.
@@ -37,17 +38,13 @@ class Template;
 // variables. So you should use a non-const containing scope whenever possible.
 class Scope {
  public:
-  typedef base::hash_map<base::StringPiece, Value, base::StringPieceHash>
-      KeyValueMap;
+  typedef std::map<base::StringPiece, Value> KeyValueMap;
   // Holds an owning list of Items.
   typedef std::vector<std::unique_ptr<Item>> ItemVector;
 
   // A flag to indicate whether a function should recurse into nested scopes,
   // or only operate on the current scope.
-  enum SearchNested {
-    SEARCH_NESTED,
-    SEARCH_CURRENT
-  };
+  enum SearchNested { SEARCH_NESTED, SEARCH_CURRENT };
 
   // Allows code to provide values for built-in variables. This class will
   // automatically register itself on construction and deregister itself on
@@ -138,8 +135,7 @@ class Scope {
   // found_in_scope is set to the scope that contains the definition of the
   // ident. If the value was provided programmatically (like host_cpu),
   // found_in_scope will be set to null.
-  const Value* GetValue(const base::StringPiece& ident,
-                        bool counts_as_used);
+  const Value* GetValue(const base::StringPiece& ident, bool counts_as_used);
   const Value* GetValue(const base::StringPiece& ident) const;
   const Value* GetValueWithScope(const base::StringPiece& ident,
                                  const Scope** found_in_scope) const;
@@ -224,6 +220,11 @@ class Scope {
   // scopes.
   void GetCurrentScopeValues(KeyValueMap* output) const;
 
+  // Returns true if the values in the current scope are the same as all
+  // values in the given scope, without going to the parent scopes. Returns
+  // false if not.
+  bool CheckCurrentScopeValuesEqual(const Scope* other) const;
+
   // Copies this scope's values into the destination. Values from the
   // containing scope(s) (normally shadowed into the current one) will not be
   // copied, neither will the reference to the containing scope (this is why
@@ -284,6 +285,15 @@ class Scope {
   const SourceDir& GetSourceDir() const;
   void set_source_dir(const SourceDir& d) { source_dir_ = d; }
 
+  // Set of files that may affect the execution of this scope. Note that this
+  // set is constructed conservatively, meanining that every file that can
+  // potentially affect this scope is included, but not necessarily every change
+  // to these files will affect this scope.
+  const std::set<SourceFile>& build_dependency_files() const {
+    return build_dependency_files_;
+  }
+  void AddBuildDependencyFile(const SourceFile& build_dependency_file);
+
   // The item collector is where Items (Targets, Configs, etc.) go that have
   // been defined. If a scope can generate items, this non-owning pointer will
   // point to the storage for such items. The creator of this scope will be
@@ -328,7 +338,7 @@ class Scope {
     Value value;
   };
 
-  typedef base::hash_map<base::StringPiece, Record, base::StringPieceHash>
+  typedef std::unordered_map<base::StringPiece, Record, base::StringPieceHash>
       RecordMap;
 
   void AddProvider(ProgrammaticProvider* p);
@@ -357,7 +367,7 @@ class Scope {
 
   // Note that this can't use string pieces since the names are constructed from
   // Values which might be deallocated before this goes out of scope.
-  typedef base::hash_map<std::string, std::unique_ptr<Scope>> NamedScopeMap;
+  typedef std::unordered_map<std::string, std::unique_ptr<Scope>> NamedScopeMap;
   NamedScopeMap target_defaults_;
 
   // Null indicates not set and that we should fallback to the containing
@@ -365,7 +375,7 @@ class Scope {
   std::unique_ptr<PatternList> sources_assignment_filter_;
 
   // Owning pointers, must be deleted.
-  typedef std::map<std::string, scoped_refptr<const Template> > TemplateMap;
+  typedef std::map<std::string, scoped_refptr<const Template>> TemplateMap;
   TemplateMap templates_;
 
   ItemVector* item_collector_;
@@ -378,6 +388,8 @@ class Scope {
   ProviderSet programmatic_providers_;
 
   SourceDir source_dir_;
+
+  std::set<SourceFile> build_dependency_files_;
 
   DISALLOW_COPY_AND_ASSIGN(Scope);
 };

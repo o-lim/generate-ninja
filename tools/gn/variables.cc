@@ -265,7 +265,7 @@ Possible values
 const char kCurrentCpu[] = "current_cpu";
 const char kCurrentCpu_HelpShort[] =
     "current_cpu: [string] The processor architecture of the current "
-        "toolchain.";
+    "toolchain.";
 const char kCurrentCpu_Help[] =
     R"(current_cpu: The processor architecture of the current toolchain.
 
@@ -274,7 +274,7 @@ const char kCurrentCpu_Help[] =
   toolchain definitions to ensure that it always reflects the appropriate
   value.
 
-  This value is not used internally by GN for any purpose. It is set it to the
+  This value is not used internally by GN for any purpose. It is set to the
   empty string ("") by default but is declared so that it can be overridden on
   the command line if so desired.
 
@@ -291,7 +291,7 @@ const char kCurrentOs_Help[] =
   toolchain definitions to ensure that it always reflects the appropriate
   value.
 
-  This value is not used internally by GN for any purpose. It is set it to the
+  This value is not used internally by GN for any purpose. It is set to the
   empty string ("") by default but is declared so that it can be overridden on
   the command line if so desired.
 
@@ -338,9 +338,9 @@ const char kPythonPath_Help[] =
 
 const char kRootBuildDir[] = "root_build_dir";
 const char kRootBuildDir_HelpShort[] =
-  "root_build_dir: [string] Directory where build commands are run.";
+    "root_build_dir: [string] Directory where build commands are run.";
 const char kRootBuildDir_Help[] =
-  R"(root_build_dir: [string] Directory where build commands are run.
+    R"(root_build_dir: [string] Directory where build commands are run.
 
   This is the root build output directory which will be the current directory
   when executing all compilers and scripts.
@@ -462,7 +462,7 @@ Example
     "     those configs appear in the list.\n" \
     "  5. all_dependent_configs pulled from dependencies, in the order of\n" \
     "     the \"deps\" list. This is done recursively. If a config appears\n" \
-    "     more than once, only the first occurance will be used.\n" \
+    "     more than once, only the first occurence will be used.\n" \
     "  6. public_configs pulled from dependencies, in the order of the\n" \
     "     \"deps\" list. If a dependency is public, they will be applied\n" \
     "     recursively.\n" \
@@ -474,7 +474,7 @@ Example
     "     recursively.\n" \
     "  2. all_dependent_configs pulled from dependencies, in the reverse\n" \
     "     order of the \"deps\" list. This is done recursively. If a config\n" \
-    "     appears more than once, only the last occurance will be used.\n" \
+    "     appears more than once, only the last occurence will be used.\n" \
     "  3. Those set on the \"public_configs\" on the target in order that\n" \
     "     those configs appear in the list.\n" \
     "  4. Those set on the \"all_dependent_configs\" on the target in order\n" \
@@ -503,8 +503,7 @@ const char kAllDependentConfigs_Help[] =
   target's headers.
 
   See also "public_configs".
-)"
-    COMMON_ORDERING_HELP;
+)" COMMON_ORDERING_HELP;
 
 const char kAllowCircularIncludesFrom[] = "allow_circular_includes_from";
 const char kAllowCircularIncludesFrom_HelpShort[] =
@@ -594,14 +593,13 @@ const char kArflags_Help[] =
   to other static libraries. Due to the nature of how arflags are typically
   used, you will normally want to apply them directly on static_library targets
   themselves.
-)"
-    COMMON_ORDERING_HELP;
+)" COMMON_ORDERING_HELP;
 
 const char kArgs[] = "args";
 const char kArgs_HelpShort[] =
     "args: [string list] Arguments passed to an action.";
 const char kArgs_Help[] =
-    R"(args: Arguments passed to an action.
+    R"(args: (target variable) Arguments passed to an action.
 
   For action and action_foreach targets, args is the list of arguments to pass
   to the script. Typically you would use source expansion (see "gn help
@@ -684,7 +682,7 @@ Example
 const char kBundleContentsDir[] = "bundle_contents_dir";
 const char kBundleContentsDir_HelpShort[] =
     "bundle_contents_dir: "
-        "Expansion of {{bundle_contents_dir}} in create_bundle.";
+    "Expansion of {{bundle_contents_dir}} in create_bundle.";
 const char kBundleContentsDir_Help[] =
     R"(bundle_contents_dir: Expansion of {{bundle_contents_dir}} in
                              create_bundle.
@@ -701,7 +699,7 @@ const char kBundleContentsDir_Help[] =
 const char kBundleResourcesDir[] = "bundle_resources_dir";
 const char kBundleResourcesDir_HelpShort[] =
     "bundle_resources_dir: "
-        "Expansion of {{bundle_resources_dir}} in create_bundle.";
+    "Expansion of {{bundle_resources_dir}} in create_bundle.";
 const char kBundleResourcesDir_Help[] =
     R"(bundle_resources_dir: Expansion of {{bundle_resources_dir}} in
                              create_bundle.
@@ -751,7 +749,7 @@ Example
 const char kBundleExecutableDir[] = "bundle_executable_dir";
 const char kBundleExecutableDir_HelpShort[] =
     "bundle_executable_dir: "
-        "Expansion of {{bundle_executable_dir}} in create_bundle";
+    "Expansion of {{bundle_executable_dir}} in create_bundle";
 const char kBundleExecutableDir_Help[] =
     R"(bundle_executable_dir: Expansion of {{bundle_executable_dir}} in create_bundle.
 
@@ -767,7 +765,7 @@ const char kBundleExecutableDir_Help[] =
 const char kBundlePlugInsDir[] = "bundle_plugins_dir";
 const char kBundlePlugInsDir_HelpShort[] =
     "bundle_plugins_dir: "
-        "Expansion of {{bundle_plugins_dir}} in create_bundle.";
+    "Expansion of {{bundle_plugins_dir}} in create_bundle.";
 const char kBundlePlugInsDir_Help[] =
     R"(bundle_plugins_dir: Expansion of {{bundle_plugins_dir}} in create_bundle.
 
@@ -797,8 +795,7 @@ const char kCommonCflagsHelp[] =
   "cflags".
 
   See also "asmflags" for flags for assembly-language files.
-)"
-    COMMON_ORDERING_HELP;
+)" COMMON_ORDERING_HELP;
 const char* kCflags_Help = kCommonCflagsHelp;
 
 const char kAsmflags[] = "asmflags";
@@ -811,8 +808,7 @@ const char* kAsmflags_Help =
 
   "asmflags" are passed to any invocation of a tool that takes an .asm or .S
   file as input.
-)"
-    COMMON_ORDERING_HELP;
+)" COMMON_ORDERING_HELP;
 
 const char kAsmppflags[] = "asmppflags";
 const char kAsmppflags_HelpShort[] =
@@ -1049,9 +1045,8 @@ Configs on a config
      listed as a sub-config that it is only used in that context. (Note that
      it's possible to fix this and de-dupe, but it's not normally relevant and
      complicates the implementation.)
-)"
-    COMMON_ORDERING_HELP
-R"(
+)" COMMON_ORDERING_HELP
+    R"(
 Example
 
   # Configs on a target.
@@ -1140,6 +1135,19 @@ Example
   }
 )";
 
+const char kDataKeys[] = "data_keys";
+const char kDataKeys_HelpShort[] =
+    "data_keys: [string list] Keys from which to collect metadata.";
+const char kDataKeys_Help[] =
+    R"(data_keys: Keys from which to collect metadata.
+
+  These keys are used to identify metadata to collect. If a walked target
+  defines this key in its metadata, its value will be appended to the resulting
+  collection.
+
+  See "gn help generated_file".
+)";
+
 const char kDefines[] = "defines";
 const char kDefines_HelpShort[] =
     "defines: [string list] C preprocessor defines.";
@@ -1150,9 +1158,8 @@ const char kDefines_Help[] =
 
   These strings will be passed to the C/C++ compiler as #defines. The strings
   may or may not include an "=" to assign a value.
-)"
-    COMMON_ORDERING_HELP
-R"(
+)" COMMON_ORDERING_HELP
+    R"(
 Example
 
   defines = [ "AWESOME_FEATURE", "LOG_LEVEL=3" ]
@@ -1208,7 +1215,7 @@ const char kDeps_Help[] =
   A list of target labels.
 
   Specifies private dependencies of a target. Private dependencies are
-  propagated up the dependency tree and linked to dependant targets, but do not
+  propagated up the dependency tree and linked to dependent targets, but do not
   grant the ability to include headers from the dependency. Public configs are
   not forwarded.
 
@@ -1221,7 +1228,7 @@ Details of dependency propagation
   Executables, shared libraries, and complete static libraries will link all
   propagated targets and stop propagation. Actions and copy steps also stop
   propagation, allowing them to take a library as an input but not force
-  dependants to link to it.
+  dependents to link to it.
 
   Propagation of all_dependent_configs and public_configs happens independently
   of target type. all_dependent_configs are always propagated across all types
@@ -1234,6 +1241,69 @@ Details of dependency propagation
   See also "public_deps".
 )";
 
+const char kFriend[] = "friend";
+const char kFriend_HelpShort[] =
+    "friend: [label pattern list] Allow targets to include private headers.";
+const char kFriend_Help[] =
+    R"(friend: Allow targets to include private headers.
+
+  A list of label patterns (see "gn help label_pattern") that allow dependent
+  targets to include private headers. Applies to all binary targets.
+
+  Normally if a target lists headers in the "public" list (see "gn help
+  public"), other headers are implicitly marked as private. Private headers
+  can not be included by other targets, even with a public dependency path.
+  The "gn check" function performs this validation.
+
+  A friend declaration allows one or more targets to include private headers.
+  This is useful for things like unit tests that are closely associated with a
+  target and require internal knowledge without opening up all headers to be
+  included by all dependents.
+
+  A friend target does not allow that target to include headers when no
+  dependency exists. A public dependency path must still exist between two
+  targets to include any headers from a destination target. The friend
+  annotation merely allows the use of headers that would otherwise be
+  prohibited because they are private.
+
+  The friend annotation is matched only against the target containing the file
+  with the include directive. Friend annotations are not propagated across
+  public or private dependencies. Friend annotations do not affect visibility.
+
+Example
+
+  static_library("lib") {
+    # This target can include our private headers.
+    friend = [ ":unit_tests" ]
+
+    public = [
+      "public_api.h",  # Normal public API for dependent targets.
+    ]
+
+    # Private API and sources.
+    sources = [
+      "a_source_file.cc",
+
+      # Normal targets that depend on this one won't be able to include this
+      # because this target defines a list of "public" headers. Without the
+      # "public" list, all headers are implicitly public.
+      "private_api.h",
+    ]
+  }
+
+  executable("unit_tests") {
+    sources = [
+      # This can include "private_api.h" from the :lib target because it
+      # depends on that target and because of the friend annotation.
+      "my_test.cc",
+    ]
+
+    deps = [
+      ":lib",  # Required for the include to be allowed.
+    ]
+  }
+)";
+
 const char kIncludeDirs[] = "include_dirs";
 const char kIncludeDirs_HelpShort[] =
     "include_dirs: [directory list] Additional include directories.";
@@ -1244,9 +1314,8 @@ const char kIncludeDirs_Help[] =
 
   The directories in this list will be added to the include path for the files
   in the affected target.
-)"
-    COMMON_ORDERING_HELP
-R"(
+)" COMMON_ORDERING_HELP
+    R"(
 Example
 
   include_dirs = [ "src/include", "//third_party/foo" ]
@@ -1300,10 +1369,10 @@ Script input gotchas
 
 Inputs for binary targets
 
-  Any input dependencies will be resolved before compiling any sources.
-  Normally, all actions that a target depends on will be run before any files
-  in a target are compiled. So if you depend on generated headers, you do not
-  typically need to list them in the inputs section.
+  Any input dependencies will be resolved before compiling any sources or
+  linking the target. Normally, all actions that a target depends on will be run
+  before any files in a target are compiled. So if you depend on generated
+  headers, you do not typically need to list them in the inputs section.
 
   Inputs for binary targets will be treated as implicit dependencies, meaning
   that changes in any of the inputs will force all sources in the target to be
@@ -1334,23 +1403,22 @@ const char kLdflags_Help[] =
   static libraries will be a no-op. If you want to apply ldflags to dependent
   targets, put them in a config and set it in the all_dependent_configs or
   public_configs.
-)"
-    COMMON_ORDERING_HELP;
+)" COMMON_ORDERING_HELP;
 
-#define COMMON_LIB_INHERITANCE_HELP \
-    "\n" \
-    "  libs and lib_dirs work differently than other flags in two respects.\n" \
-    "  First, they are inherited across static library boundaries until a\n" \
-    "  shared library or executable target is reached. Second, they are\n" \
-    "  uniquified so each one is only passed once. For \"libs\", the first\n" \
-    "  instance of it will be the one used, while for \"lib_dirs\", the\n" \
-    "  last instance of it will be the one used).\n"
+#define COMMON_LIB_INHERITANCE_HELP                                          \
+  "\n"                                                                       \
+  "  libs and lib_dirs work differently than other flags in two respects.\n" \
+  "  First, they are inherited across static library boundaries until a\n"   \
+  "  shared library or executable target is reached. Second, they are\n"     \
+  "  uniquified so each one is only passed once. For \"libs\", the first\n"  \
+  "  instance of it will be the one used, while for \"lib_dirs\", the\n"     \
+  "  last instance of it will be the one used).\n"
 
-#define LIBS_AND_LIB_DIRS_ORDERING_HELP \
-    "\n" \
-    "  For \"libs\" and \"lib_dirs\" only, the values propagated from\n" \
-    "  dependencies (as described above) are applied last assuming they\n" \
-    "  are not already in the list.\n"
+#define LIBS_AND_LIB_DIRS_ORDERING_HELP                                  \
+  "\n"                                                                   \
+  "  For \"libs\" and \"lib_dirs\" only, the values propagated from\n"   \
+  "  dependencies (as described above) are applied last assuming they\n" \
+  "  are not already in the list.\n"
 
 const char kLibDirs[] = "lib_dirs";
 const char kLibDirs_HelpShort[] =
@@ -1363,11 +1431,9 @@ const char kLibDirs_Help[] =
   Specifies additional directories passed to the linker for searching for the
   required libraries. If an item is not an absolute path, it will be treated as
   being relative to the current build file.
-)"
-    COMMON_LIB_INHERITANCE_HELP
-    COMMON_ORDERING_HELP
-    LIBS_AND_LIB_DIRS_ORDERING_HELP
-R"(
+)" COMMON_LIB_INHERITANCE_HELP COMMON_ORDERING_HELP
+        LIBS_AND_LIB_DIRS_ORDERING_HELP
+    R"(
 Example
 
   lib_dirs = [ "/usr/lib/foo", "lib/doom_melon" ]
@@ -1383,9 +1449,8 @@ const char kLibs_Help[] =
 
   These libraries will be linked into the final binary (executable or shared
   library) containing the current target.
-)"
-    COMMON_LIB_INHERITANCE_HELP
-R"(
+)" COMMON_LIB_INHERITANCE_HELP
+    R"(
 Types of libs
 
   There are several different things that can be expressed in libs:
@@ -1400,20 +1465,18 @@ Types of libs
   System libraries
       Values not containing '/' will be treated as system library names. These
       will be passed unmodified to the linker and prefixed with the
-      "lib_prefix" attribute of the linker tool. Generally you would set the
+      "lib_switch" attribute of the linker tool. Generally you would set the
       "lib_dirs" so the given library is found. Your BUILD.gn file should not
-      specify the switch (like "-l"): this will be encoded in the "lib_prefix"
+      specify the switch (like "-l"): this will be encoded in the "lib_switch"
       of the tool.
 
   Apple frameworks
       System libraries ending in ".framework" will be special-cased: the switch
-      "-framework" will be prepended instead of the lib_prefix, and the
+      "-framework" will be prepended instead of the lib_switch, and the
       ".framework" suffix will be trimmed. This is to support the way Mac links
       framework dependencies.
-)"
-    COMMON_ORDERING_HELP
-    LIBS_AND_LIB_DIRS_ORDERING_HELP
-R"(
+)" COMMON_ORDERING_HELP LIBS_AND_LIB_DIRS_ORDERING_HELP
+    R"(
 Examples
 
   On Windows:
@@ -1421,6 +1484,32 @@ Examples
 
   On Linux:
     libs = [ "ld" ]
+)";
+
+const char kMetadata[] = "metadata";
+const char kMetadata_HelpShort[] = "metadata: [scope] Metadata of this target.";
+const char kMetadata_Help[] =
+    R"(metadata: Metadata of this target.
+
+  Metadata is a collection of keys and values relating to a particular target.
+  Values must be lists, allowing for sane and predictable collection behavior.
+  Generally, these keys will include three types of lists: lists of ordinary
+  strings, lists of filenames intended to be rebased according to their
+  particular source directory, and lists of target labels intended to be used
+  as barriers to the walk. Verfication of these categories occurs at walk time,
+  not creation time (since it is not clear until the walk which values are
+  intended for which purpose).
+
+Example
+
+  group("doom_melon") {
+    metadata = {
+      # These keys are not built in to GN but are interpreted when consuming
+      # metadata.
+      my_barrier = []
+      my_files = [ "a.txt", "b.txt" ]
+    }
+  }
 )";
 
 const char kOutputExtension[] = "output_extension";
@@ -1715,7 +1804,8 @@ const char kPublic_Help[] =
   If no public files are declared, other targets (assuming they have visibility
   to depend on this target) can include any file in the sources list. If this
   variable is defined on a target, dependent targets may only include files on
-  this whitelist.
+  this whitelist unless that target is marked as a friend (see "gn help
+  friend").
 
   Header file permissions are also subject to visibility. A target must be
   visible to another target to include any files from it at all and the public
@@ -1731,12 +1821,29 @@ const char kPublic_Help[] =
   targets. If a file is included that is not known to the build, it will be
   allowed.
 
+  It is common for test targets to need to include private headers for their
+  associated code. In this case, list the test target in the "friend" list of
+  the target that owns the private header to allow the inclusion. See
+  "gn help friend" for more.
+
+  When a binary target has no explicit or implicit public headers (a "public"
+  list is defined but is empty), GN assumes that the target can not propagate
+  any compile-time dependencies up the dependency tree. In this case, the build
+  can be parallelized more efficiently.
+  Say there are dependencies:
+    A (shared library) -> B (shared library) -> C (action).
+  Normally C must complete before any source files in A can compile (because
+  there might be generated includes). But when B explicitly declares no public
+  headers, C can execute in parallel with A's compile steps. C must still be
+  complete before any dependents link.
+
 Examples
 
   These exact files are public:
     public = [ "foo.h", "bar.h" ]
 
   No files are public (no targets may include headers from this one):
+    # This allows starting compilation in dependent targets earlier.
     public = []
 )";
 
@@ -1750,17 +1857,69 @@ const char kPublicConfigs_Help[] =
 
   Targets directly depending on this one will have the configs listed in this
   variable added to them. These configs will also apply to the current target.
+  Generally, public configs are used to apply defines and include directories
+  necessary to compile this target's header files.
 
-  This addition happens in a second phase once a target and all of its
-  dependencies have been resolved. Therefore, a target will not see these
+  See also "gn help all_dependent_configs".
+
+Propagation of public configs
+
+  Public configs are applied to all targets that depend directly on this one.
+  These dependant targets can further push this target's public configs
+  higher in the dependency tree by depending on it via public_deps (see "gn
+  help public_deps").
+
+    static_library("toplevel") {
+      # This target will get "my_config" applied to it. However, since this
+      # target uses "deps" and not "public_deps", targets that depend on this
+      # one won't get it.
+      deps = [ ":intermediate" ]
+    }
+
+    static_library("intermediate") {
+      # Depending on "lower" in any way will apply "my_config" to this target.
+      # Additionall, since this target depends on "lower" via public_deps,
+      # targets that depend on this one will also get "my_config".
+      public_deps = [ ":lower" ]
+    }
+
+    static_library("lower") {
+      # This will get applied to all targets that depend on this one.
+      public_configs = [ ":my_config" ]
+    }
+
+  Public config propagation happens in a second phase once a target and all of
+  its dependencies have been resolved. Therefore, a target will not see these
   force-added configs in their "configs" variable while the script is running,
   and they can not be removed. As a result, this capability should generally
-  only be used to add defines and include directories necessary to compile a
-  target's headers.
+  only be used to add defines and include directories rather than setting
+  complicated flags that some targets may not want.
 
-  See also "all_dependent_configs".
-)"
-    COMMON_ORDERING_HELP;
+  Public configs may or may not be propagated across toolchain boundaries
+  depending on the value of the propagates_configs flag (see "gn help
+  toolchain") on the toolchain of the target declaring the public_config.
+
+Avoiding applying public configs to this target
+
+  If you want the config to apply to targets that depend on this one, but NOT
+  this one, define an extra layer of indirection using a group:
+
+    # External targets depend on this group.
+    group("my_target") {
+      # Config to apply to all targets that depend on this one.
+      public_configs = [ ":external_settings" ]
+      deps = [ ":internal_target" ]
+    }
+
+    # Internal target to actually compile the sources.
+    static_library("internal_target") {
+      # Force all external targets to depend on the group instead of directly
+      # on this so the "external_settings" config will get applied.
+      visibility = [ ":my_target" ]
+      ...
+    }
+
+)" COMMON_ORDERING_HELP;
 
 const char kPublicDeps[] = "public_deps";
 const char kPublicDeps_HelpShort[] =
@@ -1783,6 +1942,8 @@ const char kPublicDeps_Help[] =
     - If the current target is a shared library, other shared libraries that it
       publicly depends on (directly or indirectly) are propagated up the
       dependency tree to dependents for linking.
+
+  See also "gn help public_configs".
 
 Discussion
 
@@ -1809,6 +1970,26 @@ Example
     deps = [ ":super_secret_implementation_details" ]
     public_deps = [ ":c" ]
   }
+)";
+
+const char kRebase[] = "rebase";
+const char kRebase_HelpShort[] =
+    "rebase: [boolean] Rebase collected metadata as files.";
+const char kRebase_Help[] =
+    R"(rebase: Rebase collected metadata as files.
+
+  A boolean that triggers a rebase of collected metadata strings based on their
+  declared file. Defaults to false.
+
+  Metadata generally declares files as strings relative to the local build file.
+  However, this data is often used in other contexts, and so setting this flag
+  will force the metadata collection to be rebased according to the local build
+  file's location and thus allow the filename to be used anywhere.
+
+  Setting this flag will raise an error if any target's specified metadata is
+  not a string value.
+
+  See also "gn help generated_file".
 )";
 
 const char kCommand[] = "command";
@@ -1848,7 +2029,7 @@ const char kResponseFileContents[] = "response_file_contents";
 const char kResponseFileContents_HelpShort[] =
     "response_file_contents: [string list] Contents of .rsp file for actions.";
 const char kResponseFileContents_Help[] =
-   R"*(response_file_contents: Contents of a response file for actions.
+    R"*(response_file_contents: Contents of a response file for actions.
 
   Sometimes the arguments passed to a script can be too long for the system's
   command-line capabilities. This is especially the case on Windows where the
@@ -1885,8 +2066,7 @@ Example
 )*";
 
 const char kScript[] = "script";
-const char kScript_HelpShort[] =
-    "script: [file name] Script file for actions.";
+const char kScript_HelpShort[] = "script: [file name] Script file for actions.";
 const char kScript_Help[] =
     R"(script: Script file for actions.
 
@@ -1914,7 +2094,7 @@ Sources for binary targets
 
   As a special case, a file ending in ".def" will be treated as a Windows
   module definition file. It will be appended to the link line with a
-  preceeding "/DEF:" string. There must be at most one .def file in a target
+  preceding "/DEF:" string. There must be at most one .def file in a target
   and they do not cross dependency boundaries (so specifying a .def file in a
   static library or source set will have no effect on the executable or shared
   library they're linked into).
@@ -1954,25 +2134,11 @@ Example
   sys_include_dirs = [ "src/sys_include", "//third_party/foo" ]
 )";
 
-const char kXcodeExtraAttributes[] = "xcode_extra_attributes";
-const char kXcodeExtraAttributes_HelpShort[] =
-    "xcode_extra_attributes: [scope] Extra attributes for Xcode projects.";
-const char kXcodeExtraAttributes_Help[] =
-    R"(xcode_extra_attributes: [scope] Extra attributes for Xcode projects.
-
-  The value defined in this scope will be copied to the EXTRA_ATTRIBUTES
-  property of the generated Xcode project. They are only meaningful when
-  generating with --ide=xcode.
-
-  See "gn help create_bundle" for more information.
-)";
-
 const char kXcodeTestApplicationName[] = "xcode_test_application_name";
 const char kXcodeTestApplicationName_HelpShort[] =
-    "xcode_test_application_name: [string] Test application name for unit or ui"
-    " test target.";
+    "xcode_test_application_name: [string] Name for Xcode test target.";
 const char kXcodeTestApplicationName_Help[] =
-    R"(xcode_test_application_name: Test application name for unit or ui test target.
+    R"(xcode_test_application_name: Name for Xcode test target.
 
   Each unit and ui test target must have a test application target, and this
   value is used to specify the relationship. Only meaningful to Xcode (used as
@@ -1980,7 +2146,7 @@ const char kXcodeTestApplicationName_Help[] =
 
   See "gn help create_bundle" for more information.
 
-Exmaple
+Example
 
   create_bundle("chrome_xctest") {
     xcode_test_application_name = "chrome"
@@ -2066,6 +2232,45 @@ Examples
     visibility = [ "./*", "//bar/*" ]
 )";
 
+const char kWalkKeys[] = "walk_keys";
+const char kWalkKeys_HelpShort[] =
+    "walk_keys: [string list] Key(s) for managing the metadata collection "
+    "walk.";
+const char kWalkKeys_Help[] =
+    R"(walk_keys: Key(s) for managing the metadata collection walk.
+
+  Defaults to [].
+
+  These keys are used to control the next step in a collection walk, acting as
+  barriers. If a specified key is defined in a target's metadata, the walk will
+  use the targets listed in that value to determine which targets are walked.
+
+  If no walk_keys are specified for a generated_file target (i.e. "[]"), the
+  walk will touch all deps and data_deps of the specified target recursively.
+
+  See "gn help generated_file".
+)";
+
+const char kWriteValueContents[] = "contents";
+const char kWriteValueContents_HelpShort[] =
+    "contents: Contents to write to file.";
+const char kWriteValueContents_Help[] =
+    R"(contents: Contents to write to file.
+
+  The contents of the file for a generated_file target.
+  See "gn help generated_file".
+)";
+
+const char kWriteOutputConversion[] = "output_conversion";
+const char kWriteOutputConversion_HelpShort[] =
+    "output_conversion: Data format for generated_file targets.";
+const char kWriteOutputConversion_Help[] =
+    R"("output_conversion: Data format for generated_file targets.
+
+  Controls how the "contents" of a generated_file target is formatted.
+  See "gn help output_conversion".
+)";
+
 const char kWriteRuntimeDeps[] = "write_runtime_deps";
 const char kWriteRuntimeDeps_HelpShort[] =
     "write_runtime_deps: Writes the target's runtime_deps to the given path.";
@@ -2090,20 +2295,28 @@ const char kWriteRuntimeDeps_Help[] =
   help --runtime-deps-list-file").
 )";
 
+const char kXcodeExtraAttributes[] = "xcode_extra_attributes";
+const char kXcodeExtraAttributes_HelpShort[] =
+    "xcode_extra_attributes: [scope] Extra attributes for Xcode projects.";
+const char kXcodeExtraAttributes_Help[] =
+    R"(xcode_extra_attributes: [scope] Extra attributes for Xcode projects.
+
+  The value defined in this scope will be copied to the EXTRA_ATTRIBUTES
+  property of the generated Xcode project. They are only meaningful when
+  generating with --ide=xcode.
+
+  See "gn help create_bundle" for more information.
+)";
+
 // -----------------------------------------------------------------------------
 
-VariableInfo::VariableInfo()
-    : help_short(""),
-      help("") {
-}
+VariableInfo::VariableInfo() : help_short(""), help("") {}
 
 VariableInfo::VariableInfo(const char* in_help_short, const char* in_help)
-    : help_short(in_help_short),
-      help(in_help) {
-}
+    : help_short(in_help_short), help(in_help) {}
 
 #define INSERT_VARIABLE(var) \
-    info_map[k##var] = VariableInfo(k##var##_HelpShort, k##var##_Help);
+  info_map[k##var] = VariableInfo(k##var##_HelpShort, k##var##_Help);
 
 const VariableInfoMap& GetBuiltinVariables() {
   static VariableInfoMap info_map;
@@ -2166,14 +2379,17 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(ConsolePool)
     INSERT_VARIABLE(Data)
     INSERT_VARIABLE(DataDeps)
+    INSERT_VARIABLE(DataKeys)
     INSERT_VARIABLE(Defines)
     INSERT_VARIABLE(Depfile)
     INSERT_VARIABLE(Deps)
+    INSERT_VARIABLE(Friend)
     INSERT_VARIABLE(IncludeDirs)
     INSERT_VARIABLE(Inputs)
     INSERT_VARIABLE(Ldflags)
     INSERT_VARIABLE(Libs)
     INSERT_VARIABLE(LibDirs)
+    INSERT_VARIABLE(Metadata)
     INSERT_VARIABLE(OutputDir)
     INSERT_VARIABLE(OutputExtension)
     INSERT_VARIABLE(OutputName)
@@ -2188,6 +2404,7 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(Public)
     INSERT_VARIABLE(PublicConfigs)
     INSERT_VARIABLE(PublicDeps)
+    INSERT_VARIABLE(Rebase)
     INSERT_VARIABLE(ResponseFileContents)
     INSERT_VARIABLE(Script)
     INSERT_VARIABLE(Command)
@@ -2199,7 +2416,11 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(XcodeTestApplicationName)
     INSERT_VARIABLE(Testonly)
     INSERT_VARIABLE(Visibility)
+    INSERT_VARIABLE(WalkKeys)
+    INSERT_VARIABLE(WriteOutputConversion)
+    INSERT_VARIABLE(WriteValueContents)
     INSERT_VARIABLE(WriteRuntimeDeps)
+    INSERT_VARIABLE(XcodeExtraAttributes)
   }
   return info_map;
 }

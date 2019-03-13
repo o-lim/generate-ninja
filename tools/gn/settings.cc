@@ -5,8 +5,8 @@
 #include "tools/gn/settings.h"
 
 #include "base/logging.h"
-#include "build/build_config.h"
 #include "tools/gn/filesystem_utils.h"
+#include "util/build_config.h"
 
 Settings::Settings(const BuildSettings* build_settings,
                    const std::string& output_subdir_name)
@@ -32,5 +32,4 @@ Settings::Settings(const BuildSettings* build_settings,
     toolchain_gen_dir_ = SourceDir(toolchain_output_dir_.value() + "gen/");
 }
 
-Settings::~Settings() {
-}
+Settings::~Settings() = default;

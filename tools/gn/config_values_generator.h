@@ -37,10 +37,10 @@ class ConfigValuesGenerator {
 };
 
 // For using in documentation for functions which use this.
-#define CONFIG_VALUES_VARS_HELP \
-    "  Flags: arflags, asmflags, cflags, cflags_c, cflags_cc, cflags_objc,,\n" \
-    "         cflags_objcc cppflags, cppflags_c, cppflags_cc, cppflags_objc,\n" \
-    "         cppflags_objcc, defines, include_dirs, ldflags, lib_dirs, libs,\n" \
-    "         precompiled_header, precompiled_source\n"
+#define CONFIG_VALUES_VARS_HELP                                               \
+  "  Flags: arflags, asmflags, cflags, cflags_c, cflags_cc, cflags_objc,,\n"  \
+  "         cflags_objcc cppflags, cppflags_c, cppflags_cc, cppflags_objc,\n" \
+  "         cppflags_objcc, defines, include_dirs, inputs, ldflags,\n"        \
+  "         lib_dirs, libs, precompiled_header, precompiled_source\n"
 
 #endif  // TOOLS_GN_CONFIG_VALUES_GENERATOR_H_

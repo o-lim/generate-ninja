@@ -55,11 +55,9 @@ bool RecursiveFindCycle(const BuilderRecord* search_in,
 
 }  // namespace
 
-Builder::Builder(Loader* loader) : loader_(loader) {
-}
+Builder::Builder(Loader* loader) : loader_(loader) {}
 
-Builder::~Builder() {
-}
+Builder::~Builder() = default;
 
 void Builder::ItemDefined(std::unique_ptr<Item> item) {
   ScopedTrace trace(TraceItem::TRACE_DEFINE_TARGET, item->label());
@@ -78,10 +76,10 @@ void Builder::ItemDefined(std::unique_ptr<Item> item) {
   // Check that it's not been already defined.
   if (record->item()) {
     err = Err(item->defined_from(), "Duplicate definition.",
-        "The item\n  " + item->label().GetUserVisibleName(false) +
-        "\nwas already defined.");
-    err.AppendSubErr(Err(record->item()->defined_from(),
-                         "Previous definition:"));
+              "The item\n  " + item->label().GetUserVisibleName(false) +
+                  "\nwas already defined.");
+    err.AppendSubErr(
+        Err(record->item()->defined_from(), "Previous definition:"));
     g_scheduler->FailWithError(err);
     return;
   }
@@ -136,7 +134,20 @@ std::vector<const BuilderRecord*> Builder::GetAllRecords() const {
   std::vector<const BuilderRecord*> result;
   result.reserve(records_.size());
   for (const auto& record : records_)
-    result.push_back(record.second);
+    result.push_back(record.second.get());
+  return result;
+}
+
+std::vector<const Item*> Builder::GetAllResolvedItems() const {
+  std::vector<const Item*> result;
+  result.reserve(records_.size());
+  for (const auto& record : records_) {
+    if (record.second->type() != BuilderRecord::ITEM_UNKNOWN &&
+        record.second->should_generate() && record.second->item()) {
+      result.push_back(record.second->item());
+    }
+  }
+
   return result;
 }
 
@@ -157,10 +168,8 @@ const BuilderRecord* Builder::GetRecord(const Label& label) const {
 }
 
 BuilderRecord* Builder::GetRecord(const Label& label) {
-  RecordMap::iterator found = records_.find(label);
-  if (found == records_.end())
-    return nullptr;
-  return found->second;
+  auto found = records_.find(label);
+  return (found != records_.end()) ? found->second.get() : nullptr;
 }
 
 bool Builder::CheckForBadItems(Err* err) const {
@@ -176,7 +185,7 @@ bool Builder::CheckForBadItems(Err* err) const {
   std::vector<const BuilderRecord*> bad_records;
   std::string depstring;
   for (const auto& record_pair : records_) {
-    const BuilderRecord* src = record_pair.second;
+    const BuilderRecord* src = record_pair.second.get();
     if (!src->should_generate())
       continue;  // Skip ungenerated nodes.
 
@@ -186,8 +195,8 @@ bool Builder::CheckForBadItems(Err* err) const {
       // Check dependencies.
       for (auto* dest : src->unresolved_deps()) {
         if (!dest->item()) {
-          depstring += src->label().GetUserVisibleName(true) +
-              "\n  needs " + dest->label().GetUserVisibleName(true) + "\n";
+          depstring += src->label().GetUserVisibleName(true) + "\n  needs " +
+                       dest->label().GetUserVisibleName(true) + "\n";
         }
       }
     }
@@ -204,11 +213,12 @@ bool Builder::CheckForBadItems(Err* err) const {
     depstring = CheckForCircularDependencies(bad_records);
     if (depstring.empty()) {
       // Something's very wrong, just dump out the bad nodes.
-      depstring = "I have no idea what went wrong, but these are unresolved, "
+      depstring =
+          "I have no idea what went wrong, but these are unresolved, "
           "possibly due to an\ninternal error:";
       for (auto* bad_record : bad_records) {
-        depstring += "\n\"" +
-            bad_record->label().GetUserVisibleName(false) + "\"";
+        depstring +=
+            "\n\"" + bad_record->label().GetUserVisibleName(false) + "\"";
       }
       *err = Err(Location(), "", depstring);
     } else {
@@ -301,10 +311,10 @@ void Builder::CreateConsolePoolRecord(const Toolchain* toolchain) {
   const Settings * settings = loader_->GetToolchainSettings(toolchain->label());
   std::unique_ptr<Pool> console_pool(new Pool(settings, label));
   console_pool->set_console(true);
-  BuilderRecord* record = new BuilderRecord(BuilderRecord::ITEM_POOL, label);
+  std::unique_ptr<BuilderRecord> record(new BuilderRecord(BuilderRecord::ITEM_POOL, label));
   record->set_item(std::move(console_pool));
   record->set_resolved(true);
-  records_[label] = record;
+  records_[label] = std::move(record);
 }
 
 BuilderRecord* Builder::GetOrCreateRecordOfType(const Label& label,
@@ -314,25 +324,26 @@ BuilderRecord* Builder::GetOrCreateRecordOfType(const Label& label,
   BuilderRecord* record = GetRecord(label);
   if (!record) {
     // Not seen this record yet, create a new one.
-    record = new BuilderRecord(type, label);
-    record->set_originally_referenced_from(request_from);
-    records_[label] = record;
+    auto new_record = std::make_unique<BuilderRecord>(type, label);
+    new_record->set_originally_referenced_from(request_from);
+    record = new_record.get();
+    records_[label] = std::move(new_record);
     return record;
   }
 
   // Check types.
   if (record->type() != type) {
     std::string msg =
-        "The type of " + label.GetUserVisibleName(false) +
-        "\nhere is a " + BuilderRecord::GetNameForType(type) +
-        " but was previously seen as a " +
-        BuilderRecord::GetNameForType(record->type()) + ".\n\n"
+        "The type of " + label.GetUserVisibleName(false) + "\nhere is a " +
+        BuilderRecord::GetNameForType(type) + " but was previously seen as a " +
+        BuilderRecord::GetNameForType(record->type()) +
+        ".\n\n"
         "The most common cause is that the label of a config was put in the\n"
         "in the deps section of a target (or vice-versa).";
     *err = Err(request_from, "Item type does not match.", msg);
     if (record->originally_referenced_from()) {
-      err->AppendSubErr(Err(record->originally_referenced_from(),
-                            std::string()));
+      err->AppendSubErr(
+          Err(record->originally_referenced_from(), std::string()));
     }
     return nullptr;
   }
@@ -347,24 +358,27 @@ BuilderRecord* Builder::GetResolvedRecordOfType(const Label& label,
   BuilderRecord* record = GetRecord(label);
   if (!record) {
     *err = Err(origin, "Item not found",
-        "\"" + label.GetUserVisibleName(false) + "\" doesn't\n"
-        "refer to an existent thing.");
+               "\"" + label.GetUserVisibleName(false) +
+                   "\" doesn't\n"
+                   "refer to an existent thing.");
     return nullptr;
   }
 
   const Item* item = record->item();
   if (!item) {
-    *err = Err(origin, "Item not resolved.",
+    *err = Err(
+        origin, "Item not resolved.",
         "\"" + label.GetUserVisibleName(false) + "\" hasn't been resolved.\n");
     return nullptr;
   }
 
   if (!BuilderRecord::IsItemOfType(item, type)) {
-    *err = Err(origin,
-        std::string("This is not a ") + BuilderRecord::GetNameForType(type),
-        "\"" + label.GetUserVisibleName(false) + "\" refers to a " +
-        item->GetItemTypeName() + " instead of a " +
-        BuilderRecord::GetNameForType(type) + ".");
+    *err =
+        Err(origin,
+            std::string("This is not a ") + BuilderRecord::GetNameForType(type),
+            "\"" + label.GetUserVisibleName(false) + "\" refers to a " +
+                item->GetItemTypeName() + " instead of a " +
+                BuilderRecord::GetNameForType(type) + ".");
     return nullptr;
   }
   return record;
@@ -440,8 +454,7 @@ bool Builder::AddToolchainDep(BuilderRecord* record,
   return true;
 }
 
-void Builder::RecursiveSetShouldGenerate(BuilderRecord* record,
-                                         bool force) {
+void Builder::RecursiveSetShouldGenerate(BuilderRecord* record, bool force) {
   if (!record->should_generate()) {
     record->set_should_generate(true);
 
@@ -462,8 +475,7 @@ void Builder::RecursiveSetShouldGenerate(BuilderRecord* record,
 
 void Builder::ScheduleItemLoadIfNecessary(BuilderRecord* record) {
   const ParseNode* origin = record->originally_referenced_from();
-  loader_->Load(record->label(),
-                origin ? origin->GetRange() : LocationRange());
+  loader_->Load(record->label(), origin ? origin->GetRange() : LocationRange());
 }
 
 bool Builder::ResolveItem(BuilderRecord* record, Err* err) {
@@ -545,10 +557,10 @@ bool Builder::ResolveToolchain(Target* target, Err* err) {
       target->settings()->toolchain_label(), target->defined_from(),
       BuilderRecord::ITEM_TOOLCHAIN, err);
   if (!record) {
-    *err = Err(target->defined_from(),
-        "Toolchain for target not defined.",
+    *err = Err(
+        target->defined_from(), "Toolchain for target not defined.",
         "I was hoping to find a toolchain " +
-        target->settings()->toolchain_label().GetUserVisibleName(false));
+            target->settings()->toolchain_label().GetUserVisibleName(false));
     return false;
   }
 

@@ -95,11 +95,6 @@ DepsReverseIterator& DepsReverseIterator::operator++() {
 }
 
 DepsIteratorRange::DepsIteratorRange(const DepsIterator& b)
-    : begin_(b),
-      end_(),
-      rbegin_(b),
-      rend_() {
-}
+    : begin_(b), end_(), rbegin_(b), rend_() {}
 
-DepsIteratorRange::~DepsIteratorRange() {
-}
+DepsIteratorRange::~DepsIteratorRange() = default;

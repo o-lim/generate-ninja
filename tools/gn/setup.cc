@@ -5,7 +5,9 @@
 #include "tools/gn/setup.h"
 
 #include <stdlib.h>
+
 #include <algorithm>
+#include <memory>
 #include <sstream>
 #include <utility>
 
@@ -14,15 +16,12 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/process/launch.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
-#include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "build/build_config.h"
 #include "tools/gn/command_format.h"
 #include "tools/gn/commands.h"
+#include "tools/gn/exec_process.h"
 #include "tools/gn/filesystem_utils.h"
 #include "tools/gn/input_file.h"
 #include "tools/gn/parse_tree.h"
@@ -35,12 +34,14 @@
 #include "tools/gn/trace.h"
 #include "tools/gn/value.h"
 #include "tools/gn/value_extractors.h"
+#include "util/build_config.h"
 
 #if defined(OS_WIN)
 #include <windows.h>
+#include "base/win/scoped_process_information.h"
 #endif
 
-extern const char kDotfile_Help[] =
+const char kDotfile_Help[] =
     R"(.gn file
 
   When gn starts, it will search the current directory and parent directories
@@ -69,7 +70,8 @@ Variables
   check_targets [optional]
       A list of labels and label patterns that should be checked when running
       "gn check" or "gn gen --check". If unspecified, all targets will be
-      checked. If it is the empty list, no targets will be checked.
+      checked. If it is the empty list, no targets will be checked. To
+      bypass this list, request an explicit check of targets, like "//*".
 
       The format of this list is identical to that of "visibility" so see "gn
       help visibility" for examples.
@@ -161,20 +163,10 @@ base::FilePath FindDotFile(const base::FilePath& current_dir) {
   return FindDotFile(up_one_dir);
 }
 
-void ForwardItemDefinedToBuilderInMainThread(
-    Builder* builder_call_on_main_thread_only,
-    std::unique_ptr<Item> item) {
-  builder_call_on_main_thread_only->ItemDefined(std::move(item));
-
-  // Pair to the Increment in ItemDefinedCallback.
-  g_scheduler->DecrementWorkCount();
-}
-
 // Called on any thread. Post the item to the builder on the main thread.
-void ItemDefinedCallback(
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-    Builder* builder_call_on_main_thread_only,
-    std::unique_ptr<Item> item) {
+void ItemDefinedCallback(MsgLoop* task_runner,
+                         Builder* builder_call_on_main_thread_only,
+                         std::unique_ptr<Item> item) {
   DCHECK(item);
 
   // Increment the work count for the duration of defining the item with the
@@ -183,11 +175,13 @@ void ItemDefinedCallback(
   // this call completing on the main thread, the 'Complete' function will
   // be signaled and we'll stop running with an incomplete build.
   g_scheduler->IncrementWorkCount();
-  task_runner->PostTask(
-      FROM_HERE,
-      base::Bind(&ForwardItemDefinedToBuilderInMainThread,
-                 base::Unretained(builder_call_on_main_thread_only),
-                 base::Passed(&item)));
+  task_runner->PostTask(base::BindOnce(
+      [](Builder* builder_call_on_main_thread_only,
+         std::unique_ptr<Item> item) {
+        builder_call_on_main_thread_only->ItemDefined(std::move(item));
+        g_scheduler->DecrementWorkCount();
+      },
+      builder_call_on_main_thread_only, base::Passed(&item)));
 }
 
 void DecrementWorkCount() {
@@ -195,6 +189,24 @@ void DecrementWorkCount() {
 }
 
 #if defined(OS_WIN)
+
+std::wstring SysMultiByteToWide(base::StringPiece mb) {
+  if (mb.empty())
+    return std::wstring();
+
+  int mb_length = static_cast<int>(mb.length());
+  // Compute the length of the buffer.
+  int charcount =
+      MultiByteToWideChar(CP_ACP, 0, mb.data(), mb_length, NULL, 0);
+  if (charcount == 0)
+    return std::wstring();
+
+  std::wstring wide;
+  wide.resize(charcount);
+  MultiByteToWideChar(CP_ACP, 0, mb.data(), mb_length, &wide[0], charcount);
+
+  return wide;
+}
 
 // Given the path to a batch file that runs Python, extracts the name of the
 // executable actually implementing Python. Generally people write a batch file
@@ -212,11 +224,16 @@ base::FilePath PythonBatToExe(const base::FilePath& bat_path) {
   command.append(L"\" -c \"import sys; print sys.executable\"\"");
 
   std::string python_path;
-  if (base::GetAppOutput(command, &python_path)) {
+  std::string std_err;
+  int exit_code;
+  base::FilePath cwd;
+  GetCurrentDirectory(&cwd);
+  if (internal::ExecProcess(command, cwd, &python_path, &std_err, &exit_code) &&
+      exit_code == 0 && std_err.empty()) {
     base::TrimWhitespaceASCII(python_path, base::TRIM_ALL, &python_path);
 
     // Python uses the system multibyte code page for sys.executable.
-    base::FilePath exe_path(base::SysNativeMBToWide(python_path));
+    base::FilePath exe_path(SysMultiByteToWide(python_path));
 
     // Check for reasonable output, cmd may have output an error message.
     if (base::PathExists(exe_path))
@@ -295,25 +312,29 @@ Setup::Setup()
   loader_->set_task_runner(scheduler_.task_runner());
 }
 
-Setup::~Setup() {
-}
+Setup::~Setup() = default;
 
 bool Setup::DoSetup(const std::string& build_dir, bool force_create) {
-  base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
+  return DoSetup(build_dir, force_create,
+                 *base::CommandLine::ForCurrentProcess());
+}
 
-  scheduler_.set_verbose_logging(cmdline->HasSwitch(switches::kVerbose));
-  scheduler_.set_verbose_log(cmdline->GetSwitchValuePath(switches::kVerbose));
-  if (cmdline->HasSwitch(switches::kTime) ||
-      cmdline->HasSwitch(switches::kTracelog))
+bool Setup::DoSetup(const std::string& build_dir,
+                    bool force_create,
+                    const base::CommandLine& cmdline) {
+  scheduler_.set_verbose_logging(cmdline.HasSwitch(switches::kVerbose));
+  scheduler_.set_verbose_log(cmdline.GetSwitchValuePath(switches::kVerbose));
+  if (cmdline.HasSwitch(switches::kTime) ||
+      cmdline.HasSwitch(switches::kTracelog))
     EnableTracing();
 
   ScopedTrace setup_trace(TraceItem::TRACE_SETUP, "DoSetup");
 
-  if (!FillSourceDir(*cmdline))
+  if (!FillSourceDir(cmdline))
     return false;
   if (!RunConfigFile())
     return false;
-  if (!FillOtherConfig(*cmdline))
+  if (!FillOtherConfig(cmdline))
     return false;
 
   // Must be after FillSourceDir to resolve.
@@ -325,14 +346,14 @@ bool Setup::DoSetup(const std::string& build_dir, bool force_create) {
   if (default_args_) {
     Scope::KeyValueMap overrides;
     default_args_->GetCurrentScopeValues(&overrides);
-    build_settings_.build_args().AddArgOverrides(overrides);
+    build_settings_.build_args().AddDefaultArgOverrides(overrides);
   }
 
   if (fill_arguments_) {
-    if (!FillArguments(*cmdline))
+    if (!FillArguments(cmdline))
       return false;
   }
-  if (!FillPythonPath(*cmdline))
+  if (!FillPythonPath(cmdline))
     return false;
 
   // Check for unused variables in the .gn file.
@@ -346,10 +367,14 @@ bool Setup::DoSetup(const std::string& build_dir, bool force_create) {
 }
 
 bool Setup::Run() {
+  return Run(*base::CommandLine::ForCurrentProcess());
+}
+
+bool Setup::Run(const base::CommandLine& cmdline) {
   RunPreMessageLoop();
   if (!scheduler_.Run())
     return false;
-  return RunPostMessageLoop();
+  return RunPostMessageLoop(cmdline);
 }
 
 SourceFile Setup::GetBuildArgFile() const {
@@ -364,7 +389,7 @@ void Setup::RunPreMessageLoop() {
   loader_->Load(root_build_file_, LocationRange(), Label());
 }
 
-bool Setup::RunPostMessageLoop() {
+bool Setup::RunPostMessageLoop(const base::CommandLine& cmdline) {
   Err err;
   if (!builder_.CheckForBadItems(&err)) {
     err.PrintToStdout();
@@ -372,13 +397,14 @@ bool Setup::RunPostMessageLoop() {
   }
 
   if (!build_settings_.build_args().VerifyAllOverridesUsed(&err)) {
-    // TODO(brettw) implement a system to have a different marker for
-    // warnings. Until we have a better system, print the error but don't
-    // return failure unless requested on the command line.
-    err.PrintToStdout();
-    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kFailOnUnusedArgs))
+    if (cmdline.HasSwitch(switches::kFailOnUnusedArgs)) {
+      err.PrintToStdout();
       return false;
+    }
+    err.PrintNonfatalToStdout();
+    OutputString(
+        "\nThe build continued as if that argument was "
+        "unspecified.\n\n");
     return true;
   }
 
@@ -392,18 +418,17 @@ bool Setup::RunPostMessageLoop() {
       to_check = all_targets;
     }
 
-    if (!commands::CheckPublicHeaders(&build_settings_, all_targets,
-                                      to_check, false)) {
+    if (!commands::CheckPublicHeaders(&build_settings_, all_targets, to_check,
+                                      false, false)) {
       return false;
     }
   }
 
   // Write out tracing and timing if requested.
-  const base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
-  if (cmdline->HasSwitch(switches::kTime))
+  if (cmdline.HasSwitch(switches::kTime))
     PrintLongHelp(SummarizeTraces());
-  if (cmdline->HasSwitch(switches::kTracelog))
-    SaveTraces(cmdline->GetSwitchValuePath(switches::kTracelog));
+  if (cmdline.HasSwitch(switches::kTracelog))
+    SaveTraces(cmdline.GetSwitchValuePath(switches::kTracelog));
 
   return true;
 }
@@ -423,7 +448,7 @@ bool Setup::FillArguments(const base::CommandLine& cmdline) {
 }
 
 bool Setup::FillArgsFromCommandLine(const std::string& args) {
-  args_input_file_.reset(new InputFile(SourceFile()));
+  args_input_file_ = std::make_unique<InputFile>(SourceFile());
   args_input_file_->SetContents(args);
   args_input_file_->set_friendly_name("the command-line \"--args\"");
   return FillArgsFromArgsInputFile();
@@ -447,7 +472,7 @@ bool Setup::FillArgsFromFile() {
   if (contents.empty())
     return true;  // Empty file, do nothing.
 
-  args_input_file_.reset(new InputFile(build_arg_source_file));
+  args_input_file_ = std::make_unique<InputFile>(build_arg_source_file);
   args_input_file_->SetContents(contents);
   args_input_file_->set_friendly_name(
       "build arg file (use \"gn args <out_dir>\" to edit)");
@@ -487,6 +512,8 @@ bool Setup::FillArgsFromArgsInputFile() {
   Scope::KeyValueMap overrides;
   arg_scope.GetCurrentScopeValues(&overrides);
   build_settings_.build_args().AddArgOverrides(overrides);
+  build_settings_.build_args().set_build_args_dependency_files(
+      arg_scope.build_dependency_files());
   return true;
 }
 
@@ -501,17 +528,17 @@ bool Setup::SaveArgsToFile() {
   base::CreateDirectory(build_arg_file.DirName());
 
   std::string contents = args_input_file_->contents();
-  commands::FormatStringToString(contents, false, &contents);
+  commands::FormatStringToString(contents, commands::TreeDumpMode::kInactive, &contents);
 #if defined(OS_WIN)
   // Use Windows lineendings for this file since it will often open in
   // Notepad which can't handle Unix ones.
   base::ReplaceSubstringsAfterOffset(&contents, 0, "\n", "\r\n");
 #endif
   if (base::WriteFile(build_arg_file, contents.c_str(),
-      static_cast<int>(contents.size())) == -1) {
+                      static_cast<int>(contents.size())) == -1) {
     Err(Location(), "Args file could not be written.",
-      "The file is \"" + FilePathToUTF8(build_arg_file) +
-        "\"").PrintToStdout();
+        "The file is \"" + FilePathToUTF8(build_arg_file) + "\"")
+        .PrintToStdout();
     return false;
   }
 
@@ -534,25 +561,29 @@ bool Setup::FillSourceDir(const base::CommandLine& cmdline) {
     if (root_path.empty()) {
       Err(Location(), "Root source path not found.",
           "The path \"" + FilePathToUTF8(relative_root_path) +
-          "\" doesn't exist.").PrintToStdout();
+              "\" doesn't exist.")
+          .PrintToStdout();
       return false;
     }
 
     // When --root is specified, an alternate --dotfile can also be set.
     // --dotfile should be a real file path and not a "//foo" source-relative
     // path.
-    base::FilePath dot_file_path =
+    base::FilePath dotfile_path =
         cmdline.GetSwitchValuePath(switches::kDotfile);
-    if (dot_file_path.empty()) {
+    if (dotfile_path.empty()) {
       dotfile_name_ = root_path.Append(kGnFile);
     } else {
-      dotfile_name_ = base::MakeAbsoluteFilePath(dot_file_path);
+      dotfile_name_ = base::MakeAbsoluteFilePath(dotfile_path);
       if (dotfile_name_.empty()) {
         Err(Location(), "Could not load dotfile.",
-            "The file \"" + FilePathToUTF8(dot_file_path) +
-            "\" couldn't be loaded.").PrintToStdout();
+            "The file \"" + FilePathToUTF8(dotfile_path) +
+                "\" couldn't be loaded.")
+            .PrintToStdout();
         return false;
       }
+      // Only set dotfile_name if it was passed explicitly.
+      build_settings_.set_dotfile_name(dotfile_name_);
     }
   } else {
     // In the default case, look for a dotfile and that also tells us where the
@@ -583,7 +614,8 @@ bool Setup::FillSourceDir(const base::CommandLine& cmdline) {
   if (root_realpath.empty()) {
     Err(Location(), "Can't get the real root path.",
         "I could not get the real path of \"" + FilePathToUTF8(root_path) +
-        "\".").PrintToStdout();
+            "\".")
+        .PrintToStdout();
     return false;
   }
   if (scheduler_.verbose_logging())
@@ -597,9 +629,9 @@ bool Setup::FillSourceDir(const base::CommandLine& cmdline) {
 bool Setup::FillBuildDir(const std::string& build_dir, bool require_exists) {
   Err err;
   SourceDir resolved =
-      SourceDirForCurrentDirectory(build_settings_.root_path()).
-    ResolveRelativeDir(Value(nullptr, build_dir), &err,
-        build_settings_.root_path_utf8());
+      SourceDirForCurrentDirectory(build_settings_.root_path())
+          .ResolveRelativeDir(Value(nullptr, build_dir), &err,
+                              build_settings_.root_path_utf8());
   if (err.has_error()) {
     err.PrintToStdout();
     return false;
@@ -607,13 +639,13 @@ bool Setup::FillBuildDir(const std::string& build_dir, bool require_exists) {
 
   base::FilePath build_dir_path = build_settings_.GetFullPath(resolved);
   if (require_exists) {
-    if (!base::PathExists(build_dir_path.Append(
-            FILE_PATH_LITERAL("build.ninja")))) {
+    if (!base::PathExists(
+            build_dir_path.Append(FILE_PATH_LITERAL("build.ninja")))) {
       Err(Location(), "Not a build directory.",
           "This command requires an existing build directory. I interpreted "
-          "your input\n\"" + build_dir + "\" as:\n  " +
-          FilePathToUTF8(build_dir_path) +
-          "\nwhich doesn't seem to contain a previously-generated build.")
+          "your input\n\"" +
+              build_dir + "\" as:\n  " + FilePathToUTF8(build_dir_path) +
+              "\nwhich doesn't seem to contain a previously-generated build.")
           .PrintToStdout();
       return false;
     }
@@ -621,7 +653,8 @@ bool Setup::FillBuildDir(const std::string& build_dir, bool require_exists) {
     if (!base::CreateDirectory(build_dir_path)) {
       Err(Location(), "Can't create the build dir.",
           "I could not create the build dir \"" + FilePathToUTF8(build_dir_path) +
-          "\".").PrintToStdout();
+            "\".")
+        .PrintToStdout();
       return false;
     }
   }
@@ -631,11 +664,11 @@ bool Setup::FillBuildDir(const std::string& build_dir, bool require_exists) {
   if (build_dir_realpath.empty()) {
     Err(Location(), "Can't get the real build dir path.",
         "I could not get the real path of \"" + FilePathToUTF8(build_dir_path) +
-        "\".").PrintToStdout();
+            "\".")
+        .PrintToStdout();
     return false;
   }
-  resolved = SourceDirForPath(build_settings_.root_path(),
-                              build_dir_realpath);
+  resolved = SourceDirForPath(build_settings_.root_path(), build_dir_realpath);
 
   if (scheduler_.verbose_logging())
     scheduler_.Log("Using build dir", resolved.value());
@@ -663,8 +696,9 @@ bool Setup::FillPythonPath(const base::CommandLine& cmdline) {
 #if defined(OS_WIN)
     base::FilePath python_path = FindWindowsPython();
     if (python_path.empty()) {
-      scheduler_.Log("WARNING", "Could not find python on path, using "
-          "just \"python.exe\"");
+      scheduler_.Log("WARNING",
+                     "Could not find python on path, using "
+                     "just \"python.exe\"");
       python_path = base::FilePath(kPythonExeName);
     }
     build_settings_.set_python_path(python_path.NormalizePathSeparatorsTo('/'));
@@ -679,7 +713,7 @@ bool Setup::RunConfigFile() {
   if (scheduler_.verbose_logging())
     scheduler_.Log("Got dotfile", FilePathToUTF8(dotfile_name_));
 
-  dotfile_input_file_.reset(new InputFile(SourceFile("//.gn")));
+  dotfile_input_file_ = std::make_unique<InputFile>(SourceFile("//.gn"));
   if (!dotfile_input_file_->Load(dotfile_name_)) {
     Err(Location(), "Could not load dotfile.",
         "The file \"" + FilePathToUTF8(dotfile_name_) + "\" couldn't be loaded")
@@ -700,6 +734,13 @@ bool Setup::RunConfigFile() {
     return false;
   }
 
+  // Add a dependency on the build arguments file. If this changes, we want
+  // to re-generate the build. This causes the dotfile to make it into
+  // build.ninja.d.
+  g_scheduler->AddGenDependency(dotfile_name_);
+
+  // Also add a build dependency to the scope, which is used by `gn analyze`.
+  dotfile_scope_.AddBuildDependencyFile(SourceFile("//.gn"));
   dotfile_root_->Execute(&dotfile_scope_, &err);
   if (err.has_error()) {
     err.PrintToStdout();
@@ -750,8 +791,10 @@ bool Setup::FillOtherConfig(const base::CommandLine& cmdline) {
       dotfile_scope_.GetValue("buildconfig", true);
   if (!build_config_value) {
     Err(Location(), "No build config file.",
-        "Your .gn file (\"" + FilePathToUTF8(dotfile_name_) + "\")\n"
-        "didn't specify a \"buildconfig\" value.").PrintToStdout();
+        "Your .gn file (\"" + FilePathToUTF8(dotfile_name_) +
+            "\")\n"
+            "didn't specify a \"buildconfig\" value.")
+        .PrintToStdout();
     return false;
   } else if (!build_config_value->VerifyTypeIs(Value::STRING, &err)) {
     err.PrintToStdout();
@@ -782,7 +825,8 @@ bool Setup::FillOtherConfig(const base::CommandLine& cmdline) {
       err.PrintToStdout();
       return false;
     }
-    std::unique_ptr<std::set<SourceFile>> whitelist(new std::set<SourceFile>);
+    std::unique_ptr<std::set<SourceFile>> whitelist =
+        std::make_unique<std::set<SourceFile>>();
     for (const auto& item : exec_script_whitelist_value->list_value()) {
       if (!item.VerifyTypeIs(Value::STRING, &err)) {
         err.PrintToStdout();

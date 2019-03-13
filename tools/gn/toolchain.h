@@ -77,7 +77,12 @@ class Toolchain : public Item {
   // Loader::GetToolchainSettings(). Many toolchain objects may be created in a
   // given build, but only a few might be used, and the Loader is in charge of
   // this process.
-  Toolchain(const Settings* settings, const Label& label);
+  //
+  // We also track the set of build files that may affect this target, please
+  // refer to Scope for how this is determined.
+  Toolchain(const Settings* settings,
+            const Label& label,
+            const std::set<SourceFile>& build_dependency_files = {});
   ~Toolchain() override;
 
   // Item overrides.
@@ -112,6 +117,13 @@ class Toolchain : public Item {
   // pass in other settings.
   Scope::KeyValueMap& args() { return args_; }
   const Scope::KeyValueMap& args() const { return args_; }
+
+  // Specifies whether public_configs and all_dependent_configs in this
+  // toolchain propagate to targets in other toolchains.
+  bool propagates_configs() const { return propagates_configs_; }
+  void set_propagates_configs(bool propagates_configs) {
+    propagates_configs_ = propagates_configs;
+  }
 
   // Returns the tool for compiling the given source file type.
   static ToolType GetToolTypeForSourceType(SourceFileType type);
@@ -155,14 +167,14 @@ class Toolchain : public Item {
  private:
   std::unique_ptr<Tool> tools_[TYPE_NUMTYPES];
 
-  bool setup_complete_;
+  bool setup_complete_ = false;
 
   // Substitutions used by the tools in this toolchain.
   SubstitutionBits substitution_bits_;
 
   LabelTargetVector deps_;
   Scope::KeyValueMap args_;
-
+  bool propagates_configs_ = false;
   std::vector<std::string> object_extensions_;
 
   std::string define_switch_;

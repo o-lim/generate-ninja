@@ -7,7 +7,6 @@
 #include <algorithm>
 
 #include "base/command_line.h"
-#include "base/containers/hash_tables.h"
 #include "base/strings/stringprintf.h"
 #include "tools/gn/commands.h"
 #include "tools/gn/setup.h"
@@ -17,12 +16,7 @@ namespace commands {
 
 namespace {
 
-enum class DepType {
-  NONE,
-  PUBLIC,
-  PRIVATE,
-  DATA
-};
+enum class DepType { NONE, PUBLIC, PRIVATE, DATA };
 
 // The dependency paths are stored in a vector. Assuming the chain:
 //    A --[public]--> B --[private]--> C
@@ -40,10 +34,7 @@ enum class PrintWhat { ONE, ALL };
 
 struct Options {
   Options()
-      : print_what(PrintWhat::ONE),
-        public_only(false),
-        with_data(false) {
-  }
+      : print_what(PrintWhat::ONE), public_only(false), with_data(false) {}
 
   PrintWhat print_what;
   bool public_only;
@@ -53,8 +44,7 @@ struct Options {
 typedef std::list<PathVector> WorkQueue;
 
 struct Stats {
-  Stats() : public_paths(0), other_paths(0) {
-  }
+  Stats() : public_paths(0), other_paths(0) {}
 
   int total_paths() const { return public_paths + other_paths; }
 
@@ -90,7 +80,7 @@ DepType ClassifyPath(const PathVector& path, DepType implicit_last_dep) {
 }
 
 const char* StringForDepType(DepType type) {
-  switch(type) {
+  switch (type) {
     case DepType::PUBLIC:
       return "public";
     case DepType::PRIVATE:
@@ -121,13 +111,15 @@ void PrintPath(const PathVector& path, DepType implicit_last_dep) {
       // Last one either gets the implicit last dep type or nothing.
       if (implicit_last_dep != DepType::NONE) {
         OutputString(std::string(" --> see ") +
-                     StringForDepType(implicit_last_dep) +
-                     " chain printed above...", DECORATION_DIM);
+                         StringForDepType(implicit_last_dep) +
+                         " chain printed above...",
+                     DECORATION_DIM);
       }
     } else {
       // Take type from the next entry.
-      OutputString(std::string(" --[") + StringForDepType(path[i + 1].second) +
-                   "]-->", DECORATION_DIM);
+      OutputString(
+          std::string(" --[") + StringForDepType(path[i + 1].second) + "]-->",
+          DECORATION_DIM);
     }
     OutputString("\n");
   }
@@ -174,8 +166,10 @@ void InsertTargetsIntoFoundPaths(const PathVector& path,
   }
 }
 
-void BreadthFirstSearch(const Target* from, const Target* to,
-                        PrivateDeps private_deps, DataDeps data_deps,
+void BreadthFirstSearch(const Target* from,
+                        const Target* to,
+                        PrivateDeps private_deps,
+                        DataDeps data_deps,
                         PrintWhat print_what,
                         Stats* stats) {
   // Seed the initial stack with just the "from" target.
@@ -241,8 +235,7 @@ void BreadthFirstSearch(const Target* from, const Target* to,
       // Add private deps.
       for (const auto& pair : current_target->private_deps()) {
         work_queue.push_back(current_path);
-        work_queue.back().push_back(
-            TargetDep(pair.ptr, DepType::PRIVATE));
+        work_queue.back().push_back(TargetDep(pair.ptr, DepType::PRIVATE));
       }
     }
 
@@ -256,18 +249,20 @@ void BreadthFirstSearch(const Target* from, const Target* to,
   }
 }
 
-void DoSearch(const Target* from, const Target* to, const Options& options,
+void DoSearch(const Target* from,
+              const Target* to,
+              const Options& options,
               Stats* stats) {
   BreadthFirstSearch(from, to, PrivateDeps::EXCLUDE, DataDeps::EXCLUDE,
                      options.print_what, stats);
   if (!options.public_only) {
     // Check private deps.
-    BreadthFirstSearch(from, to, PrivateDeps::INCLUDE,
-                       DataDeps::EXCLUDE, options.print_what, stats);
+    BreadthFirstSearch(from, to, PrivateDeps::INCLUDE, DataDeps::EXCLUDE,
+                       options.print_what, stats);
     if (options.with_data) {
       // Check data deps.
-      BreadthFirstSearch(from, to, PrivateDeps::INCLUDE,
-                         DataDeps::INCLUDE, options.print_what, stats);
+      BreadthFirstSearch(from, to, PrivateDeps::INCLUDE, DataDeps::INCLUDE,
+                         options.print_what, stats);
     }
   }
 }
@@ -275,8 +270,7 @@ void DoSearch(const Target* from, const Target* to, const Options& options,
 }  // namespace
 
 const char kPath[] = "path";
-const char kPath_HelpShort[] =
-    "path: Find paths between two targets.";
+const char kPath_HelpShort[] = "path: Find paths between two targets.";
 const char kPath_Help[] =
     R"(gn path: Find paths between two targets.
 
@@ -327,6 +321,7 @@ int RunPath(const std::vector<std::string>& args) {
     return 1;
   }
 
+  // Deliberately leaked to avoid expensive process teardown.
   Setup* setup = new Setup;
   if (!setup->DoSetup(args[0], false))
     return 1;
@@ -342,7 +337,8 @@ int RunPath(const std::vector<std::string>& args) {
 
   Options options;
   options.print_what = base::CommandLine::ForCurrentProcess()->HasSwitch("all")
-      ? PrintWhat::ALL : PrintWhat::ONE;
+                           ? PrintWhat::ALL
+                           : PrintWhat::ONE;
   options.public_only =
       base::CommandLine::ForCurrentProcess()->HasSwitch("public");
   options.with_data =
@@ -350,7 +346,8 @@ int RunPath(const std::vector<std::string>& args) {
   if (options.public_only && options.with_data) {
     Err(Location(), "Can't use --public with --with-data for 'gn path'.",
         "Your zealous over-use of arguments has inevitably resulted in an "
-        "invalid\ncombination of flags.").PrintToStdout();
+        "invalid\ncombination of flags.")
+        .PrintToStdout();
     return 1;
   }
 
@@ -373,8 +370,9 @@ int RunPath(const std::vector<std::string>& args) {
 
   if (stats.total_paths() == 0) {
     // No results.
-    OutputString(base::StringPrintf(
-        "No %spaths found between these two targets.\n", path_annotation),
+    OutputString(
+        base::StringPrintf("No %spaths found between these two targets.\n",
+                           path_annotation),
         DECORATION_YELLOW);
   } else if (stats.total_paths() == 1) {
     // Exactly one result.
@@ -394,8 +392,8 @@ int RunPath(const std::vector<std::string>& args) {
                                       stats.total_paths(), path_annotation),
                    DECORATION_YELLOW);
       if (!options.public_only) {
-        OutputString(base::StringPrintf(" %d of them are public.",
-                                        stats.public_paths));
+        OutputString(
+            base::StringPrintf(" %d of them are public.", stats.public_paths));
       }
       OutputString("\n");
     } else {

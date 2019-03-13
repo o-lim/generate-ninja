@@ -45,15 +45,15 @@ namespace base {
 // with |ASSUME| for the former and |RETAIN| for the latter. The default policy
 // is to |ASSUME|.
 
-template<typename T>
+template <typename T>
 struct ScopedTypeRefTraits;
 
-template<typename T, typename Traits = ScopedTypeRefTraits<T>>
+template <typename T, typename Traits = ScopedTypeRefTraits<T>>
 class ScopedTypeRef {
  public:
   typedef T element_type;
 
-  explicit ScopedTypeRef(
+  explicit constexpr ScopedTypeRef(
       __unsafe_unretained T object = Traits::InvalidValue(),
       base::scoped_policy::OwnershipPolicy policy = base::scoped_policy::ASSUME)
       : object_(object) {
@@ -61,8 +61,7 @@ class ScopedTypeRef {
       object_ = Traits::Retain(object_);
   }
 
-  ScopedTypeRef(const ScopedTypeRef<T, Traits>& that)
-      : object_(that.object_) {
+  ScopedTypeRef(const ScopedTypeRef<T, Traits>& that) : object_(that.object_) {
     if (object_)
       object_ = Traits::Retain(object_);
   }

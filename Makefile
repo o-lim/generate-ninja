@@ -8,17 +8,21 @@ all: gn_all gn_test
 
 .PHONY: clean
 clean:
-	@rm -rf out out_bootstrap
+	@rm -rf out
 
 .PHONY: gn_all
 gn_all: gn gn_unittests
 
-.PHONY: bootstrap
-bootstrap out_bootstrap/gn: tools/gn/bootstrap/bootstrap.py
-	@(cd tools/gn/bootstrap && python bootstrap.py -s --no-clean)
+out/bootstrap/gn: build/gen.py
+	@build/gen.py --out-path $(@D)
+	@ninja -C $(@D)
 
-out/Release/build.ninja: out_bootstrap/gn Makefile
-	@out_bootstrap/gn gen --args='is_debug=false is_official_build=true' //out/Release
+.PHONY: bootstrap
+bootstrap: out/bootstrap/gn
+	@true
+
+out/Release/build.ninja: out/bootstrap/gn Makefile
+	@out/bootstrap/gn gen --args='is_debug=false is_official_build=true' //out/Release
 
 .PHONY: build.ninja
 build.ninja: out/Release/build.ninja
@@ -34,6 +38,10 @@ out/Release/gn_unittests: build.ninja
 
 .PHONY: gn_unittests
 gn_unittests: out/Release/gn_unittests
+
+out/boostrap/gn_unittests.pass: out/boostrap/gn_unittests
+	@$<
+	@touch $@
 
 out/Release/gn_unittests.pass: out/Release/gn_unittests
 	@$<

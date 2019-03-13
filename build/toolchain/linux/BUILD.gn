@@ -192,7 +192,6 @@ gcc_toolchain("mipsel") {
     current_cpu = "mipsel"
     current_os = "linux"
     is_clang = false
-    use_goma = false
   }
 }
 
@@ -211,7 +210,6 @@ gcc_toolchain("mips64el") {
     current_cpu = "mips64el"
     current_os = "linux"
     is_clang = false
-    use_goma = false
   }
 }
 

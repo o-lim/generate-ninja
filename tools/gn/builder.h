@@ -6,6 +6,7 @@
 #define TOOLS_GN_BUILDER_H_
 
 #include <map>
+#include <memory>
 
 #include "base/callback.h"
 #include "base/macros.h"
@@ -44,6 +45,9 @@ class Builder {
   const Toolchain* GetToolchain(const Label& label) const;
 
   std::vector<const BuilderRecord*> GetAllRecords() const;
+
+  // Returns items which should be generated and which are defined.
+  std::vector<const Item*> GetAllResolvedItems() const;
 
   // Returns targets which should be generated and which are defined.
   std::vector<const Target*> GetAllResolvedTargets() const;
@@ -96,9 +100,7 @@ class Builder {
   bool AddActionValuesDep(BuilderRecord* record,
                           const ActionValues& action_values,
                           Err* err);
-  bool AddToolchainDep(BuilderRecord* record,
-                       const Target* target,
-                       Err* err);
+  bool AddToolchainDep(BuilderRecord* record, const Target* target, Err* err);
 
   // Given a target, sets the "should generate" bit and pushes it through the
   // dependency tree. Any time the bit it set, we ensure that the given item is
@@ -136,9 +138,7 @@ class Builder {
   // Non owning pointer.
   Loader* loader_;
 
-  // Owning pointers.
-  typedef std::map<Label, BuilderRecord*> RecordMap;
-  RecordMap records_;
+  std::map<Label, std::unique_ptr<BuilderRecord>> records_;
 
   ResolvedGeneratedCallback resolved_and_generated_callback_;
 

@@ -8,7 +8,7 @@
 #define BASE_STRINGS_STRING_UTIL_H_
 
 #include <ctype.h>
-#include <stdarg.h>   // va_list
+#include <stdarg.h>  // va_list
 #include <stddef.h>
 #include <stdint.h>
 
@@ -16,11 +16,10 @@
 #include <string>
 #include <vector>
 
-#include "base/base_export.h"
 #include "base/compiler_specific.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"  // For implicit conversions.
-#include "build/build_config.h"
+#include "util/build_config.h"
 
 namespace base {
 
@@ -60,8 +59,8 @@ inline int snprintf(char* buffer,
 // long as |dst_size| is not 0.  Returns the length of |src| in characters.
 // If the return value is >= dst_size, then the output was truncated.
 // NOTE: All sizes are in number of characters, NOT in bytes.
-BASE_EXPORT size_t strlcpy(char* dst, const char* src, size_t dst_size);
-BASE_EXPORT size_t wcslcpy(wchar_t* dst, const wchar_t* src, size_t dst_size);
+size_t strlcpy(char* dst, const char* src, size_t dst_size);
+size_t wcslcpy(wchar_t* dst, const wchar_t* src, size_t dst_size);
 
 // Scan a wprintf format string to determine whether it's portable across a
 // variety of systems.  This function only checks that the conversion
@@ -84,7 +83,7 @@ BASE_EXPORT size_t wcslcpy(wchar_t* dst, const wchar_t* src, size_t dst_size);
 // working with wprintf.
 //
 // This function is intended to be called from base::vswprintf.
-BASE_EXPORT bool IsWprintfFormatPortable(const wchar_t* format);
+bool IsWprintfFormatPortable(const wchar_t* format);
 
 // ASCII-specific tolower.  The standard library's tolower is locale sensitive,
 // so we don't want to use it here.
@@ -105,12 +104,12 @@ inline char16 ToUpperASCII(char16 c) {
 }
 
 // Converts the given string to it's ASCII-lowercase equivalent.
-BASE_EXPORT std::string ToLowerASCII(StringPiece str);
-BASE_EXPORT string16 ToLowerASCII(StringPiece16 str);
+std::string ToLowerASCII(StringPiece str);
+string16 ToLowerASCII(StringPiece16 str);
 
 // Converts the given string to it's ASCII-uppercase equivalent.
-BASE_EXPORT std::string ToUpperASCII(StringPiece str);
-BASE_EXPORT string16 ToUpperASCII(StringPiece16 str);
+std::string ToUpperASCII(StringPiece str);
+string16 ToUpperASCII(StringPiece16 str);
 
 // Functor for case-insensitive ASCII comparisons for STL algorithms like
 // std::search.
@@ -120,7 +119,8 @@ BASE_EXPORT string16 ToUpperASCII(StringPiece16 str);
 // context (combining accents), and require handling UTF-16. If you need
 // proper Unicode support, use base::i18n::ToLower/FoldCase and then just
 // use a normal operator== on the result.
-template<typename Char> struct CaseInsensitiveCompareASCII {
+template <typename Char>
+struct CaseInsensitiveCompareASCII {
  public:
   bool operator()(Char x, Char y) const {
     return ToLowerASCII(x) == ToLowerASCII(y);
@@ -134,71 +134,55 @@ template<typename Char> struct CaseInsensitiveCompareASCII {
 // (unlike strcasecmp which can return values greater or less than 1/-1). For
 // full Unicode support, use base::i18n::ToLower or base::i18h::FoldCase
 // and then just call the normal string operators on the result.
-BASE_EXPORT int CompareCaseInsensitiveASCII(StringPiece a, StringPiece b);
-BASE_EXPORT int CompareCaseInsensitiveASCII(StringPiece16 a, StringPiece16 b);
+int CompareCaseInsensitiveASCII(StringPiece a, StringPiece b);
+int CompareCaseInsensitiveASCII(StringPiece16 a, StringPiece16 b);
 
 // Equality for ASCII case-insensitive comparisons. For full Unicode support,
 // use base::i18n::ToLower or base::i18h::FoldCase and then compare with either
 // == or !=.
-BASE_EXPORT bool EqualsCaseInsensitiveASCII(StringPiece a, StringPiece b);
-BASE_EXPORT bool EqualsCaseInsensitiveASCII(StringPiece16 a, StringPiece16 b);
-
-// These threadsafe functions return references to globally unique empty
-// strings.
-//
-// It is likely faster to construct a new empty string object (just a few
-// instructions to set the length to 0) than to get the empty string singleton
-// returned by these functions (which requires threadsafe singleton access).
-//
-// Therefore, DO NOT USE THESE AS A GENERAL-PURPOSE SUBSTITUTE FOR DEFAULT
-// CONSTRUCTORS. There is only one case where you should use these: functions
-// which need to return a string by reference (e.g. as a class member
-// accessor), and don't have an empty string to use (e.g. in an error case).
-// These should not be used as initializers, function arguments, or return
-// values for functions which return by value or outparam.
-BASE_EXPORT const std::string& EmptyString();
-BASE_EXPORT const string16& EmptyString16();
+bool EqualsCaseInsensitiveASCII(StringPiece a, StringPiece b);
+bool EqualsCaseInsensitiveASCII(StringPiece16 a, StringPiece16 b);
 
 // Contains the set of characters representing whitespace in the corresponding
 // encoding. Null-terminated. The ASCII versions are the whitespaces as defined
 // by HTML5, and don't include control characters.
-BASE_EXPORT extern const wchar_t kWhitespaceWide[];  // Includes Unicode.
-BASE_EXPORT extern const char16 kWhitespaceUTF16[];  // Includes Unicode.
-BASE_EXPORT extern const char kWhitespaceASCII[];
-BASE_EXPORT extern const char16 kWhitespaceASCIIAs16[];  // No unicode.
+extern const wchar_t kWhitespaceWide[];  // Includes Unicode.
+extern const char16 kWhitespaceUTF16[];  // Includes Unicode.
+extern const char kWhitespaceASCII[];
+extern const char16 kWhitespaceASCIIAs16[];  // No unicode.
 
 // Null-terminated string representing the UTF-8 byte order mark.
-BASE_EXPORT extern const char kUtf8ByteOrderMark[];
+extern const char kUtf8ByteOrderMark[];
 
 // Removes characters in |remove_chars| from anywhere in |input|.  Returns true
 // if any characters were removed.  |remove_chars| must be null-terminated.
 // NOTE: Safe to use the same variable for both |input| and |output|.
-BASE_EXPORT bool RemoveChars(const string16& input,
-                             const StringPiece16& remove_chars,
-                             string16* output);
-BASE_EXPORT bool RemoveChars(const std::string& input,
-                             const StringPiece& remove_chars,
-                             std::string* output);
+bool RemoveChars(const string16& input,
+                 StringPiece16 remove_chars,
+                 string16* output);
+bool RemoveChars(const std::string& input,
+                 StringPiece remove_chars,
+                 std::string* output);
 
 // Replaces characters in |replace_chars| from anywhere in |input| with
 // |replace_with|.  Each character in |replace_chars| will be replaced with
 // the |replace_with| string.  Returns true if any characters were replaced.
 // |replace_chars| must be null-terminated.
 // NOTE: Safe to use the same variable for both |input| and |output|.
-BASE_EXPORT bool ReplaceChars(const string16& input,
-                              const StringPiece16& replace_chars,
-                              const string16& replace_with,
-                              string16* output);
-BASE_EXPORT bool ReplaceChars(const std::string& input,
-                              const StringPiece& replace_chars,
-                              const std::string& replace_with,
-                              std::string* output);
+bool ReplaceChars(const string16& input,
+                  StringPiece16 replace_chars,
+                  const string16& replace_with,
+                  string16* output);
+bool ReplaceChars(const std::string& input,
+                  StringPiece replace_chars,
+                  const std::string& replace_with,
+                  std::string* output);
 
 enum TrimPositions {
-  TRIM_NONE     = 0,
-  TRIM_LEADING  = 1 << 0,
+  TRIM_NONE = 0,
+  TRIM_LEADING = 1 << 0,
   TRIM_TRAILING = 1 << 1,
-  TRIM_ALL      = TRIM_LEADING | TRIM_TRAILING,
+  TRIM_ALL = TRIM_LEADING | TRIM_TRAILING,
 };
 
 // Removes characters in |trim_chars| from the beginning and end of |input|.
@@ -207,27 +191,27 @@ enum TrimPositions {
 //
 // It is safe to use the same variable for both |input| and |output| (this is
 // the normal usage to trim in-place).
-BASE_EXPORT bool TrimString(const string16& input,
-                            StringPiece16 trim_chars,
-                            string16* output);
-BASE_EXPORT bool TrimString(const std::string& input,
-                            StringPiece trim_chars,
-                            std::string* output);
+bool TrimString(const string16& input,
+                StringPiece16 trim_chars,
+                string16* output);
+bool TrimString(const std::string& input,
+                StringPiece trim_chars,
+                std::string* output);
 
 // StringPiece versions of the above. The returned pieces refer to the original
 // buffer.
-BASE_EXPORT StringPiece16 TrimString(StringPiece16 input,
-                                     const StringPiece16& trim_chars,
-                                     TrimPositions positions);
-BASE_EXPORT StringPiece TrimString(StringPiece input,
-                                   const StringPiece& trim_chars,
-                                   TrimPositions positions);
+StringPiece16 TrimString(StringPiece16 input,
+                         StringPiece16 trim_chars,
+                         TrimPositions positions);
+StringPiece TrimString(StringPiece input,
+                       StringPiece trim_chars,
+                       TrimPositions positions);
 
 // Truncates a string to the nearest UTF-8 character that will leave
 // the string less than or equal to the specified byte size.
-BASE_EXPORT void TruncateUTF8ToByteSize(const std::string& input,
-                                        const size_t byte_size,
-                                        std::string* output);
+void TruncateUTF8ToByteSize(const std::string& input,
+                            const size_t byte_size,
+                            std::string* output);
 
 // Trims any whitespace from either end of the input string.
 //
@@ -236,16 +220,14 @@ BASE_EXPORT void TruncateUTF8ToByteSize(const std::string& input,
 //
 // The std::string versions return where whitespace was found.
 // NOTE: Safe to use the same variable for both input and output.
-BASE_EXPORT TrimPositions TrimWhitespace(const string16& input,
-                                         TrimPositions positions,
-                                         string16* output);
-BASE_EXPORT StringPiece16 TrimWhitespace(StringPiece16 input,
-                                         TrimPositions positions);
-BASE_EXPORT TrimPositions TrimWhitespaceASCII(const std::string& input,
-                                              TrimPositions positions,
-                                              std::string* output);
-BASE_EXPORT StringPiece TrimWhitespaceASCII(StringPiece input,
-                                            TrimPositions positions);
+TrimPositions TrimWhitespace(const string16& input,
+                             TrimPositions positions,
+                             string16* output);
+StringPiece16 TrimWhitespace(StringPiece16 input, TrimPositions positions);
+TrimPositions TrimWhitespaceASCII(const std::string& input,
+                                  TrimPositions positions,
+                                  std::string* output);
+StringPiece TrimWhitespaceASCII(StringPiece input, TrimPositions positions);
 
 // Searches for CR or LF characters.  Removes all contiguous whitespace
 // strings that contain them.  This is useful when trying to deal with text
@@ -255,19 +237,15 @@ BASE_EXPORT StringPiece TrimWhitespaceASCII(StringPiece input,
 // (2) If |trim_sequences_with_line_breaks| is true, any other whitespace
 //     sequences containing a CR or LF are trimmed.
 // (3) All other whitespace sequences are converted to single spaces.
-BASE_EXPORT string16 CollapseWhitespace(
-    const string16& text,
-    bool trim_sequences_with_line_breaks);
-BASE_EXPORT std::string CollapseWhitespaceASCII(
-    const std::string& text,
-    bool trim_sequences_with_line_breaks);
+string16 CollapseWhitespace(const string16& text,
+                            bool trim_sequences_with_line_breaks);
+std::string CollapseWhitespaceASCII(const std::string& text,
+                                    bool trim_sequences_with_line_breaks);
 
 // Returns true if |input| is empty or contains only characters found in
 // |characters|.
-BASE_EXPORT bool ContainsOnlyChars(const StringPiece& input,
-                                   const StringPiece& characters);
-BASE_EXPORT bool ContainsOnlyChars(const StringPiece16& input,
-                                   const StringPiece16& characters);
+bool ContainsOnlyChars(StringPiece input, StringPiece characters);
+bool ContainsOnlyChars(StringPiece16 input, StringPiece16 characters);
 
 // Returns true if the specified string matches the criteria. How can a wide
 // string be 8-bit or UTF8? It contains only characters that are < 256 (in the
@@ -283,25 +261,22 @@ BASE_EXPORT bool ContainsOnlyChars(const StringPiece16& input,
 //
 // IsStringASCII assumes the input is likely all ASCII, and does not leave early
 // if it is not the case.
-BASE_EXPORT bool IsStringUTF8(const StringPiece& str);
-BASE_EXPORT bool IsStringASCII(const StringPiece& str);
-BASE_EXPORT bool IsStringASCII(const StringPiece16& str);
-BASE_EXPORT bool IsStringASCII(const string16& str);
+bool IsStringUTF8(StringPiece str);
+bool IsStringASCII(StringPiece str);
+bool IsStringASCII(StringPiece16 str);
 #if defined(WCHAR_T_IS_UTF32)
-BASE_EXPORT bool IsStringASCII(const std::wstring& str);
+bool IsStringASCII(WStringPiece str);
 #endif
 
 // Compare the lower-case form of the given string against the given
 // previously-lower-cased ASCII string (typically a constant).
-BASE_EXPORT bool LowerCaseEqualsASCII(StringPiece str,
-                                      StringPiece lowecase_ascii);
-BASE_EXPORT bool LowerCaseEqualsASCII(StringPiece16 str,
-                                      StringPiece lowecase_ascii);
+bool LowerCaseEqualsASCII(StringPiece str, StringPiece lowecase_ascii);
+bool LowerCaseEqualsASCII(StringPiece16 str, StringPiece lowecase_ascii);
 
 // Performs a case-sensitive string compare of the given 16-bit string against
 // the given 8-bit ASCII string (typically a constant). The behavior is
 // undefined if the |ascii| string is not ASCII.
-BASE_EXPORT bool EqualsASCII(StringPiece16 str, StringPiece ascii);
+bool EqualsASCII(StringPiece16 str, StringPiece ascii);
 
 // Indicates case sensitivity of comparisons. Only ASCII case insensitivity
 // is supported. Full Unicode case-insensitive conversions would need to go in
@@ -316,18 +291,18 @@ enum class CompareCase {
   INSENSITIVE_ASCII,
 };
 
-BASE_EXPORT bool StartsWith(StringPiece str,
-                            StringPiece search_for,
-                            CompareCase case_sensitivity);
-BASE_EXPORT bool StartsWith(StringPiece16 str,
-                            StringPiece16 search_for,
-                            CompareCase case_sensitivity);
-BASE_EXPORT bool EndsWith(StringPiece str,
-                          StringPiece search_for,
-                          CompareCase case_sensitivity);
-BASE_EXPORT bool EndsWith(StringPiece16 str,
-                          StringPiece16 search_for,
-                          CompareCase case_sensitivity);
+bool StartsWith(StringPiece str,
+                StringPiece search_for,
+                CompareCase case_sensitivity);
+bool StartsWith(StringPiece16 str,
+                StringPiece16 search_for,
+                CompareCase case_sensitivity);
+bool EndsWith(StringPiece str,
+              StringPiece search_for,
+              CompareCase case_sensitivity);
+bool EndsWith(StringPiece16 str,
+              StringPiece16 search_for,
+              CompareCase case_sensitivity);
 
 // Determines the type of ASCII character, independent of locale (the C
 // library versions will change based on locale).
@@ -354,8 +329,7 @@ inline bool IsAsciiDigit(Char c) {
 
 template <typename Char>
 inline bool IsHexDigit(Char c) {
-  return (c >= '0' && c <= '9') ||
-         (c >= 'A' && c <= 'F') ||
+  return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') ||
          (c >= 'a' && c <= 'f');
 }
 
@@ -364,29 +338,27 @@ inline bool IsHexDigit(Char c) {
 //    'a' -> 10
 //    'B' -> 11
 // Assumes the input is a valid hex character. DCHECKs in debug builds if not.
-BASE_EXPORT char HexDigitToInt(wchar_t c);
+char HexDigitToInt(wchar_t c);
 
 // Returns true if it's a Unicode whitespace character.
-BASE_EXPORT bool IsUnicodeWhitespace(wchar_t c);
+bool IsUnicodeWhitespace(wchar_t c);
 
 // Return a byte string in human-readable format with a unit suffix. Not
 // appropriate for use in any UI; use of FormatBytes and friends in ui/base is
 // highly recommended instead. TODO(avi): Figure out how to get callers to use
 // FormatBytes instead; remove this.
-BASE_EXPORT string16 FormatBytesUnlocalized(int64_t bytes);
+string16 FormatBytesUnlocalized(int64_t bytes);
 
 // Starting at |start_offset| (usually 0), replace the first instance of
 // |find_this| with |replace_with|.
-BASE_EXPORT void ReplaceFirstSubstringAfterOffset(
-    base::string16* str,
-    size_t start_offset,
-    StringPiece16 find_this,
-    StringPiece16 replace_with);
-BASE_EXPORT void ReplaceFirstSubstringAfterOffset(
-    std::string* str,
-    size_t start_offset,
-    StringPiece find_this,
-    StringPiece replace_with);
+void ReplaceFirstSubstringAfterOffset(base::string16* str,
+                                      size_t start_offset,
+                                      StringPiece16 find_this,
+                                      StringPiece16 replace_with);
+void ReplaceFirstSubstringAfterOffset(std::string* str,
+                                      size_t start_offset,
+                                      StringPiece find_this,
+                                      StringPiece replace_with);
 
 // Starting at |start_offset| (usually 0), look through |str| and replace all
 // instances of |find_this| with |replace_with|.
@@ -394,16 +366,14 @@ BASE_EXPORT void ReplaceFirstSubstringAfterOffset(
 // This does entire substrings; use std::replace in <algorithm> for single
 // characters, for example:
 //   std::replace(str.begin(), str.end(), 'a', 'b');
-BASE_EXPORT void ReplaceSubstringsAfterOffset(
-    string16* str,
-    size_t start_offset,
-    StringPiece16 find_this,
-    StringPiece16 replace_with);
-BASE_EXPORT void ReplaceSubstringsAfterOffset(
-    std::string* str,
-    size_t start_offset,
-    StringPiece find_this,
-    StringPiece replace_with);
+void ReplaceSubstringsAfterOffset(string16* str,
+                                  size_t start_offset,
+                                  StringPiece16 find_this,
+                                  StringPiece16 replace_with);
+void ReplaceSubstringsAfterOffset(std::string* str,
+                                  size_t start_offset,
+                                  StringPiece find_this,
+                                  StringPiece replace_with);
 
 // Reserves enough memory in |str| to accommodate |length_with_null| characters,
 // sets the size of |str| to |length_with_null - 1| characters, and returns a
@@ -425,8 +395,8 @@ BASE_EXPORT void ReplaceSubstringsAfterOffset(
 // of the string, and not doing that will mean people who access |str| rather
 // than str.c_str() will get back a string of whatever size |str| had on entry
 // to this function (probably 0).
-BASE_EXPORT char* WriteInto(std::string* str, size_t length_with_null);
-BASE_EXPORT char16* WriteInto(string16* str, size_t length_with_null);
+char* WriteInto(std::string* str, size_t length_with_null);
+char16* WriteInto(string16* str, size_t length_with_null);
 
 // Does the opposite of SplitString()/SplitStringPiece(). Joins a vector or list
 // of strings into a single string, inserting |separator| (which may be empty)
@@ -437,46 +407,46 @@ BASE_EXPORT char16* WriteInto(string16* str, size_t length_with_null);
 // strings. For example, instead of using SplitString, modifying the vector,
 // then using JoinString, use SplitStringPiece followed by JoinString so that no
 // copies of those strings are created until the final join operation.
-BASE_EXPORT std::string JoinString(const std::vector<std::string>& parts,
-                                   StringPiece separator);
-BASE_EXPORT string16 JoinString(const std::vector<string16>& parts,
-                                StringPiece16 separator);
-BASE_EXPORT std::string JoinString(const std::vector<StringPiece>& parts,
-                                   StringPiece separator);
-BASE_EXPORT string16 JoinString(const std::vector<StringPiece16>& parts,
-                                StringPiece16 separator);
+//
+// Use StrCat (in base/strings/strcat.h) if you don't need a separator.
+std::string JoinString(const std::vector<std::string>& parts,
+                       StringPiece separator);
+string16 JoinString(const std::vector<string16>& parts,
+                    StringPiece16 separator);
+std::string JoinString(const std::vector<StringPiece>& parts,
+                       StringPiece separator);
+string16 JoinString(const std::vector<StringPiece16>& parts,
+                    StringPiece16 separator);
 // Explicit initializer_list overloads are required to break ambiguity when used
 // with a literal initializer list (otherwise the compiler would not be able to
 // decide between the string and StringPiece overloads).
-BASE_EXPORT std::string JoinString(std::initializer_list<StringPiece> parts,
-                                   StringPiece separator);
-BASE_EXPORT string16 JoinString(std::initializer_list<StringPiece16> parts,
-                                StringPiece16 separator);
+std::string JoinString(std::initializer_list<StringPiece> parts,
+                       StringPiece separator);
+string16 JoinString(std::initializer_list<StringPiece16> parts,
+                    StringPiece16 separator);
 
 // Replace $1-$2-$3..$9 in the format string with values from |subst|.
 // Additionally, any number of consecutive '$' characters is replaced by that
 // number less one. Eg $$->$, $$$->$$, etc. The offsets parameter here can be
 // NULL. This only allows you to use up to nine replacements.
-BASE_EXPORT string16 ReplaceStringPlaceholders(
-    const string16& format_string,
-    const std::vector<string16>& subst,
-    std::vector<size_t>* offsets);
+string16 ReplaceStringPlaceholders(const string16& format_string,
+                                   const std::vector<string16>& subst,
+                                   std::vector<size_t>* offsets);
 
-BASE_EXPORT std::string ReplaceStringPlaceholders(
-    const StringPiece& format_string,
-    const std::vector<std::string>& subst,
-    std::vector<size_t>* offsets);
+std::string ReplaceStringPlaceholders(StringPiece format_string,
+                                      const std::vector<std::string>& subst,
+                                      std::vector<size_t>* offsets);
 
 // Single-string shortcut for ReplaceStringHolders. |offset| may be NULL.
-BASE_EXPORT string16 ReplaceStringPlaceholders(const string16& format_string,
-                                               const string16& a,
-                                               size_t* offset);
+string16 ReplaceStringPlaceholders(const string16& format_string,
+                                   const string16& a,
+                                   size_t* offset);
 
 }  // namespace base
 
 #if defined(OS_WIN)
 #include "base/strings/string_util_win.h"
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
 #include "base/strings/string_util_posix.h"
 #else
 #error Define string operations appropriately for your platform

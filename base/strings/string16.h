@@ -33,8 +33,7 @@
 #include <functional>
 #include <string>
 
-#include "base/base_export.h"
-#include "build/build_config.h"
+#include "util/build_config.h"
 
 #if defined(WCHAR_T_IS_UTF16)
 
@@ -56,12 +55,12 @@ typedef uint16_t char16;
 // char16 versions of the functions required by string16_char_traits; these
 // are based on the wide character functions of similar names ("w" or "wcs"
 // instead of "c16").
-BASE_EXPORT int c16memcmp(const char16* s1, const char16* s2, size_t n);
-BASE_EXPORT size_t c16len(const char16* s);
-BASE_EXPORT const char16* c16memchr(const char16* s, char16 c, size_t n);
-BASE_EXPORT char16* c16memmove(char16* s1, const char16* s2, size_t n);
-BASE_EXPORT char16* c16memcpy(char16* s1, const char16* s2, size_t n);
-BASE_EXPORT char16* c16memset(char16* s, char16 c, size_t n);
+int c16memcmp(const char16* s1, const char16* s2, size_t n);
+size_t c16len(const char16* s);
+const char16* c16memchr(const char16* s, char16 c, size_t n);
+char16* c16memmove(char16* s1, const char16* s2, size_t n);
+char16* c16memcpy(char16* s1, const char16* s2, size_t n);
+char16* c16memset(char16* s, char16 c, size_t n);
 
 // This namespace contains the implementation of base::string16 along with
 // things that need to be found via argument-dependent lookup from a
@@ -81,26 +80,19 @@ struct string16_char_traits {
   typedef mbstate_t state_type;
   typedef std::fpos<state_type> pos_type;
 
-  static void assign(char_type& c1, const char_type& c2) {
-    c1 = c2;
-  }
+  static void assign(char_type& c1, const char_type& c2) { c1 = c2; }
 
-  static bool eq(const char_type& c1, const char_type& c2) {
-    return c1 == c2;
-  }
-  static bool lt(const char_type& c1, const char_type& c2) {
-    return c1 < c2;
-  }
+  static bool eq(const char_type& c1, const char_type& c2) { return c1 == c2; }
+  static bool lt(const char_type& c1, const char_type& c2) { return c1 < c2; }
 
   static int compare(const char_type* s1, const char_type* s2, size_t n) {
     return c16memcmp(s1, s2, n);
   }
 
-  static size_t length(const char_type* s) {
-    return c16len(s);
-  }
+  static size_t length(const char_type* s) { return c16len(s); }
 
-  static const char_type* find(const char_type* s, size_t n,
+  static const char_type* find(const char_type* s,
+                               size_t n,
                                const char_type& a) {
     return c16memchr(s, a, n);
   }
@@ -121,21 +113,15 @@ struct string16_char_traits {
     return eq_int_type(c, eof()) ? 0 : c;
   }
 
-  static char_type to_char_type(const int_type& c) {
-    return char_type(c);
-  }
+  static char_type to_char_type(const int_type& c) { return char_type(c); }
 
-  static int_type to_int_type(const char_type& c) {
-    return int_type(c);
-  }
+  static int_type to_int_type(const char_type& c) { return int_type(c); }
 
   static bool eq_int_type(const int_type& c1, const int_type& c2) {
     return c1 == c2;
   }
 
-  static int_type eof() {
-    return static_cast<int_type>(EOF);
-  }
+  static int_type eof() { return static_cast<int_type>(EOF); }
 };
 
 }  // namespace string16_internals
@@ -146,11 +132,10 @@ typedef std::basic_string<char16,
 
 namespace string16_internals {
 
-BASE_EXPORT extern std::ostream& operator<<(std::ostream& out,
-                                            const string16& str);
+extern std::ostream& operator<<(std::ostream& out, const string16& str);
 
 // This is required by googletest to print a readable output on test failures.
-BASE_EXPORT extern void PrintTo(const string16& str, std::ostream* out);
+extern void PrintTo(const string16& str, std::ostream* out);
 
 }  // namespace string16_internals
 
@@ -195,9 +180,8 @@ BASE_EXPORT extern void PrintTo(const string16& str, std::ostream* out);
 //
 // TODO(mark): File this bug with Apple and update this note with a bug number.
 
-extern template class BASE_EXPORT
-    std::basic_string<base::char16,
-                      base::string16_internals::string16_char_traits>;
+extern template class std::
+    basic_string<base::char16, base::string16_internals::string16_char_traits>;
 
 // Specialize std::hash for base::string16. Although the style guide forbids
 // this in general, it is necessary for consistency with WCHAR_T_IS_UTF16

@@ -10,10 +10,14 @@
 #include "base/logging.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "build/build_config.h"
 #include "tools/gn/location.h"
 #include "tools/gn/settings.h"
 #include "tools/gn/source_dir.h"
+#include "util/build_config.h"
+
+#if defined(OS_WIN)
+#include <windows.h>
+#endif
 
 namespace {
 
@@ -155,8 +159,8 @@ bool FilesystemStringsEqual(const base::FilePath::StringType& a,
   // Note: The documentation for CompareString says it runs fastest on
   // null-terminated strings with -1 passed for the length, so we do that here.
   // There should not be embedded nulls in filesystem strings.
-  return ::CompareString(LOCALE_USER_DEFAULT, LINGUISTIC_IGNORECASE,
-                         a.c_str(), -1, b.c_str(), -1) == CSTR_EQUAL;
+  return ::CompareString(LOCALE_USER_DEFAULT, LINGUISTIC_IGNORECASE, a.c_str(),
+                         -1, b.c_str(), -1) == CSTR_EQUAL;
 #else
   // Assume case-sensitive filesystems on non-Windows.
   return a == b;
@@ -307,11 +311,12 @@ bool EnsureStringIsInOutputDir(const SourceDir& output_dir,
   if (IsStringInOutputDir(output_dir, str))
     return true;  // Output directory is hardcoded.
 
-  *err = Err(origin, "File is not inside output directory.",
+  *err = Err(
+      origin, "File is not inside output directory.",
       "The given file should be in the output directory. Normally you would "
       "specify\n\"$target_out_dir/foo\" or "
-      "\"$target_gen_dir/foo\". I interpreted this as\n\""
-      + str + "\".");
+      "\"$target_gen_dir/foo\". I interpreted this as\n\"" +
+          str + "\".");
   return false;
 }
 
@@ -410,6 +415,52 @@ bool MakeAbsolutePathRelativeIfPossible(const base::StringPiece& source_root,
   }
   return false;
 #endif
+}
+
+base::FilePath MakeAbsoluteFilePathRelativeIfPossible(
+    const base::FilePath& base,
+    const base::FilePath& target) {
+  DCHECK(base.IsAbsolute());
+  DCHECK(target.IsAbsolute());
+  std::vector<base::FilePath::StringType> base_components;
+  std::vector<base::FilePath::StringType> target_components;
+  base.GetComponents(&base_components);
+  target.GetComponents(&target_components);
+#if defined(OS_WIN)
+  // On Windows, it's impossible to have a relative path from C:\foo to D:\bar,
+  // so return the target as an absolute path instead.
+  if (base_components[0] != target_components[0])
+    return target;
+
+  // GetComponents() returns the first slash after the root. Set it to the
+  // same value in both component lists so that relative paths between
+  // "C:/foo/..." and "C:\foo\..." are computed correctly.
+  target_components[1] = base_components[1];
+#endif
+  size_t i;
+  for (i = 0; i < base_components.size() && i < target_components.size(); i++) {
+    if (base_components[i] != target_components[i])
+      break;
+  }
+  std::vector<base::FilePath::StringType> relative_components;
+  for (size_t j = i; j < base_components.size(); j++)
+    relative_components.push_back(base::FilePath::kParentDirectory);
+  for (size_t j = i; j < target_components.size(); j++)
+    relative_components.push_back(target_components[j]);
+  if (relative_components.size() <= 1) {
+    // In case the file pointed-to is an executable, prepend the current
+    // directory to the path -- if the path was "gn", use "./gn" instead.  If
+    // the file path is used in a command, this prevents issues where "gn" might
+    // not be in the PATH (or it is in the path, and the wrong gn is used).
+    relative_components.insert(relative_components.begin(),
+                               base::FilePath::kCurrentDirectory);
+  }
+  // base::FilePath::Append(component) replaces the file path with |component|
+  // if the path is base::Filepath::kCurrentDirectory.  We want to preserve the
+  // leading "./", so we build the path ourselves and use that to construct the
+  // base::FilePath.
+  base::FilePath::StringType separator(&base::FilePath::kSeparators[0], 1);
+  return base::FilePath(base::JoinString(relative_components, separator));
 }
 
 void NormalizePath(std::string* path, const base::StringPiece& source_root) {
@@ -614,8 +665,8 @@ std::string RebasePath(const std::string& input,
   std::string ret;
   DCHECK(source_root.empty() || !source_root.ends_with("/"));
 
-  bool input_is_source_path = (input.size() >= 2 &&
-                               input[0] == '/' && input[1] == '/');
+  bool input_is_source_path =
+      (input.size() >= 2 && input[0] == '/' && input[1] == '/');
 
   if (!source_root.empty() &&
       (!input_is_source_path || !dest_dir.is_source_absolute())) {
@@ -660,6 +711,109 @@ std::string RebasePath(const std::string& input,
   return ret;
 }
 
+base::FilePath ResolvePath(const std::string& value,
+                           bool as_file,
+                           const base::FilePath& source_root) {
+  if (value.empty())
+    return base::FilePath();
+
+  std::string converted;
+  if (!IsPathSourceAbsolute(value)) {
+    if (value.size() > 2 && value[2] == ':') {
+      // Windows path, strip the leading slash.
+      converted.assign(&value[1], value.size() - 1);
+    } else {
+      converted.assign(value);
+    }
+    return base::FilePath(UTF8ToFilePath(converted));
+  }
+
+  // String the double-leading slash for source-relative paths.
+  converted.assign(&value[2], value.size() - 2);
+
+  if (as_file && source_root.empty())
+    return UTF8ToFilePath(converted).NormalizePathSeparatorsTo('/');
+
+  return source_root.Append(UTF8ToFilePath(converted))
+      .NormalizePathSeparatorsTo('/');
+}
+
+template <typename StringType>
+std::string ResolveRelative(const StringType& input,
+                            const std::string& value,
+                            bool as_file,
+                            const base::StringPiece& source_root) {
+  std::string result;
+
+  if (input.size() >= 2 && input[0] == '/' && input[1] == '/') {
+    // Source-relative.
+    result.assign(input.data(), input.size());
+    if (!as_file) {
+      if (!EndsWithSlash(result))
+        result.push_back('/');
+    }
+    NormalizePath(&result, source_root);
+    return result;
+  } else if (IsPathAbsolute(input)) {
+    if (source_root.empty() ||
+        !MakeAbsolutePathRelativeIfPossible(source_root, input, &result)) {
+#if defined(OS_WIN)
+      if (input[0] != '/')  // See the file case for why we do this check.
+        result = "/";
+#endif
+      result.append(input.data(), input.size());
+    }
+    NormalizePath(&result);
+    if (!as_file) {
+      if (!EndsWithSlash(result))
+        result.push_back('/');
+    }
+    return result;
+  }
+
+  if (!source_root.empty()) {
+    std::string absolute =
+        FilePathToUTF8(ResolvePath(value, as_file, UTF8ToFilePath(source_root))
+                           .AppendASCII(input)
+                           .value());
+    NormalizePath(&absolute);
+    if (!MakeAbsolutePathRelativeIfPossible(source_root, absolute, &result)) {
+#if defined(OS_WIN)
+      if (absolute[0] != '/')  // See the file case for why we do this check.
+        result = "/";
+#endif
+      result.append(absolute.data(), absolute.size());
+    }
+    if (!as_file && !EndsWithSlash(result))
+      result.push_back('/');
+    return result;
+  }
+
+  // With no source_root, there's nothing we can do about
+  // e.g. input=../../../path/to/file and value=//source and we'll
+  // errornously return //file.
+  result.reserve(value.size() + input.size());
+  result.assign(value);
+  result.append(input.data(), input.size());
+
+  NormalizePath(&result);
+  if (!as_file && !EndsWithSlash(result))
+    result.push_back('/');
+
+  return result;
+}
+
+// Explicit template instantiation
+template std::string ResolveRelative(const base::StringPiece& input,
+                                     const std::string& value,
+                                     bool as_file,
+                                     const base::StringPiece& source_root);
+
+template std::string ResolveRelative(const std::string& input,
+                                     const std::string& value,
+                                     bool as_file,
+                                     const base::StringPiece& source_root);
+
 std::string DirectoryWithNoLastSlash(const SourceDir& dir) {
   std::string ret;
 
@@ -680,8 +834,7 @@ SourceDir SourceDirForPath(const base::FilePath& source_root,
                            const base::FilePath& path) {
   std::vector<base::FilePath::StringType> source_comp =
       GetPathComponents(source_root);
-  std::vector<base::FilePath::StringType> path_comp =
-      GetPathComponents(path);
+  std::vector<base::FilePath::StringType> path_comp = GetPathComponents(path);
 
   // See if path is inside the source root by looking for each of source root's
   // components at the beginning of path.
@@ -761,7 +914,8 @@ bool WriteFileIfChanged(const base::FilePath& file_path,
   return WriteFile(file_path, data, err);
 }
 
-bool WriteFile(const base::FilePath& file_path, const std::string& data,
+bool WriteFile(const base::FilePath& file_path,
+               const std::string& data,
                Err* err) {
   // Create the directory if necessary.
   if (!base::CreateDirectory(file_path.DirName())) {
@@ -821,39 +975,34 @@ bool WriteFile(const base::FilePath& file_path, const std::string& data,
 }
 
 BuildDirContext::BuildDirContext(const Target* target)
-    : BuildDirContext(target->settings()) {
-}
+    : BuildDirContext(target->settings()) {}
 
 BuildDirContext::BuildDirContext(const Settings* settings)
     : BuildDirContext(settings->build_settings(),
                       settings->toolchain_label(),
-                      settings->is_default()) {
-}
+                      settings->is_default()) {}
 
 BuildDirContext::BuildDirContext(const Scope* execution_scope)
-    : BuildDirContext(execution_scope->settings()) {
-}
+    : BuildDirContext(execution_scope->settings()) {}
 
 BuildDirContext::BuildDirContext(const Scope* execution_scope,
                                  const Label& toolchain_label)
     : BuildDirContext(execution_scope->settings()->build_settings(),
                       toolchain_label,
                       execution_scope->settings()->default_toolchain_label() ==
-                          toolchain_label) {
-}
+                          toolchain_label) {}
 
 BuildDirContext::BuildDirContext(const BuildSettings* in_build_settings,
                                  const Label& in_toolchain_label,
                                  bool in_is_default_toolchain)
     : build_settings(in_build_settings),
       toolchain_label(in_toolchain_label),
-      is_default_toolchain(in_is_default_toolchain) {
-}
+      is_default_toolchain(in_is_default_toolchain) {}
 
 SourceDir GetBuildDirAsSourceDir(const BuildDirContext& context,
                                  BuildDirType type) {
-  return GetBuildDirAsOutputFile(context, type).AsSourceDir(
-      context.build_settings);
+  return GetBuildDirAsOutputFile(context, type)
+      .AsSourceDir(context.build_settings);
 }
 
 OutputFile GetBuildDirAsOutputFile(const BuildDirContext& context,
@@ -896,20 +1045,20 @@ OutputFile GetSubBuildDirAsOutputFile(const BuildDirContext& context,
 
 SourceDir GetBuildDirForTargetAsSourceDir(const Target* target,
                                           BuildDirType type) {
-  return GetSubBuildDirAsSourceDir(
-      BuildDirContext(target), target->label().dir(), type);
+  return GetSubBuildDirAsSourceDir(BuildDirContext(target),
+                                   target->label().dir(), type);
 }
 
 OutputFile GetBuildDirForTargetAsOutputFile(const Target* target,
                                             BuildDirType type) {
-  return GetSubBuildDirAsOutputFile(
-      BuildDirContext(target), target->label().dir(), type);
+  return GetSubBuildDirAsOutputFile(BuildDirContext(target),
+                                    target->label().dir(), type);
 }
 
 SourceDir GetScopeCurrentBuildDirAsSourceDir(const Scope* scope,
                                              BuildDirType type) {
   if (type == BuildDirType::TOOLCHAIN_ROOT)
     return GetBuildDirAsSourceDir(BuildDirContext(scope), type);
-  return GetSubBuildDirAsSourceDir(
-      BuildDirContext(scope), scope->GetSourceDir(), type);
+  return GetSubBuildDirAsSourceDir(BuildDirContext(scope),
+                                   scope->GetSourceDir(), type);
 }

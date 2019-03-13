@@ -35,95 +35,9 @@ default_args = {
 # their includes checked for proper dependencies when you run either
 # "gn check" or "gn gen --check".
 check_targets = [
-  #"//apps/*",  # Medium-hard.
-  "//ash/*",
   "//base/*",
-  "//blink/*",
   "//build/*",
-  "//cc/*",
-
-  #"//chrome/*",  # Epic number of errors.
-  "//chrome/app/*",
-  "//chrome/app_shim/*",
-  "//chrome/browser/chromeos/*",
-  "//chrome/browser/extensions/*",
-  "//chrome/browser/ui/*",
-  "//chrome/common/*",
-  "//chrome/installer/*",
-  "//chrome/profiling",
-  "//chrome/third_party/mozilla_security_manager/*",
-  "//chrome/tools/*",
-  "//chrome/utility/*",
-  "//chromecast/*",
-  "//chromeos/*",
-  "//chrome_elf/*",
-  "//cloud_print/*",
-  "//components/*",
-  "//content/*",
-  "//courgette/*",
-  "//crypto/*",
-  "//data/*",
-  "//dbus/*",
-  "//device/*",
-
-  #"//extensions/*",  # Lots of errors.
-  "//extensions:extensions_unittests",
-  "//extensions/browser:browser_tests",
-  "//extensions/browser:unit_tests",
-  "//extensions/common:unit_tests",
-  "//extensions/renderer:unit_tests",
-  "//extensions/shell:browser_tests",
-  "//extensions/shell:unit_tests",
-  "//extensions/utility:unit_tests",
-  "//gin/*",
-  "//google_apis/*",
-  "//google_update/*",
-  "//gpu/*",
-
-  "//ios/*",
-  "//ios_internal/*",
-  "//ipc/*",
-
-  #"//jingle/*",
-  "//mash/*",
-
-  "//media/*",
-  "//mojo/*",
-
-  #"//native_client/*",
-  "//net/*",
-
-  #"//pdf/*",  # Medium-hard.
-  #"//ppapi/*",  # Lots of errors.
-  "//ppapi/examples/*",
-  "//printing/*",
-
-  #"//remoting/*",  # Medium-hard.
-  "//rlz/*",
-
-  #"//sandbox/*",  # Medium-hard.
-  "//services/*",
-  "//skia/*",
-  "//sql/*",
-  "//storage/*",
-  "//testing/*",
-
-  #"//third_party/*",  # May not ever want this.
-  "//third_party/breakpad/*",
-  "//third_party/brotli/*",
-  "//third_party/hunspell/*",
-  "//third_party/leveldatabase/*",
-  "//third_party/libaddressinput/*",
-  "//third_party/libphonenumber/*",
-  "//third_party/libwebp/*",
-  "//third_party/snappy/*",
-  "//third_party/WebKit/*",
   "//tools/*",
-
-  "//ui/*",
-  "//url/*",
-  "//v8/*",
-  "//win8/*",
 ]
 
 # These are the list of GN files that run exec_script. This whitelist exists
@@ -195,30 +109,5 @@ exec_script_whitelist =
       # with other repos. The entries in this list should be only for files
       # in the Chromium repo outside of //build.
       "//base/BUILD.gn",
-      "//build_overrides/build.gni",
-
-      # TODO(dgn): Layer violation but breaks the build otherwise, see
-      # https://crbug.com/474506.
-      "//clank/java/BUILD.gn",
-      "//clank/native/BUILD.gn",
-
-      "//remoting/host/installer/linux/BUILD.gn",
-      "//remoting/remoting_version.gni",
-      "//remoting/host/installer/win/generate_clsids.gni",
-
-      # TODO(dpranke): Get these from the appropriate repos instead.
-      "//third_party/angle/BUILD.gn",
-      "//third_party/angle/src/tests/BUILD.gn",
-      "//third_party/angle/src/vulkan_support/BUILD.gn",
-      "//third_party/catapult/tracing/BUILD.gn",
-      "//third_party/google_input_tools/inputview.gni",
-
-      # CLD2 should be removed soon, delete this when we do.
-      "//third_party/cld_2/BUILD.gn",
       "//tools/gn/BUILD.gn",
-      "//tools/grit/grit_rule.gni",
-
-      # Not gypi-to-gn.
-      "//google_apis/BUILD.gn",
-      "//printing/BUILD.gn",
     ]

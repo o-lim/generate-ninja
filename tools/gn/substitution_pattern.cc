@@ -12,27 +12,20 @@
 #include "tools/gn/filesystem_utils.h"
 #include "tools/gn/value.h"
 
-SubstitutionPattern::Subrange::Subrange()
-    : type(SUBSTITUTION_LITERAL) {
-}
+SubstitutionPattern::Subrange::Subrange() : type(SUBSTITUTION_LITERAL) {}
 
 SubstitutionPattern::Subrange::Subrange(SubstitutionType t,
                                         const std::string& l)
-    : type(t),
-      literal(l) {
-}
+    : type(t), literal(l) {}
 
-SubstitutionPattern::Subrange::~Subrange() {
-}
+SubstitutionPattern::Subrange::~Subrange() = default;
 
-SubstitutionPattern::SubstitutionPattern() : origin_(nullptr) {
-}
+SubstitutionPattern::SubstitutionPattern() : origin_(nullptr) {}
 
 SubstitutionPattern::SubstitutionPattern(const SubstitutionPattern& other) =
     default;
 
-SubstitutionPattern::~SubstitutionPattern() {
-}
+SubstitutionPattern::~SubstitutionPattern() = default;
 
 bool SubstitutionPattern::Parse(const Value& value, Err* err) {
   if (!value.VerifyTypeIs(Value::STRING, err))
@@ -61,8 +54,8 @@ bool SubstitutionPattern::Parse(const std::string& str,
 
     // Find which specific pattern this corresponds to.
     bool found_match = false;
-    for (size_t i = SUBSTITUTION_FIRST_PATTERN;
-         i < SUBSTITUTION_NUM_TYPES; i++) {
+    for (size_t i = SUBSTITUTION_FIRST_PATTERN; i < SUBSTITUTION_NUM_TYPES;
+         i++) {
       const char* cur_pattern = kSubstitutionNames[i];
       size_t cur_len = strlen(cur_pattern);
       if (str.compare(next, cur_len, cur_pattern) == 0) {
@@ -79,9 +72,8 @@ bool SubstitutionPattern::Parse(const std::string& str,
       // most people will not be writing substitution patterns and the code
       // to exactly indicate the error location is tricky.
       *err = Err(origin, "Unknown substitution pattern",
-          "Found a {{ at offset " +
-          base::SizeTToString(next) +
-          " and did not find a known substitution following it.");
+                 "Found a {{ at offset " + base::NumberToString(next) +
+                     " and did not find a known substitution following it.");
       ranges_.clear();
       return false;
     }
@@ -131,19 +123,18 @@ bool SubstitutionPattern::IsInOutputDir(const BuildSettings* build_settings,
 
   if (ranges_[0].type == SUBSTITUTION_LITERAL) {
     // If the first thing is a literal, it must start with the output dir.
-    if (!EnsureStringIsInOutputDir(
-            build_settings->build_dir(),
-            ranges_[0].literal, origin_, err))
+    if (!EnsureStringIsInOutputDir(build_settings->build_dir(),
+                                   ranges_[0].literal, origin_, err))
       return false;
   } else {
     // Otherwise, the first subrange must be a pattern that expands to
     // something in the output directory.
     if (!SubstitutionIsInOutputDir(ranges_[0].type)) {
-      *err = Err(origin_,
-          "File is not inside output directory.",
-          "The given file should be in the output directory. Normally you\n"
-          "would specify\n\"$target_out_dir/foo\" or "
-          "\"{{source_gen_dir}}/foo\".");
+      *err =
+          Err(origin_, "File is not inside output directory.",
+              "The given file should be in the output directory. Normally you\n"
+              "would specify\n\"$target_out_dir/foo\" or "
+              "\"{{source_gen_dir}}/foo\".");
       return false;
     }
   }

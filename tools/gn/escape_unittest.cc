@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/escape.h"
+#include "util/test/test.h"
 
 TEST(Escape, Ninja) {
   EscapeOptions opts;
@@ -35,7 +35,7 @@ TEST(Escape, WindowsCommand) {
   // Backslashes at the end of the string get escaped.
   EXPECT_EQ("\"foo$ bar\\\\\\\\\"", EscapeString("foo bar\\\\", opts, nullptr));
 
-  // Backslashes preceeding quotes are escaped, and the quote is escaped.
+  // Backslashes preceding quotes are escaped, and the quote is escaped.
   EXPECT_EQ("\"foo\\\\\\\"$ bar\"", EscapeString("foo\\\" bar", opts, nullptr));
 }
 

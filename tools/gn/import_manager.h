@@ -7,10 +7,12 @@
 
 #include <map>
 #include <memory>
+#include <mutex>
+#include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/synchronization/lock.h"
 
 class Err;
 class ParseNode;
@@ -36,12 +38,15 @@ class ImportManager {
  private:
   struct ImportInfo;
 
-  // Protects access to imports_. Do not hold when actually executing imports.
-  base::Lock imports_lock_;
+  // Protects access to imports_ and imports_in_progress_. Do not hold when
+  // actually executing imports.
+  std::mutex imports_lock_;
 
   // Owning pointers to the scopes.
   typedef std::map<SourceFile, std::unique_ptr<ImportInfo>> ImportMap;
   ImportMap imports_;
+
+  std::unordered_set<std::string> imports_in_progress_;
 
   DISALLOW_COPY_AND_ASSIGN(ImportManager);
 };

@@ -42,10 +42,10 @@ typedef Value (*GenericBlockFunction)(Scope* scope,
 // This type of function takes a block, but does not need to control execution
 // of it. The dispatch function will pre-execute the block and pass the
 // resulting block_scope to the function.
-typedef Value(*ExecutedBlockFunction)(const FunctionCallNode* function,
-                                      const std::vector<Value>& args,
-                                      Scope* block_scope,
-                                      Err* err);
+typedef Value (*ExecutedBlockFunction)(const FunctionCallNode* function,
+                                       const std::vector<Value>& args,
+                                       Scope* block_scope,
+                                       Err* err);
 
 // This type of function does not take a block. It just has arguments.
 typedef Value (*NoBlockFunction)(Scope* scope,
@@ -195,6 +195,15 @@ Value RunGetTargetOutputs(Scope* scope,
                           const std::vector<Value>& args,
                           Err* err);
 
+extern const char kGeneratedFile[];
+extern const char kGeneratedFile_HelpShort[];
+extern const char kGeneratedFile_Help[];
+Value RunGeneratedFile(Scope* scope,
+                       const FunctionCallNode* function,
+                       const std::vector<Value>& args,
+                       BlockNode* block,
+                       Err* err);
+
 extern const char kGroup[];
 extern const char kGroup_HelpShort[];
 extern const char kGroup_Help[];
@@ -343,6 +352,14 @@ Value RunStaticLibrary(Scope* scope,
                        const FunctionCallNode* function,
                        const std::vector<Value>& args,
                        BlockNode* block,
+                       Err* err);
+
+extern const char kReplaceSubstr[];
+extern const char kReplaceSubstr_HelpShort[];
+extern const char kReplaceSubstr_Help[];
+Value RunReplaceSubstr(Scope* scope,
+                       const FunctionCallNode* function,
+                       const std::vector<Value>& args_list,
                        Err* err);
 
 extern const char kTarget[];

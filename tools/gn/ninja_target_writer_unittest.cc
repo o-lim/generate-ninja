@@ -4,10 +4,11 @@
 
 #include <sstream>
 
-#include "testing/gtest/include/gtest/gtest.h"
+#include "tools/gn/ninja_action_target_writer.h"
 #include "tools/gn/ninja_target_writer.h"
 #include "tools/gn/target.h"
 #include "tools/gn/test_with_scope.h"
+#include "util/test/test.h"
 
 namespace {
 
@@ -16,15 +17,16 @@ class TestingNinjaTargetWriter : public NinjaTargetWriter {
   TestingNinjaTargetWriter(const Target* target,
                            const Toolchain* toolchain,
                            std::ostream& out)
-      : NinjaTargetWriter(target, out) {
-  }
+      : NinjaTargetWriter(target, out) {}
 
   void Run() override {}
 
   // Make this public so the test can call it.
-  OutputFile WriteInputDepsStampAndGetDep(
-      const std::vector<const Target*>& extra_hard_deps) {
-    return NinjaTargetWriter::WriteInputDepsStampAndGetDep(extra_hard_deps);
+  std::vector<OutputFile> WriteInputDepsStampAndGetDep(
+      const std::vector<const Target*>& extra_hard_deps,
+      size_t num_stamp_uses) {
+    return NinjaTargetWriter::WriteInputDepsStampAndGetDep(extra_hard_deps,
+                                                           num_stamp_uses);
   }
 };
 
@@ -45,7 +47,7 @@ TEST(NinjaTargetWriter, WriteInputDepsStampAndGetDep) {
   Target target(setup.settings(), Label(SourceDir("//foo/"), "target"));
   target.set_output_type(Target::EXECUTABLE);
   target.visibility().SetPublic();
-  target.inputs().push_back(SourceFile("//foo/input.txt"));
+  target.config_values().inputs().push_back(SourceFile("//foo/input.txt"));
   target.sources().push_back(SourceFile("//foo/source.txt"));
   target.public_deps().push_back(LabelTargetPair(&base_target));
 
@@ -66,12 +68,13 @@ TEST(NinjaTargetWriter, WriteInputDepsStampAndGetDep) {
   {
     std::ostringstream stream;
     TestingNinjaTargetWriter writer(&base_target, setup.toolchain(), stream);
-    OutputFile dep =
-        writer.WriteInputDepsStampAndGetDep(std::vector<const Target*>());
+    std::vector<OutputFile> dep =
+        writer.WriteInputDepsStampAndGetDep(std::vector<const Target*>(), 10u);
 
     // Since there is only one dependency, it should just be returned and
     // nothing written to the stream.
-    EXPECT_EQ("../../foo/script.py", dep.value());
+    ASSERT_EQ(1u, dep.size());
+    EXPECT_EQ("../../foo/script.py", dep[0].value());
     EXPECT_EQ("", stream.str());
   }
 
@@ -79,12 +82,30 @@ TEST(NinjaTargetWriter, WriteInputDepsStampAndGetDep) {
   {
     std::ostringstream stream;
     TestingNinjaTargetWriter writer(&target, setup.toolchain(), stream);
-    OutputFile dep =
-        writer.WriteInputDepsStampAndGetDep(std::vector<const Target*>());
+    std::vector<OutputFile> dep =
+        writer.WriteInputDepsStampAndGetDep(std::vector<const Target*>(), 10u);
 
     // Since there is only one dependency, a stamp file will be returned
     // directly without writing any additional rules.
-    EXPECT_EQ("obj/foo/base.stamp", dep.value());
+    ASSERT_EQ(1u, dep.size());
+    EXPECT_EQ("obj/foo/base.stamp", dep[0].value());
+  }
+
+  {
+    std::ostringstream stream;
+    NinjaActionTargetWriter writer(&action, stream);
+    writer.Run();
+    EXPECT_EQ(
+        "rule __foo_action___rule\n"
+        "  command =  ../../foo/script.py\n"
+        "  description = ACTION //foo:action()\n"
+        "  restat = 1\n"
+        "\n"
+        "build: __foo_action___rule | ../../foo/script.py"
+        " ../../foo/action_source.txt ./target\n"
+        "\n"
+        "build obj/foo/action.stamp: stamp\n",
+        stream.str());
   }
 
   // Input deps for action which should depend on the base since its a hard dep
@@ -92,13 +113,15 @@ TEST(NinjaTargetWriter, WriteInputDepsStampAndGetDep) {
   {
     std::ostringstream stream;
     TestingNinjaTargetWriter writer(&action, setup.toolchain(), stream);
-    OutputFile dep =
-        writer.WriteInputDepsStampAndGetDep(std::vector<const Target*>());
+    std::vector<OutputFile> dep =
+        writer.WriteInputDepsStampAndGetDep(std::vector<const Target*>(), 10u);
 
-    EXPECT_EQ("obj/foo/action.inputdeps.stamp", dep.value());
-    EXPECT_EQ("build obj/foo/action.inputdeps.stamp: stamp ../../foo/script.py "
-                  "../../foo/action_source.txt obj/foo/base.stamp\n",
-              stream.str());
+    ASSERT_EQ(1u, dep.size());
+    EXPECT_EQ("obj/foo/action.inputdeps.stamp", dep[0].value());
+    EXPECT_EQ(
+        "build obj/foo/action.inputdeps.stamp: stamp ../../foo/script.py "
+        "../../foo/action_source.txt ./target\n",
+        stream.str());
   }
 }
 
@@ -124,11 +147,12 @@ TEST(NinjaTargetWriter, WriteInputDepsStampAndGetDepWithToolchainDeps) {
 
   std::ostringstream stream;
   TestingNinjaTargetWriter writer(&target, setup.toolchain(), stream);
-  OutputFile dep =
-      writer.WriteInputDepsStampAndGetDep(std::vector<const Target*>());
+  std::vector<OutputFile> dep =
+      writer.WriteInputDepsStampAndGetDep(std::vector<const Target*>(), 10u);
 
   // Since there is more than one dependency, a stamp file will be returned
   // and the rule for the stamp file will be written to the stream.
-  EXPECT_EQ("obj/foo/setup.stamp", dep.value());
+  ASSERT_EQ(1u, dep.size());
+  EXPECT_EQ("obj/foo/setup.stamp", dep[0].value());
   EXPECT_EQ("", stream.str());
 }

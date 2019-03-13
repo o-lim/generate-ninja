@@ -56,8 +56,7 @@ class SubstitutionPattern {
   // Checks whether this pattern resolves to something in the output directory
   // for the given build settings. If not, returns false and fills in the given
   // error.
-  bool IsInOutputDir(const BuildSettings* build_settings,
-                     Err* err) const;
+  bool IsInOutputDir(const BuildSettings* build_settings, Err* err) const;
 
   // Returns a vector listing the substitutions used by this pattern, not
   // counting SUBSTITUTION_LITERAL.
@@ -67,6 +66,8 @@ class SubstitutionPattern {
 
   const std::vector<Subrange>& ranges() const { return ranges_; }
   bool empty() const { return ranges_.empty(); }
+
+  const ParseNode* origin() const { return origin_; }
 
  private:
   std::vector<Subrange> ranges_;

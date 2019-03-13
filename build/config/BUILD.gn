@@ -2,13 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/allocator.gni")
 import("//build/config/c++/c++.gni")
-import("//build/config/chrome_build.gni")
-import("//build/config/chromecast_build.gni")
-import("//build/config/crypto.gni")
 import("//build/config/dcheck_always_on.gni")
-import("//build/config/features.gni")
 
 # Subprojects need to override arguments in mac_sdk_overrides.gni in their .gn
 # config, but those arguments are only used on macOS. Including
@@ -17,9 +12,6 @@ import("//build/config/features.gni")
 import("//build/config/mac/mac_sdk_overrides.gni")
 
 import("//build/config/pch.gni")
-import("//build/config/sanitizers/sanitizers.gni")
-import("//build/config/ui.gni")
-import("//build/toolchain/goma.gni")
 
 declare_args() {
   # When set (the default) enables C++ iterator debugging in debug builds.
@@ -56,81 +48,12 @@ declare_args() {
 # flags. See //build/config/BUILDCONFIG.gn for advice on where to define
 # build flags.
 config("feature_flags") {
-  # Don't use deprecated V8 APIs anywhere.
-  defines = [ "V8_DEPRECATION_WARNINGS" ]
+  defines = []
   if (dcheck_always_on) {
     defines += [ "DCHECK_ALWAYS_ON=1" ]
   }
-  if (use_udev) {
-    # TODO(brettw) should probably be "=1".
-    defines += [ "USE_UDEV" ]
-  }
-  if (use_aura) {
-    defines += [ "USE_AURA=1" ]
-  }
-  if (use_glib) {
-    defines += [ "USE_GLIB=1" ]
-  }
-  if (use_nss_certs) {
-    defines += [ "USE_NSS_CERTS=1" ]
-  }
-  if (use_ozone) {
-    defines += [ "USE_OZONE=1" ]
-  }
-  if (use_x11) {
-    defines += [ "USE_X11=1" ]
-  }
-  if (use_allocator != "tcmalloc") {
-    defines += [ "NO_TCMALLOC" ]
-  }
-  if (is_asan || is_lsan || is_tsan || is_msan) {
-    defines += [
-      "MEMORY_TOOL_REPLACES_ALLOCATOR",
-      "MEMORY_SANITIZER_INITIAL_SIZE",
-    ]
-  }
-  if (is_asan) {
-    defines += [ "ADDRESS_SANITIZER" ]
-  }
-  if (is_lsan) {
-    defines += [ "LEAK_SANITIZER" ]
-  }
-  if (is_tsan) {
-    defines += [
-      "THREAD_SANITIZER",
-      "DYNAMIC_ANNOTATIONS_EXTERNAL_IMPL=1",
-      "WTF_USE_DYNAMIC_ANNOTATIONS_NOIMPL=1",
-    ]
-  }
-  if (is_msan) {
-    defines += [ "MEMORY_SANITIZER" ]
-  }
-  if (is_ubsan || is_ubsan_null || is_ubsan_vptr || is_ubsan_security) {
-    defines += [ "UNDEFINED_SANITIZER" ]
-  }
-  if (safe_browsing_mode == 1) {
-    defines += [ "FULL_SAFE_BROWSING" ]
-    defines += [ "SAFE_BROWSING_CSD" ]
-    defines += [ "SAFE_BROWSING_DB_LOCAL" ]
-  } else if (safe_browsing_mode == 2) {
-    defines += [ "SAFE_BROWSING_DB_REMOTE" ]
-  }
   if (is_official_build) {
     defines += [ "OFFICIAL_BUILD" ]
-  }
-  if (is_chrome_branded) {
-    defines += [ "GOOGLE_CHROME_BUILD" ]
-  } else {
-    defines += [ "CHROMIUM_BUILD" ]
-  }
-  if (is_syzyasan) {
-    defines += [
-      "SYZYASAN",
-      "MEMORY_SANITIZER_INITIAL_SIZE",
-    ]
-  }
-  if (!fieldtrial_testing_like_official_build && !is_chrome_branded) {
-    defines += [ "FIELDTRIAL_TESTING_ENABLED" ]
   }
 
   # ==============================================
@@ -145,51 +68,11 @@ config("feature_flags") {
 config("debug") {
   defines = [
     "_DEBUG",
-    "DYNAMIC_ANNOTATIONS_ENABLED=1",
-    "WTF_USE_DYNAMIC_ANNOTATIONS=1",
   ]
-
-  if (is_nacl) {
-    defines += [ "DYNAMIC_ANNOTATIONS_PREFIX=NACL_" ]
-  }
-
-  if (is_win) {
-    if (!enable_iterator_debugging) {
-      # Iterator debugging is enabled by default by the compiler on debug
-      # builds, and we have to tell it to turn it off.
-      defines += [ "_HAS_ITERATOR_DEBUGGING=0" ]
-    }
-  } else if (is_linux && current_cpu == "x64" && enable_iterator_debugging) {
-    # Enable libstdc++ debugging facilities to help catch problems early, see
-    # http://crbug.com/65151 .
-    # TODO(phajdan.jr): Should we enable this for all of POSIX?
-    defines += [ "_GLIBCXX_DEBUG=1" ]
-  }
 }
 
 config("release") {
   defines = [ "NDEBUG" ]
-
-  # Sanitizers.
-  if (is_tsan) {
-    defines += [
-      "DYNAMIC_ANNOTATIONS_ENABLED=1",
-      "WTF_USE_DYNAMIC_ANNOTATIONS=1",
-    ]
-  } else {
-    defines += [ "NVALGRIND" ]
-    if (!is_nacl) {
-      # NaCl always enables dynamic annotations. Currently this value is set to
-      # 1 for all .nexes.
-      defines += [ "DYNAMIC_ANNOTATIONS_ENABLED=0" ]
-    }
-  }
-
-  if (is_ios) {
-    # Disable NSAssert and GTMDevAssert (from Google Toolbox for Mac). This
-    # follows XCode's default behavior for Release builds.
-    defines += [ "NS_BLOCK_ASSERTIONS=1" ]
-  }
 }
 
 # Default libraries ------------------------------------------------------------
@@ -202,28 +85,16 @@ config("default_libs") {
     # winspool) should include those explicitly.
     libs = [
       "advapi32.lib",
-      "comdlg32.lib",
       "dbghelp.lib",
-      "delayimp.lib",
-      "dnsapi.lib",
-      "gdi32.lib",
       "kernel32.lib",
-      "msimg32.lib",
-      "odbc32.lib",
-      "odbccp32.lib",
       "ole32.lib",
-      "oleaut32.lib",
-      "psapi.lib",
       "shell32.lib",
-      "shlwapi.lib",
       "user32.lib",
-      "usp10.lib",
-      "uuid.lib",
+      "userenv.lib",
       "version.lib",
-      "wininet.lib",
       "winmm.lib",
-      "winspool.lib",
       "ws2_32.lib",
+      "Shlwapi.lib",
 
       # Please don't add more stuff here. We should actually be making this
       # list smaller, since all common things should be covered. If you need
@@ -249,25 +120,11 @@ config("default_libs") {
       "Foundation.framework",
     ]
   } else if (is_linux) {
+    ldflags = [ "-pthread" ]
     libs = [
       "dl",
-      "pthread",
       "rt",
     ]
-  }
-}
-
-# Dependencies that all executables and shared libraries should have.
-group("exe_and_shlib_deps") {
-  public_deps = []
-  if (using_sanitizer) {
-    public_deps += [ "//build/config/sanitizers:deps" ]
-  }
-  if (use_custom_libcxx) {
-    public_deps += [ "//buildtools/third_party/libc++" ]
-  }
-  if (use_afl) {
-    public_deps += [ "//third_party/afl" ]
   }
 }
 
@@ -301,20 +158,8 @@ config("executable_config") {
     configs += [ "//build/config/gcc:executable_ldconfig" ]
     if (is_android) {
       configs += [ "//build/config/android:executable_config" ]
-    } else if (is_chromecast) {
-      configs += [ "//build/config/chromecast:executable_config" ]
     }
   }
-
-  # If we're using the prebuilt instrumented libraries with the sanitizers, we
-  # need to add ldflags to every binary to make sure they are picked up.
-  if (prebuilt_instrumented_libraries_available) {
-    configs += [ "//third_party/instrumented_libraries:prebuilt_ldflags" ]
-  }
-  if (use_locally_built_instrumented_libraries) {
-    configs += [ "//third_party/instrumented_libraries:locally_built_ldflags" ]
-  }
-  configs += [ "//build/config/sanitizers:link_executable" ]
 }
 
 # Shared library configs -------------------------------------------------------
@@ -329,8 +174,6 @@ config("shared_library_config") {
     configs += [ "//build/config/mac:mac_dynamic_flags" ]
   } else if (is_ios) {
     configs += [ "//build/config/ios:ios_dynamic_flags" ]
-  } else if (is_chromecast) {
-    configs += [ "//build/config/chromecast:shared_library_config" ]
   }
 
   # If we're using the prebuilt instrumented libraries with the sanitizers, we
@@ -341,7 +184,6 @@ config("shared_library_config") {
   if (use_locally_built_instrumented_libraries) {
     configs += [ "//third_party/instrumented_libraries:locally_built_ldflags" ]
   }
-  configs += [ "//build/config/sanitizers:link_shared_library" ]
 }
 
 # Add this config to your target to enable precompiled headers.

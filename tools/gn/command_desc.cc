@@ -5,12 +5,13 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <memory>
 #include <set>
 #include <sstream>
 
 #include "base/command_line.h"
 #include "base/json/json_writer.h"
-#include "base/memory/ptr_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "tools/gn/commands.h"
 #include "tools/gn/config.h"
@@ -31,6 +32,52 @@ const char kShow[] = "show";
 const char kTree[] = "tree";
 const char kAll[] = "all";
 
+void PrintDictValue(const base::Value* value,
+                    int indentLevel,
+                    bool use_first_indent) {
+  std::string indent(indentLevel * 2, ' ');
+  const base::ListValue* list_value = nullptr;
+  const base::DictionaryValue* dict_value = nullptr;
+  std::string string_value;
+  bool bool_value = false;
+  int int_value = 0;
+  if (use_first_indent)
+    OutputString(indent);
+  if (value->GetAsList(&list_value)) {
+    OutputString("[\n");
+    bool first = true;
+    for (const auto& v : *list_value) {
+      if (!first)
+        OutputString(",\n");
+      PrintDictValue(&v, indentLevel + 1, true);
+      first = false;
+    }
+    OutputString("\n" + indent + "]");
+  } else if (value->GetAsString(&string_value)) {
+    OutputString("\"" + string_value + "\"");
+  } else if (value->GetAsBoolean(&bool_value)) {
+    OutputString(bool_value ? "true" : "false");
+  } else if (value->GetAsDictionary(&dict_value)) {
+    OutputString("{\n");
+    std::string indent_plus_one((indentLevel + 1) * 2, ' ');
+    base::DictionaryValue::Iterator iter(*dict_value);
+    bool first = true;
+    while (!iter.IsAtEnd()) {
+      if (!first)
+        OutputString(",\n");
+      OutputString(indent_plus_one + iter.key() + " = ");
+      PrintDictValue(&iter.value(), indentLevel + 1, false);
+      iter.Advance();
+      first = false;
+    }
+    OutputString("\n" + indent + "}");
+  } else if (value->GetAsInteger(&int_value)) {
+    OutputString(base::IntToString(int_value));
+  } else if (value->is_none()) {
+    OutputString("<null>");
+  }
+}
+
 // Prints value with specified indentation level
 void PrintValue(const base::Value* value, int indentLevel) {
   std::string indent(indentLevel * 2, ' ');
@@ -38,6 +85,7 @@ void PrintValue(const base::Value* value, int indentLevel) {
   const base::DictionaryValue* dict_value = nullptr;
   std::string string_value;
   bool bool_value = false;
+  int int_value = 0;
   if (value->GetAsList(&list_value)) {
     for (const auto& v : *list_value) {
       PrintValue(&v, indentLevel);
@@ -57,13 +105,23 @@ void PrintValue(const base::Value* value, int indentLevel) {
       PrintValue(&iter.value(), indentLevel + 1);
       iter.Advance();
     }
-  } else if (value->IsType(base::Value::Type::NONE)) {
+  } else if (value->GetAsInteger(&int_value)) {
+    OutputString(indent);
+    OutputString(base::IntToString(int_value));
+    OutputString("\n");
+  } else if (value->is_none()) {
     OutputString(indent + "<null>\n");
   }
 }
 
 // Default handler for property
-void DefaultHandler(const std::string& name, const base::Value* value) {
+void DefaultHandler(const std::string& name,
+                    const base::Value* value,
+                    bool value_only) {
+  if (value_only) {
+    PrintValue(value, 0);
+    return;
+  }
   OutputString("\n");
   OutputString(name);
   OutputString("\n");
@@ -72,9 +130,32 @@ void DefaultHandler(const std::string& name, const base::Value* value) {
 
 // Specific handler for properties that need different treatment
 
+// Prints the dict in GN scope-sytle.
+void MetadataHandler(const std::string& name,
+                     const base::Value* value,
+                     bool value_only) {
+  if (value_only) {
+    PrintDictValue(value, 0, true);
+    OutputString("\n");
+    return;
+  }
+  OutputString("\n");
+  OutputString(name);
+  OutputString("\n");
+  PrintDictValue(value, 1, true);
+  OutputString("\n");
+}
+
 // Prints label and property value on one line, capitalizing the label.
-void LabelHandler(std::string name, const base::Value* value) {
-  name[0] = base::ToUpperASCII(name[0]);
+void LabelHandler(const std::string& name,
+                  const base::Value* value,
+                  bool value_only) {
+  if (value_only) {
+    PrintValue(value, 0);
+    return;
+  }
+  std::string label = name;
+  label[0] = base::ToUpperASCII(label[0]);
   std::string string_value;
   if (value->GetAsString(&string_value)) {
     OutputString(name + ": ", DECORATION_YELLOW);
@@ -82,51 +163,68 @@ void LabelHandler(std::string name, const base::Value* value) {
   }
 }
 
-void VisibilityHandler(const std::string& name, const base::Value* value) {
+void VisibilityHandler(const std::string& name,
+                       const base::Value* value,
+                       bool value_only) {
+  if (value_only) {
+    PrintValue(value, 0);
+    return;
+  }
   const base::ListValue* list;
   if (value->GetAsList(&list)) {
     if (list->empty()) {
       base::Value str("(no visibility)");
-      DefaultHandler(name, &str);
+      DefaultHandler(name, &str, value_only);
     } else {
-      DefaultHandler(name, value);
+      DefaultHandler(name, value, value_only);
     }
   }
 }
 
-void PublicHandler(const std::string& name, const base::Value* value) {
+void PublicHandler(const std::string& name,
+                   const base::Value* value,
+                   bool value_only) {
+  if (value_only) {
+    PrintValue(value, 0);
+    return;
+  }
   std::string p;
   if (value->GetAsString(&p)) {
     if (p == "*") {
       base::Value str("[All headers listed in the sources are public.]");
-      DefaultHandler(name, &str);
+      DefaultHandler(name, &str, value_only);
       return;
     }
   }
-  DefaultHandler(name, value);
+  DefaultHandler(name, value, value_only);
 }
 
-void ConfigsHandler(const std::string& name, const base::Value* value) {
+void ConfigsHandler(const std::string& name,
+                    const base::Value* value,
+                    bool value_only) {
   bool tree = base::CommandLine::ForCurrentProcess()->HasSwitch(kTree);
   if (tree)
-    DefaultHandler(name + " tree (in order applying)", value);
+    DefaultHandler(name + " tree (in order applying)", value, value_only);
   else
-    DefaultHandler(name + " (in order applying, try also --tree)", value);
+    DefaultHandler(name + " (in order applying, try also --tree)", value,
+                   value_only);
 }
 
-void DepsHandler(const std::string& name, const base::Value* value) {
+void DepsHandler(const std::string& name,
+                 const base::Value* value,
+                 bool value_only) {
   bool tree = base::CommandLine::ForCurrentProcess()->HasSwitch(kTree);
   bool all = base::CommandLine::ForCurrentProcess()->HasSwitch(kTree);
   if (tree) {
-    DefaultHandler("Dependency tree", value);
+    DefaultHandler("Dependency tree", value, value_only);
   } else {
     if (!all) {
       DefaultHandler(
           "Direct dependencies "
           "(try also \"--all\", \"--tree\", or even \"--all --tree\")",
-          value);
+          value, value_only);
     } else {
-      DefaultHandler("All recursive dependencies", value);
+      DefaultHandler("All recursive dependencies", value, value_only);
     }
   }
 }
@@ -155,9 +253,72 @@ void ProcessOutputs(base::DictionaryValue* target) {
   }
 }
 
+using DescHandlerFunc = void (*)(const std::string& name,
+                                 const base::Value* value,
+                                 bool value_only);
+std::map<std::string, DescHandlerFunc> GetHandlers() {
+  return {{"type", LabelHandler},
+          {"toolchain", LabelHandler},
+          {variables::kVisibility, VisibilityHandler},
+          {variables::kMetadata, MetadataHandler},
+          {variables::kTestonly, DefaultHandler},
+          {variables::kCheckIncludes, DefaultHandler},
+          {variables::kAllowCircularIncludesFrom, DefaultHandler},
+          {variables::kSources, DefaultHandler},
+          {variables::kPublic, PublicHandler},
+          {variables::kInputs, DefaultHandler},
+          {variables::kConfigs, ConfigsHandler},
+          {variables::kPublicConfigs, ConfigsHandler},
+          {variables::kAllDependentConfigs, ConfigsHandler},
+          {variables::kCommand, DefaultHandler},
+          {variables::kScript, DefaultHandler},
+          {variables::kInterpreter, DefaultHandler},
+          {variables::kArgs, DefaultHandler},
+          {variables::kDepfile, DefaultHandler},
+          {"bundle_data", DefaultHandler},
+          {variables::kArflags, DefaultHandler},
+          {variables::kAsmflags, DefaultHandler},
+          {variables::kAsmppflags, DefaultHandler},
+          {variables::kCflags, DefaultHandler},
+          {variables::kCflagsC, DefaultHandler},
+          {variables::kCflagsCC, DefaultHandler},
+          {variables::kCflagsObjC, DefaultHandler},
+          {variables::kCflagsObjCC, DefaultHandler},
+          {variables::kCppflags, DefaultHandler},
+          {variables::kCppflagsC, DefaultHandler},
+          {variables::kCppflagsCC, DefaultHandler},
+          {variables::kCppflagsObjC, DefaultHandler},
+          {variables::kCppflagsObjCC, DefaultHandler},
+          {variables::kDefines, DefaultHandler},
+          {variables::kIncludeDirs, DefaultHandler},
+          {variables::kLdflags, DefaultHandler},
+          {variables::kPrecompiledHeader, DefaultHandler},
+          {variables::kPrecompiledSource, DefaultHandler},
+          {variables::kDeps, DepsHandler},
+          {variables::kLibs, DefaultHandler},
+          {variables::kLibDirs, DefaultHandler},
+          {variables::kSysIncludeDirs, DefaultHandler},
+          {variables::kDataKeys, DefaultHandler},
+          {variables::kRebase, DefaultHandler},
+          {variables::kWalkKeys, DefaultHandler},
+          {variables::kWriteOutputConversion, DefaultHandler}};
+}
+
+void HandleProperty(const std::string& what,
+                    const std::map<std::string, DescHandlerFunc>& handler_map,
+                    std::unique_ptr<base::Value>& v,
+                    std::unique_ptr<base::DictionaryValue>& dict) {
+  if (dict->Remove(what, &v)) {
+    auto pair = handler_map.find(what);
+    if (pair != handler_map.end())
+      pair->second(what, v.get(), false);
+  }
+}
+
 bool PrintTarget(const Target* target,
                  const std::string& what,
                  bool single_target,
+                 const std::map<std::string, DescHandlerFunc>& handler_map,
                  bool all,
                  bool tree,
                  bool blame) {
@@ -169,10 +330,14 @@ bool PrintTarget(const Target* target,
                  "\".\n");
     return false;
   }
-  // Print single value, without any headers
+  // Print single value
   if (!what.empty() && dict->size() == 1 && single_target) {
     base::DictionaryValue::Iterator iter(*dict);
-    PrintValue(&iter.value(), 0);
+    auto pair = handler_map.find(what);
+    if (pair != handler_map.end())
+      pair->second(what, &iter.value(), true);
+    else
+      PrintValue(&iter.value(), 0);
     return true;
   }
 
@@ -181,60 +346,58 @@ bool PrintTarget(const Target* target,
   OutputString("\n");
 
   std::unique_ptr<base::Value> v;
-#define HANDLER(property, handler_name) \
-  if (dict->Remove(property, &v)) {     \
-    handler_name(property, v.get());    \
-  }
-
   // Entries with DefaultHandler are present to enforce order
-  HANDLER("type", LabelHandler);
-  HANDLER("toolchain", LabelHandler);
-  HANDLER(variables::kVisibility, VisibilityHandler);
-  HANDLER(variables::kTestonly, DefaultHandler);
-  HANDLER(variables::kCheckIncludes, DefaultHandler);
-  HANDLER(variables::kAllowCircularIncludesFrom, DefaultHandler);
-  HANDLER(variables::kSources, DefaultHandler);
-  HANDLER(variables::kPublic, PublicHandler);
-  HANDLER(variables::kInputs, DefaultHandler);
-  HANDLER(variables::kConfigs, ConfigsHandler);
-  HANDLER(variables::kPublicConfigs, ConfigsHandler);
-  HANDLER(variables::kAllDependentConfigs, ConfigsHandler);
-  HANDLER(variables::kCommand, DefaultHandler);
-  HANDLER(variables::kScript, DefaultHandler);
-  HANDLER(variables::kInterpreter, DefaultHandler);
-  HANDLER(variables::kArgs, DefaultHandler);
-  HANDLER(variables::kDepfile, DefaultHandler);
+  HandleProperty("type", handler_map, v, dict);
+  HandleProperty("toolchain", handler_map, v, dict);
+  HandleProperty(variables::kVisibility, handler_map, v, dict);
+  HandleProperty(variables::kMetadata, handler_map, v, dict);
+  HandleProperty(variables::kTestonly, handler_map, v, dict);
+  HandleProperty(variables::kCheckIncludes, handler_map, v, dict);
+  HandleProperty(variables::kAllowCircularIncludesFrom, handler_map, v, dict);
+  HandleProperty(variables::kSources, handler_map, v, dict);
+  HandleProperty(variables::kPublic, handler_map, v, dict);
+  HandleProperty(variables::kInputs, handler_map, v, dict);
+  HandleProperty(variables::kConfigs, handler_map, v, dict);
+  HandleProperty(variables::kPublicConfigs, handler_map, v, dict);
+  HandleProperty(variables::kAllDependentConfigs, handler_map, v, dict);
+  HandleProperty(variables::kCommand, handler_map, v, dict);
+  HandleProperty(variables::kScript, handler_map, v, dict);
+  HandleProperty(variables::kInterpreter, handler_map, v, dict);
+  HandleProperty(variables::kArgs, handler_map, v, dict);
+  HandleProperty(variables::kDepfile, handler_map, v, dict);
   ProcessOutputs(dict.get());
-  HANDLER("bundle_data", DefaultHandler);
-  HANDLER(variables::kArflags, DefaultHandler);
-  HANDLER(variables::kAsmflags, DefaultHandler);
-  HANDLER(variables::kAsmppflags, DefaultHandler)
-  HANDLER(variables::kCflags, DefaultHandler);
-  HANDLER(variables::kCflagsC, DefaultHandler);
-  HANDLER(variables::kCflagsCC, DefaultHandler);
-  HANDLER(variables::kCflagsObjC, DefaultHandler);
-  HANDLER(variables::kCflagsObjCC, DefaultHandler);
-  HANDLER(variables::kCppflags, DefaultHandler)
-  HANDLER(variables::kCppflagsC, DefaultHandler)
-  HANDLER(variables::kCppflagsCC, DefaultHandler)
-  HANDLER(variables::kCppflagsObjC, DefaultHandler)
-  HANDLER(variables::kCppflagsObjCC, DefaultHandler)
-  HANDLER(variables::kDefines, DefaultHandler);
-  HANDLER(variables::kIncludeDirs, DefaultHandler);
-  HANDLER(variables::kLdflags, DefaultHandler);
-  HANDLER(variables::kPrecompiledHeader, DefaultHandler);
-  HANDLER(variables::kPrecompiledSource, DefaultHandler);
-  HANDLER(variables::kDeps, DepsHandler);
-  HANDLER(variables::kLibs, DefaultHandler);
-  HANDLER(variables::kLibDirs, DefaultHandler);
-  HANDLER(variables::kSysIncludeDirs, DefaultHandler)
-
-#undef HANDLER
+  HandleProperty("bundle_data", handler_map, v, dict);
+  HandleProperty(variables::kArflags, handler_map, v, dict);
+  HandleProperty(variables::kAsmflags, handler_map, v, dict);
+  HandleProperty(variables::kAsmppflags, handler_map, v, dict);
+  HandleProperty(variables::kCflags, handler_map, v, dict);
+  HandleProperty(variables::kCflagsC, handler_map, v, dict);
+  HandleProperty(variables::kCflagsCC, handler_map, v, dict);
+  HandleProperty(variables::kCflagsObjC, handler_map, v, dict);
+  HandleProperty(variables::kCflagsObjCC, handler_map, v, dict);
+  HandleProperty(variables::kCppflags, handler_map, v, dict);
+  HandleProperty(variables::kCppflagsC, handler_map, v, dict);
+  HandleProperty(variables::kCppflagsCC, handler_map, v, dict);
+  HandleProperty(variables::kCppflagsObjC, handler_map, v, dict);
+  HandleProperty(variables::kCppflagsObjCC, handler_map, v, dict);
+  HandleProperty(variables::kDefines, handler_map, v, dict);
+  HandleProperty(variables::kIncludeDirs, handler_map, v, dict);
+  HandleProperty(variables::kLdflags, handler_map, v, dict);
+  HandleProperty(variables::kPrecompiledHeader, handler_map, v, dict);
+  HandleProperty(variables::kPrecompiledSource, handler_map, v, dict);
+  HandleProperty(variables::kDeps, handler_map, v, dict);
+  HandleProperty(variables::kLibs, handler_map, v, dict);
+  HandleProperty(variables::kLibDirs, handler_map, v, dict);
+  HandleProperty(variables::kSysIncludeDirs, handler_map, v, dict);
+  HandleProperty(variables::kDataKeys, handler_map, v, dict);
+  HandleProperty(variables::kRebase, handler_map, v, dict);
+  HandleProperty(variables::kWalkKeys, handler_map, v, dict);
+  HandleProperty(variables::kWriteOutputConversion, handler_map, v, dict);
 
   // Process the rest (if any)
   base::DictionaryValue::Iterator iter(*dict);
   while (!iter.IsAtEnd()) {
-    DefaultHandler(iter.key(), &iter.value());
+    DefaultHandler(iter.key(), &iter.value(), false);
     iter.Advance();
   }
 
@@ -243,17 +406,20 @@ bool PrintTarget(const Target* target,
 
 bool PrintConfig(const Config* config,
                  const std::string& what,
-                 bool single_config) {
+                 bool single_config,
+                 const std::map<std::string, DescHandlerFunc>& handler_map) {
   std::unique_ptr<base::DictionaryValue> dict =
       DescBuilder::DescriptionForConfig(config, what);
   if (!what.empty() && dict->empty()) {
     OutputString("Don't know how to display \"" + what + "\" for a config.\n");
     return false;
   }
-  // Print single value, without any headers
+  // Print single value
   if (!what.empty() && dict->size() == 1 && single_config) {
     base::DictionaryValue::Iterator iter(*dict);
-    PrintValue(&iter.value(), 0);
+    auto pair = handler_map.find(what);
+    if (pair != handler_map.end())
+      pair->second(what, &iter.value(), true);
     return true;
   }
 
@@ -262,40 +428,34 @@ bool PrintConfig(const Config* config,
   OutputString("\n");
 
   std::unique_ptr<base::Value> v;
-#define HANDLER(property, handler_name) \
-  if (dict->Remove(property, &v)) {     \
-    handler_name(property, v.get());    \
-  }
-
-  HANDLER("toolchain", LabelHandler);
+  HandleProperty("toolchain", handler_map, v, dict);
   if (!config->configs().empty()) {
     OutputString(
         "(This is a composite config, the values below are after the\n"
         "expansion of the child configs.)\n");
   }
-  HANDLER(variables::kArflags, DefaultHandler);
-  HANDLER(variables::kAsmflags, DefaultHandler);
-  HANDLER(variables::kAsmppflags, DefaultHandler)
-  HANDLER(variables::kCflags, DefaultHandler);
-  HANDLER(variables::kCflagsC, DefaultHandler);
-  HANDLER(variables::kCflagsCC, DefaultHandler);
-  HANDLER(variables::kCflagsObjC, DefaultHandler);
-  HANDLER(variables::kCflagsObjCC, DefaultHandler);
-  HANDLER(variables::kCppflags, DefaultHandler)
-  HANDLER(variables::kCppflagsC, DefaultHandler)
-  HANDLER(variables::kCppflagsCC, DefaultHandler)
-  HANDLER(variables::kCppflagsObjC, DefaultHandler)
-  HANDLER(variables::kCppflagsObjCC, DefaultHandler)
-  HANDLER(variables::kDefines, DefaultHandler);
-  HANDLER(variables::kIncludeDirs, DefaultHandler);
-  HANDLER(variables::kLdflags, DefaultHandler);
-  HANDLER(variables::kLibs, DefaultHandler);
-  HANDLER(variables::kLibDirs, DefaultHandler);
-  HANDLER(variables::kPrecompiledHeader, DefaultHandler);
-  HANDLER(variables::kPrecompiledSource, DefaultHandler);
-  HANDLER(variables::kSysIncludeDirs, DefaultHandler)
-
-#undef HANDLER
+  HandleProperty(variables::kArflags, handler_map, v, dict);
+  HandleProperty(variables::kAsmflags, handler_map, v, dict);
+  HandleProperty(variables::kAsmppflags, handler_map, v, dict);
+  HandleProperty(variables::kCflags, handler_map, v, dict);
+  HandleProperty(variables::kCflagsC, handler_map, v, dict);
+  HandleProperty(variables::kCflagsCC, handler_map, v, dict);
+  HandleProperty(variables::kCflagsObjC, handler_map, v, dict);
+  HandleProperty(variables::kCflagsObjCC, handler_map, v, dict);
+  HandleProperty(variables::kCppflags, handler_map, v, dict);
+  HandleProperty(variables::kCppflagsC, handler_map, v, dict);
+  HandleProperty(variables::kCppflagsCC, handler_map, v, dict);
+  HandleProperty(variables::kCppflagsObjC, handler_map, v, dict);
+  HandleProperty(variables::kCppflagsObjCC, handler_map, v, dict);
+  HandleProperty(variables::kDefines, handler_map, v, dict);
+  HandleProperty(variables::kIncludeDirs, handler_map, v, dict);
+  HandleProperty(variables::kInputs, handler_map, v, dict);
+  HandleProperty(variables::kLdflags, handler_map, v, dict);
+  HandleProperty(variables::kLibs, handler_map, v, dict);
+  HandleProperty(variables::kLibDirs, handler_map, v, dict);
+  HandleProperty(variables::kPrecompiledHeader, handler_map, v, dict);
+  HandleProperty(variables::kPrecompiledSource, handler_map, v, dict);
+  HandleProperty(variables::kSysIncludeDirs, handler_map, v, dict);
 
   return true;
 }
@@ -313,14 +473,14 @@ const char kDesc_Help[] =
   gn desc <out_dir> <label or pattern> [--show=<what to show>] [--blame]
       [--format=json]
 
-  Displays information about a given target or config. The build build
-  parameters will be taken for the build in the given <out_dir>.
+  Displays information about a given target or config. The build parameters
+  will be taken for the build in the given <out_dir>.
 
   The <label or pattern> can be a target label, a config label, or a label
   pattern (see "gn help label_pattern"). A label pattern will only match
   targets.
 
-Possibilities for \<what to show>
+Possibilities for <what to show>
 
   (If unspecified an overall summary will be displayed.)
 
@@ -343,6 +503,7 @@ Possibilities for \<what to show>
   cppflags_cc [--blame]
   cppflags_objc [--blame]
   cppflags_objcc [--blame]
+  data_keys
   defines [--blame]
   depfile
   deps [--all] [--tree] (see below)
@@ -352,14 +513,18 @@ Possibilities for \<what to show>
   ldflags [--blame]
   lib_dirs
   libs
+  metadata
+  output_conversion
   outputs
   public_configs
   public
+  rebase
   script
   sources
   sys_include_dirs [--blame]
   testonly
   visibility
+  walk_keys
 
   runtime_deps
       Compute all runtime deps for the given target. This is a computed list
@@ -373,9 +538,9 @@ Possibilities for \<what to show>
 Shared flags
 )"
 
-ALL_TOOLCHAINS_SWITCH_HELP
+    ALL_TOOLCHAINS_SWITCH_HELP
 
-R"(
+    R"(
   --format=json
       Format the output as JSON instead of text.
 
@@ -383,7 +548,7 @@ Target flags
 
   --blame
       Used with any value specified on a config, this will name the config that
-      cause that target to get the flag. This doesn't currently work for libs
+      causes that target to get the flag. This doesn't currently work for libs
       and lib_dirs because those are inherited and are more complicated to
       figure out the blame (patches welcome).
 
@@ -412,10 +577,9 @@ Printing deps
 )"
 
     TARGET_PRINTING_MODE_COMMAND_LINE_HELP
-"\n"
-    TARGET_TESTONLY_FILTER_COMMAND_LINE_HELP
+    "\n" TARGET_TESTONLY_FILTER_COMMAND_LINE_HELP
 
-R"(
+    R"(
   --tree
       Print a dependency tree. By default, duplicates will be elided with "..."
       but when --all and -tree are used together, no eliding will be performed.
@@ -427,9 +591,9 @@ R"(
       --type, --testonly.
 )"
 
-TARGET_TYPE_FILTER_COMMAND_LINE_HELP
+    TARGET_TYPE_FILTER_COMMAND_LINE_HELP
 
-R"(Note
+    R"(Note
 
   This command will show the full name of directories and source files, but
   when directories and source paths are written to the build file, they will be
@@ -485,9 +649,16 @@ int RunDesc(const std::vector<std::string>& args) {
 
   bool json = cmdline->GetSwitchValueASCII("format") == "json";
 
+  if (target_matches.empty() && config_matches.empty()) {
+    OutputString(
+        "The input " + args[1] + " matches no targets, configs or files.\n",
+        DECORATION_YELLOW);
+    return 1;
+  }
+
   if (json) {
     // Convert all targets/configs to JSON, serialize and print them
-    auto res = base::MakeUnique<base::DictionaryValue>();
+    auto res = std::make_unique<base::DictionaryValue>();
     if (!target_matches.empty()) {
       for (const auto* target : target_matches) {
         res->SetWithoutPathExpansion(
@@ -511,6 +682,7 @@ int RunDesc(const std::vector<std::string>& args) {
   } else {
     // Regular (non-json) formatted output
     bool multiple_outputs = (target_matches.size() + config_matches.size()) > 1;
+    std::map<std::string, DescHandlerFunc> handlers = GetHandlers();
 
     bool printed_output = false;
     for (const Target* target : target_matches) {
@@ -518,7 +690,7 @@ int RunDesc(const std::vector<std::string>& args) {
         OutputString("\n\n");
       printed_output = true;
 
-      if (!PrintTarget(target, what_to_print, !multiple_outputs,
+      if (!PrintTarget(target, what_to_print, !multiple_outputs, handlers,
                        cmdline->HasSwitch(kAll), cmdline->HasSwitch(kTree),
                        cmdline->HasSwitch(kBlame)))
         return 1;
@@ -528,7 +700,7 @@ int RunDesc(const std::vector<std::string>& args) {
         OutputString("\n\n");
       printed_output = true;
 
-      if (!PrintConfig(config, what_to_print, !multiple_outputs))
+      if (!PrintConfig(config, what_to_print, !multiple_outputs, handlers))
         return 1;
     }
   }

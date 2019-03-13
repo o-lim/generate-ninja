@@ -22,12 +22,9 @@ ActionTargetGenerator::ActionTargetGenerator(
     const FunctionCallNode* function_call,
     Target::OutputType type,
     Err* err)
-    : TargetGenerator(target, scope, function_call, err),
-      output_type_(type) {
-}
+    : TargetGenerator(target, scope, function_call, err), output_type_(type) {}
 
-ActionTargetGenerator::~ActionTargetGenerator() {
-}
+ActionTargetGenerator::~ActionTargetGenerator() = default;
 
 void ActionTargetGenerator::DoRun() {
   target_->set_output_type(output_type_);
@@ -36,9 +33,10 @@ void ActionTargetGenerator::DoRun() {
     return;
   if (output_type_ == Target::ACTION_FOREACH && target_->sources().empty()) {
     // Foreach rules must always have some sources to have an effect.
-    *err_ = Err(function_call_, "action_foreach target has no sources.",
-        "If you don't specify any sources, there is nothing to run your\n"
-        "script over.");
+    *err_ =
+        Err(function_call_, "action_foreach target has no sources.",
+            "If you don't specify any sources, there is nothing to run your\n"
+            "script over.");
     return;
   }
 
@@ -85,14 +83,16 @@ void ActionTargetGenerator::DoRun() {
   bool has_rsp_file_name = base::ContainsValue(required_args_substitutions,
                                                SUBSTITUTION_RSP_FILE_NAME);
   if (target_->action_values().uses_rsp_file() && !has_rsp_file_name) {
-    *err_ = Err(function_call_, "Missing {{response_file_name}} in args.",
+    *err_ = Err(
+        function_call_, "Missing {{response_file_name}} in args.",
         "This target defines response_file_contents but doesn't use\n"
         "{{response_file_name}} in the args, which means the response file\n"
         "will be unused.");
     return;
   }
   if (!target_->action_values().uses_rsp_file() && has_rsp_file_name) {
-    *err_ = Err(function_call_, "Missing response_file_contents definition.",
+    *err_ = Err(
+        function_call_, "Missing response_file_contents definition.",
         "This target uses {{response_file_name}} in the args, but does not\n"
         "define response_file_contents which means the response file\n"
         "will be empty.");
@@ -156,10 +156,8 @@ bool ActionTargetGenerator::FillScript() {
   if (!value->VerifyTypeIs(Value::STRING, err_))
     return false;
 
-  SourceFile script_file =
-      scope_->GetSourceDir().ResolveRelativeFile(
-          *value, err_,
-          scope_->settings()->build_settings()->root_path_utf8());
+  SourceFile script_file = scope_->GetSourceDir().ResolveRelativeFile(
+      *value, err_, scope_->settings()->build_settings()->root_path_utf8());
   if (err_->has_error())
     return false;
   target_->action_values().set_script(script_file);
@@ -174,9 +172,8 @@ bool ActionTargetGenerator::FillArgs() {
   if (!target_->action_values().args().Parse(*value, err_))
     return false;
   if (!EnsureValidSubstitutions(
-           target_->action_values().args().required_types(),
-           &IsValidScriptArgsSubstitution,
-           value->origin(), err_))
+          target_->action_values().args().required_types(),
+          &IsValidScriptArgsSubstitution, value->origin(), err_))
     return false;
 
   return true;
@@ -190,8 +187,8 @@ bool ActionTargetGenerator::FillResponseFileContents() {
   if (!target_->action_values().rsp_file_contents().Parse(*value, err_))
     return false;
   if (!EnsureValidSubstitutions(
-           target_->action_values().rsp_file_contents().required_types(),
-           &IsValidSourceSubstitution, value->origin(), err_))
+          target_->action_values().rsp_file_contents().required_types(),
+          &IsValidSourceSubstitution, value->origin(), err_))
     return false;
 
   return true;
@@ -232,15 +229,17 @@ bool ActionTargetGenerator::FillPool() {
 bool ActionTargetGenerator::CheckOutputs() {
   const SubstitutionList& outputs = target_->action_values().outputs();
   if (outputs.list().empty()) {
-    *err_ = Err(function_call_, "Action has no outputs.",
-        "If you have no outputs, the build system can not tell when your\n"
-        "script needs to be run.");
+    *err_ =
+        Err(function_call_, "Action has no outputs.",
+            "If you have no outputs, the build system can not tell when your\n"
+            "script needs to be run.");
     return false;
   }
 
   if (output_type_ == Target::ACTION) {
     if (!outputs.required_types().empty()) {
-      *err_ = Err(function_call_, "Action has patterns in the output.",
+      *err_ = Err(
+          function_call_, "Action has patterns in the output.",
           "An action target should have the outputs completely specified. If\n"
           "you want to provide a mapping from source to output, use an\n"
           "\"action_foreach\" target.");
@@ -249,13 +248,26 @@ bool ActionTargetGenerator::CheckOutputs() {
   } else if (output_type_ == Target::ACTION_FOREACH) {
     // A foreach target should always have a pattern in the outputs.
     if (outputs.required_types().empty()) {
-      *err_ = Err(function_call_,
-          "action_foreach should have a pattern in the output.",
+      *err_ = Err(
+          function_call_, "action_foreach should have a pattern in the output.",
           "An action_foreach target should have a source expansion pattern in\n"
           "it to map source file to unique output file name. Otherwise, the\n"
           "build system can't determine when your script needs to be run.");
       return false;
     }
   }
+  return true;
+}
+
+bool ActionTargetGenerator::FillInputs() {
+  const Value* value = scope_->GetValue(variables::kInputs, true);
+  if (!value)
+    return true;
+
+  Target::FileList dest_inputs;
+  if (!ExtractListOfRelativeFiles(scope_->settings()->build_settings(), *value,
+                                  scope_->GetSourceDir(), &dest_inputs, err_))
+    return false;
+  target_->config_values().inputs().swap(dest_inputs);
   return true;
 }

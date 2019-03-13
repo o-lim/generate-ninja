@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <map>
+#include <mutex>
 #include <sstream>
 #include <vector>
 
@@ -18,7 +19,6 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
-#include "base/synchronization/lock.h"
 #include "tools/gn/filesystem_utils.h"
 #include "tools/gn/label.h"
 
@@ -26,13 +26,11 @@ namespace {
 
 class TraceLog {
  public:
-  TraceLog() {
-    events_.reserve(16384);
-  }
+  TraceLog() { events_.reserve(16384); }
   // Trace items leaked intentionally.
 
   void Add(TraceItem* item) {
-    base::AutoLock lock(lock_);
+    std::lock_guard<std::mutex> lock(lock_);
     events_.push_back(item);
   }
 
@@ -40,7 +38,7 @@ class TraceLog {
   std::vector<TraceItem*> events() const { return events_; }
 
  private:
-  base::Lock lock_;
+  std::mutex lock_;
 
   std::vector<TraceItem*> events_;
 
@@ -58,15 +56,14 @@ struct Coalesced {
 };
 
 bool DurationGreater(const TraceItem* a, const TraceItem* b) {
-  return a->delta() > b->delta();
+  return a->delta().raw() > b->delta().raw();
 }
 
 bool CoalescedDurationGreater(const Coalesced& a, const Coalesced& b) {
   return a.total_duration > b.total_duration;
 }
 
-void SummarizeParses(std::vector<const TraceItem*>& loads,
-                     std::ostream& out) {
+void SummarizeParses(std::vector<const TraceItem*>& loads, std::ostream& out) {
   out << "File parse times: (time in ms, name)\n";
 
   std::sort(loads.begin(), loads.end(), &DurationGreater);
@@ -115,20 +112,16 @@ void SummarizeScriptExecs(std::vector<const TraceItem*>& execs,
 
 TraceItem::TraceItem(Type type,
                      const std::string& name,
-                     base::PlatformThreadId thread_id)
-    : type_(type),
-      name_(name),
-      thread_id_(thread_id) {
-}
+                     std::thread::id thread_id)
+    : type_(type), name_(name), thread_id_(thread_id) {}
 
-TraceItem::~TraceItem() {
-}
+TraceItem::~TraceItem() = default;
 
 ScopedTrace::ScopedTrace(TraceItem::Type t, const std::string& name)
     : item_(nullptr), done_(false) {
   if (trace_log) {
-    item_ = new TraceItem(t, name, base::PlatformThread::CurrentId());
-    item_->set_begin(base::TimeTicks::Now());
+    item_ = new TraceItem(t, name, std::this_thread::get_id());
+    item_->set_begin(TicksNow());
   }
 }
 
@@ -136,8 +129,8 @@ ScopedTrace::ScopedTrace(TraceItem::Type t, const Label& label)
     : item_(nullptr), done_(false) {
   if (trace_log) {
     item_ = new TraceItem(t, label.GetUserVisibleName(false),
-                          base::PlatformThread::CurrentId());
-    item_->set_begin(base::TimeTicks::Now());
+                          std::this_thread::get_id());
+    item_->set_begin(TicksNow());
   }
 }
 
@@ -159,7 +152,7 @@ void ScopedTrace::Done() {
   if (!done_) {
     done_ = true;
     if (trace_log) {
-      item_->set_end(base::TimeTicks::Now());
+      item_->set_end(TicksNow());
       AddTrace(item_);
     }
   }
@@ -235,8 +228,8 @@ std::string SummarizeTraces() {
       check_headers_time += cur->delta().InMillisecondsF();
 
     out << "Header check time: (total time in ms, files checked)\n";
-    out << base::StringPrintf(" %8.2f  %d\n",
-                              check_headers_time, headers_checked);
+    out << base::StringPrintf(" %8.2f  %d\n", check_headers_time,
+                              headers_checked);
   }
 
   return out.str();
@@ -251,7 +244,7 @@ void SaveTraces(const base::FilePath& file_name) {
 
   // Write main thread metadata (assume this is being written on the main
   // thread).
-  out << "{\"pid\":0,\"tid\":" << base::PlatformThread::CurrentId();
+  out << "{\"pid\":0,\"tid\":" << std::this_thread::get_id();
   out << ",\"ts\":0,\"ph\":\"M\",";
   out << "\"name\":\"thread_name\",\"args\":{\"name\":\"Main thread\"}},";
 
@@ -262,7 +255,7 @@ void SaveTraces(const base::FilePath& file_name) {
     if (i != 0)
       out << ",";
     out << "{\"pid\":0,\"tid\":" << item.thread_id();
-    out << ",\"ts\":" << item.begin().ToInternalValue();
+    out << ",\"ts\":" << item.begin();
     out << ",\"ph\":\"X\"";  // "X" = complete event with begin & duration.
     out << ",\"dur\":" << item.delta().InMicroseconds();
 
@@ -335,6 +328,5 @@ void SaveTraces(const base::FilePath& file_name) {
   out << "]}";
 
   std::string out_str = out.str();
-  base::WriteFile(file_name, out_str.data(),
-                       static_cast<int>(out_str.size()));
+  base::WriteFile(file_name, out_str.data(), static_cast<int>(out_str.size()));
 }

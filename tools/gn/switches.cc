@@ -7,8 +7,7 @@
 namespace switches {
 
 const char kArgs[] = "args";
-const char kArgs_HelpShort[] =
-    "--args: Specifies build arguments overrides.";
+const char kArgs_HelpShort[] = "--args: Specifies build arguments overrides.";
 const char kArgs_Help[] =
     R"(--args: Specifies build arguments overrides.
 
@@ -39,21 +38,20 @@ Examples
   gn desc out/Default --args="some_list=[1, false, \"foo\"]"
 )";
 
-#define COLOR_HELP_LONG \
-    "--[no]color: Forces colored output on or off.\n"\
-    "\n"\
-    "  Normally GN will try to detect whether it is outputting to a terminal\n"\
-    "  and will enable or disable color accordingly. Use of these switches\n"\
-    "  will override the default.\n"\
-    "\n"\
-    "Examples\n"\
-    "\n"\
-    "  gn gen out/Default --color\n"\
-    "\n"\
-    "  gn gen out/Default --nocolor\n"
+#define COLOR_HELP_LONG                                                       \
+  "--[no]color: Forces colored output on or off.\n"                           \
+  "\n"                                                                        \
+  "  Normally GN will try to detect whether it is outputting to a terminal\n" \
+  "  and will enable or disable color accordingly. Use of these switches\n"   \
+  "  will override the default.\n"                                            \
+  "\n"                                                                        \
+  "Examples\n"                                                                \
+  "\n"                                                                        \
+  "  gn gen out/Default --color\n"                                            \
+  "\n"                                                                        \
+  "  gn gen out/Default --nocolor\n"
 const char kColor[] = "color";
-const char kColor_HelpShort[] =
-    "--color: Force colored output.";
+const char kColor_HelpShort[] = "--color: Force colored output.";
 const char kColor_Help[] = COLOR_HELP_LONG;
 
 const char kDotfile[] = "dotfile";
@@ -65,9 +63,6 @@ const char kDotfile_Help[] =
   Normally GN loads the ".gn"file  from the source root for some basic
   configuration (see "gn help dotfile"). This flag allows you to
   use a different file.
-
-  Note that this interacts with "--root" in a possibly incorrect way.
-  It would be nice to test the edge cases and document or fix.
 )";
 
 const char kFailOnUnusedArgs[] = "fail-on-unused-args";
@@ -101,8 +96,7 @@ const char kMarkdown_Help[] =
     "--markdown: Write help output in the Markdown format.\n";
 
 const char kNoColor[] = "nocolor";
-const char kNoColor_HelpShort[] =
-    "--nocolor: Force non-colored output.";
+const char kNoColor_HelpShort[] = "--nocolor: Force non-colored output.";
 const char kNoColor_Help[] = COLOR_HELP_LONG;
 
 const char kScriptExecutable[] = "script-executable";
@@ -117,6 +111,39 @@ const char kScriptExecutable_Help[] =
   interpreter.
 )";
 
+const char kMetaDataKeys[] = "data";
+const char kMetaDataKeys_HelpShort[] =
+    "--data: list of data keys to concatenate when collecting metadata.";
+const char kMetaDataKeys_Help[] =
+    R"(--data: list of data keys to concatenate when collecting metadata.
+
+  Data keys identify which variables in the given targets' `metadata`
+  scopes should be collected. At least one data key must be specified.
+)";
+
+const char kMetaWalkKeys[] = "walk";
+const char kMetaWalkKeys_HelpShort[] =
+    "--walk: list of walk keys to traverse when collecting metadata.";
+const char kMetaWalkKeys_Help[] =
+    R"(--walk: list of walk keys to traverse when collecting metadata.
+
+  Walk keys identify which variables in the given targets' `metadata`
+  scopes contain the list of dependencies to walk next. Absence of any
+  walk keys indicates that all deps and data_deps should be walked.
+)";
+
+const char kMetaRebaseFiles[] = "rebase-files";
+const char kMetaRebaseFiles_HelpShort[] =
+    "--rebase-files (boolean): whether to rebase the paths of the collected "
+    "metadata.";
+const char kMetaRebaseFiles_Help[] =
+    R"(--rebase-files: whether to rebase the paths of the collected metadata.
+
+  This flag indicates whether or not to rebase the collected results onto their
+  declaring source directory path. Note that this requires the data key(s) to
+  contain only lists of strings, which will be interpreted as file names.
+)";
+
 const char kQuiet[] = "q";
 const char kQuiet_HelpShort[] =
     "-q: Quiet mode. Don't print output on success.";
@@ -127,8 +154,7 @@ const char kQuiet_Help[] =
 )";
 
 const char kRoot[] = "root";
-const char kRoot_HelpShort[] =
-    "--root: Explicitly specify source root.";
+const char kRoot_HelpShort[] = "--root: Explicitly specify source root.";
 const char kRoot_Help[] =
     R"(--root: Explicitly specify source root.
 
@@ -229,8 +255,7 @@ Examples
 )";
 
 const char kVerbose[] = "v";
-const char kVerbose_HelpShort[] =
-    "-v: Verbose logging.";
+const char kVerbose_HelpShort[] = "-v: Verbose logging.";
 const char kVerbose_Help[] =
     R"(-v: Verbose logging.
 
@@ -256,18 +281,13 @@ const char kAllToolchains[] = "all-toolchains";
 
 // -----------------------------------------------------------------------------
 
-SwitchInfo::SwitchInfo()
-    : short_help(""),
-      long_help("") {
-}
+SwitchInfo::SwitchInfo() : short_help(""), long_help("") {}
 
 SwitchInfo::SwitchInfo(const char* short_help, const char* long_help)
-    : short_help(short_help),
-      long_help(long_help) {
-}
+    : short_help(short_help), long_help(long_help) {}
 
 #define INSERT_VARIABLE(var) \
-    info_map[k##var] = SwitchInfo(k##var##_HelpShort, k##var##_Help);
+  info_map[k##var] = SwitchInfo(k##var##_HelpShort, k##var##_Help);
 
 const SwitchInfoMap& GetSwitches() {
   static SwitchInfoMap info_map;

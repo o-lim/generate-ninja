@@ -5,18 +5,7 @@
 # Toolchain-related configuration that may be needed outside the context of the
 # toolchain() rules themselves.
 
-import("//build_overrides/build.gni")
-import("//build/config/chrome_build.gni")
-
 declare_args() {
-  # If this is set to true, or if LLVM_FORCE_HEAD_REVISION is set to 1
-  # in the environment, we use the revision in the llvm repo to determine
-  # the CLANG_REVISION to use, instead of the version hard-coded into
-  # //tools/clang/scripts/update.py. This should only be used in
-  # conjunction with setting LLVM_FORCE_HEAD_REVISION in the
-  # environment when `gclient runhooks` is run as well.
-  llvm_force_head_revision = false
-
   # Compile with Xcode version of clang instead of hermetic version shipped
   # with the build. Used on iOS to ship official builds (as they are built
   # with the version of clang shipped with Xcode).
@@ -30,6 +19,23 @@ declare_args() {
   # Use absolute file paths in the compiler diagnostics and __FILE__ macro
   # if needed.
   msvc_use_absolute_paths = false
+
+  # Use the system install of Xcode for tools like ibtool, libtool, etc.
+  # This does not affect the compiler. When this variable is false, targets will
+  # instead use a hermetic install of Xcode. [The hermetic install can be
+  # obtained with gclient sync after setting the environment variable
+  # FORCE_MAC_TOOLCHAIN].
+  use_system_xcode = false
+}
+
+if (host_os == "mac" && !use_system_xcode) {
+  _result = exec_script("//build/mac/should_use_hermetic_xcode.py",
+                        [ target_os ],
+                        "value")
+  assert(_result != 2,
+         "Do not allow building targets with the default" +
+             "hermetic toolchain if the minimum OS version is not met.")
+  use_system_xcode = _result == 0
 }
 
 if (generate_linker_map) {
@@ -41,7 +47,6 @@ if (generate_linker_map) {
 }
 
 # The path to the hermetic install of Xcode. Only relevant when
-# use_system_xcode = false.
 hermetic_xcode_path =
     rebase_path("//build/${target_os}_files/Xcode.app", "", root_build_dir)
 

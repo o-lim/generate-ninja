@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "build/build_config.h"
-#include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/functions.h"
 #include "tools/gn/parse_tree.h"
 #include "tools/gn/test_with_scope.h"
+#include "util/build_config.h"
+#include "util/test/test.h"
 
 namespace {
 
@@ -57,7 +57,7 @@ TEST(RebasePath, Strings) {
   EXPECT_EQ("foo/bar", RebaseOne(scope, "foo/bar", ".", "."));
   EXPECT_EQ("foo/bar", RebaseOne(scope, "foo\\bar", ".", "."));
 
-  // Test system path output.
+// Test system path output.
 #if defined(OS_WIN)
   setup.build_settings()->SetRootPath(base::FilePath(L"C:/path/to/src"));
   EXPECT_EQ("C:/path/to/src", RebaseOne(scope, ".", "", "//"));
@@ -134,8 +134,7 @@ TEST(RebasePath, StringsSystemPaths) {
             RebaseOne(scope, "foo/", "//", "/ssd/out/Debug"));
 
   // Test system absolute from-dir.
-  EXPECT_EQ("../../../hdd/src",
-            RebaseOne(scope, ".", "/ssd/out/Debug", "//"));
+  EXPECT_EQ("../../../hdd/src", RebaseOne(scope, ".", "/ssd/out/Debug", "//"));
   EXPECT_EQ("../../../hdd/src/",
             RebaseOne(scope, "./", "/ssd/out/Debug", "//"));
   EXPECT_EQ("../../../hdd/src/foo",

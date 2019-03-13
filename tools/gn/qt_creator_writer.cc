@@ -11,6 +11,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/optional.h"
 
 #include "tools/gn/builder.h"
 #include "tools/gn/config_values_extractors.h"
@@ -28,7 +29,7 @@ base::FilePath::CharType kMainProjectFileSuffix[] =
 base::FilePath::CharType kSourcesFileSuffix[] = FILE_PATH_LITERAL(".files");
 base::FilePath::CharType kIncludesFileSuffix[] = FILE_PATH_LITERAL(".includes");
 base::FilePath::CharType kDefinesFileSuffix[] = FILE_PATH_LITERAL(".config");
-}
+}  // namespace
 
 // static
 bool QtCreatorWriter::RunAndWriteFile(const BuildSettings* build_settings,
@@ -44,8 +45,8 @@ bool QtCreatorWriter::RunAndWriteFile(const BuildSettings* build_settings,
     if (!base::CreateDirectoryAndGetError(project_dir, &error)) {
       *err =
           Err(Location(), "Could not create the QtCreator project directory '" +
-                              FilePathToUTF8(project_dir) + "': " +
-                              base::File::ErrorToString(error));
+                              FilePathToUTF8(project_dir) +
+                              "': " + base::File::ErrorToString(error));
       return false;
     }
   }
@@ -72,7 +73,7 @@ QtCreatorWriter::QtCreatorWriter(const BuildSettings* build_settings,
       root_target_name_(root_target_name),
       all_toolchains_(all_toolchains) {}
 
-QtCreatorWriter::~QtCreatorWriter() {}
+QtCreatorWriter::~QtCreatorWriter() = default;
 
 void QtCreatorWriter::CollectDeps(const Target* target) {
   for (const auto& dep : target->GetDeps(Target::DEPS_ALL)) {
@@ -118,16 +119,130 @@ void QtCreatorWriter::AddToSources(const Target::FileList& files) {
   }
 }
 
+namespace QtCreatorWriterUtils {
+
+enum class CVersion {
+  C99,
+  C11,
+};
+
+enum class CxxVersion {
+  CXX98,
+  CXX03,
+  CXX11,
+  CXX14,
+  CXX17,
+};
+
+std::string ToMacro(CVersion version) {
+  const std::string s = "__STDC_VERSION__";
+
+  switch(version) {
+    case CVersion::C99:
+      return s + " 199901L";
+    case CVersion::C11:
+      return s + " 201112L";
+    }
+
+  return std::string();
+}
+
+std::string ToMacro(CxxVersion version) {
+  const std::string name = "__cplusplus";
+
+  switch(version) {
+    case CxxVersion::CXX98:
+    case CxxVersion::CXX03:
+      return name + " 199711L";
+    case CxxVersion::CXX11:
+      return name + " 201103L";
+    case CxxVersion::CXX14:
+      return name + " 201402L";
+    case CxxVersion::CXX17:
+      return name + " 201703L";
+    }
+
+  return std::string();
+}
+
+const std::map<std::string, CVersion> kFlagToCVersion{
+  {"-std=gnu99" , CVersion::C99},
+  {"-std=c99"   , CVersion::C99},
+  {"-std=gnu11" , CVersion::C11},
+  {"-std=c11"   , CVersion::C11}
+};
+
+const std::map<std::string, CxxVersion> kFlagToCxxVersion{
+  {"-std=gnu++11", CxxVersion::CXX11}, {"-std=c++11", CxxVersion::CXX11},
+  {"-std=gnu++98", CxxVersion::CXX98}, {"-std=c++98", CxxVersion::CXX98},
+  {"-std=gnu++03", CxxVersion::CXX03}, {"-std=c++03", CxxVersion::CXX03},
+  {"-std=gnu++14", CxxVersion::CXX14}, {"-std=c++14", CxxVersion::CXX14},
+  {"-std=c++1y"  , CxxVersion::CXX14},
+  {"-std=gnu++17", CxxVersion::CXX17}, {"-std=c++17", CxxVersion::CXX17},
+  {"-std=c++1z"  , CxxVersion::CXX17},
+};
+
+template<typename Enum>
+struct CompVersion {
+  bool operator()(Enum a, Enum b) {
+    return static_cast<int>(a) < static_cast<int>(b);
+  }
+};
+
+struct CompilerOptions {
+  base::Optional<CVersion> c_version_;
+  base::Optional<CxxVersion> cxx_version_;
+
+  void SetCVersion(CVersion ver) {
+    SetVersionImpl(c_version_, ver);
+  }
+
+  void SetCxxVersion(CxxVersion ver) {
+    SetVersionImpl(cxx_version_, ver);
+  }
+
+private:
+  template<typename Version>
+  void SetVersionImpl(base::Optional<Version> &cur_ver, Version ver) {
+    if (cur_ver)
+      cur_ver = std::max(*cur_ver, ver, CompVersion<Version> {});
+    else
+      cur_ver = ver;
+  }
+};
+
+void ParseCompilerOption(const std::string& flag, CompilerOptions* options) {
+  auto c_ver = kFlagToCVersion.find(flag);
+  if (c_ver != kFlagToCVersion.end())
+    options->SetCVersion(c_ver->second);
+
+  auto cxx_ver = kFlagToCxxVersion.find(flag);
+  if (cxx_ver != kFlagToCxxVersion.end())
+    options->SetCxxVersion(cxx_ver->second);
+}
+
+void ParseCompilerOptions(const std::vector<std::string>& cflags,
+                          CompilerOptions* options) {
+  for (const std::string& flag : cflags)
+    ParseCompilerOption(flag, options);
+}
+
+} // QtCreatorWriterUtils
+
 void QtCreatorWriter::HandleTarget(const Target* target) {
+  using namespace QtCreatorWriterUtils;
+
   SourceFile build_file = Loader::BuildFileForLabel(target->label());
   sources_.insert(FilePathToUTF8(build_settings_->GetFullPath(build_file)));
   AddToSources(target->settings()->import_manager().GetImportedFiles());
 
   AddToSources(target->sources());
   AddToSources(target->public_headers());
-  AddToSources(target->inputs());
 
   for (ConfigValuesIterator it(target); !it.done(); it.Next()) {
+    for (const auto& input : it.cur().inputs())
+      sources_.insert(FilePathToUTF8(build_settings_->GetFullPath(input)));
+
     SourceFile precompiled_source = it.cur().precompiled_source();
     if (!precompiled_source.is_null()) {
       sources_.insert(
@@ -139,13 +254,26 @@ void QtCreatorWriter::HandleTarget(const Target* target) {
           FilePathToUTF8(build_settings_->GetFullPath(include_dir)));
     }
 
+    static constexpr const char *define_str = "#define ";
     for (std::string define : it.cur().defines()) {
       size_t equal_pos = define.find('=');
       if (equal_pos != std::string::npos)
         define[equal_pos] = ' ';
-      define.insert(0, "#define ");
+      define.insert(0, define_str);
       defines_.insert(define);
     }
+
+    CompilerOptions options;
+    ParseCompilerOptions(it.cur().cflags(), &options);
+    ParseCompilerOptions(it.cur().cflags_c(), &options);
+    ParseCompilerOptions(it.cur().cflags_cc(), &options);
+
+    auto add_define_version = [this] (auto &ver) {
+      if (ver)
+        defines_.insert(define_str + ToMacro(*ver));
+    };
+    add_define_version(options.c_version_);
+    add_define_version(options.cxx_version_);
   }
 }
 

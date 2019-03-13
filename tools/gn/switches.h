@@ -13,8 +13,7 @@ namespace switches {
 
 struct SwitchInfo {
   SwitchInfo();
-  SwitchInfo(const char* short_help,
-             const char* long_help);
+  SwitchInfo(const char* short_help, const char* long_help);
 
   const char* short_help;
   const char* long_help;
@@ -47,6 +46,18 @@ extern const char kFailOnUnusedArgs_Help[];
 extern const char kMarkdown[];
 extern const char kMarkdown_HelpShort[];
 extern const char kMarkdown_Help[];
+
+extern const char kMetaDataKeys[];
+extern const char kMetaDataKeys_HelpShort[];
+extern const char kMetaDataKeys_Help[];
+
+extern const char kMetaWalkKeys[];
+extern const char kMetaWalkKeys_HelpShort[];
+extern const char kMetaWalkKeys_Help[];
+
+extern const char kMetaRebaseFiles[];
+extern const char kMetaRebaseFiles_HelpShort[];
+extern const char kMetaRebaseFiles_Help[];
 
 extern const char kNoColor[];
 extern const char kNoColor_HelpShort[];
@@ -92,14 +103,14 @@ extern const char kVersion_Help[];
 // but it's documented in the individual commands it applies to rather than
 // globally.
 extern const char kAllToolchains[];
-#define ALL_TOOLCHAINS_SWITCH_HELP \
-  "  --all-toolchains\n" \
-  "      Normally only inputs in the default toolchain will be included.\n" \
-  "      This switch will turn on matching all toolchains.\n" \
-  "\n" \
-  "      For example, a file is in a target might be compiled twice:\n" \
+#define ALL_TOOLCHAINS_SWITCH_HELP                                             \
+  "  --all-toolchains\n"                                                       \
+  "      Normally only inputs in the default toolchain will be included.\n"    \
+  "      This switch will turn on matching all toolchains.\n"                  \
+  "\n"                                                                         \
+  "      For example, a file is in a target might be compiled twice:\n"        \
   "      once in the default toolchain and once in a secondary one. Without\n" \
-  "      this flag, only the default toolchain one will be matched by\n" \
+  "      this flag, only the default toolchain one will be matched by\n"       \
   "      wildcards. With this flag, both will be matched.\n"
 
 }  // namespace switches

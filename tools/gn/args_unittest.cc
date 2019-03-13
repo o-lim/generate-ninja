@@ -4,9 +4,9 @@
 
 #include "tools/gn/args.h"
 
-#include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/scheduler.h"
 #include "tools/gn/test_with_scope.h"
+#include "util/test/test.h"
 
 // Assertions for VerifyAllOverridesUsed() and DeclareArgs() with multiple
 // toolchains.

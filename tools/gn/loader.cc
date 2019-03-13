@@ -4,9 +4,9 @@
 
 #include "tools/gn/loader.h"
 
+#include <memory>
+
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "tools/gn/build_settings.h"
 #include "tools/gn/err.h"
 #include "tools/gn/filesystem_utils.h"
@@ -23,9 +23,7 @@ namespace {
 
 struct SourceFileAndOrigin {
   SourceFileAndOrigin(const SourceFile& f, const LocationRange& o)
-      : file(f),
-        origin(o) {
-  }
+      : file(f), origin(o) {}
 
   SourceFile file;
   LocationRange origin;
@@ -36,11 +34,9 @@ struct SourceFileAndOrigin {
 // Identifies one time a file is loaded in a given toolchain so we don't load
 // it more than once.
 struct LoaderImpl::LoadID {
-  LoadID() {}
+  LoadID() = default;
   LoadID(const SourceFile& f, const Label& tc_name)
-      : file(f),
-        toolchain_name(tc_name) {
-  }
+      : file(f), toolchain_name(tc_name) {}
 
   bool operator<(const LoadID& other) const {
     if (file.value() == other.file.value())
@@ -60,9 +56,10 @@ struct LoaderImpl::ToolchainRecord {
   ToolchainRecord(const BuildSettings* build_settings,
                   const Label& toolchain_label,
                   const Label& default_toolchain_label)
-      : settings(build_settings,
-                 GetOutputSubdirName(toolchain_label,
-                     toolchain_label == default_toolchain_label)),
+      : settings(
+            build_settings,
+            GetOutputSubdirName(toolchain_label,
+                                toolchain_label == default_toolchain_label)),
         is_toolchain_loaded(false),
         is_config_loaded(false) {
     settings.set_default_toolchain_label(default_toolchain_label);
@@ -81,11 +78,9 @@ struct LoaderImpl::ToolchainRecord {
 
 const void* const Loader::kDefaultToolchainKey = &kDefaultToolchainKey;
 
-Loader::Loader() {
-}
+Loader::Loader() = default;
 
-Loader::~Loader() {
-}
+Loader::~Loader() = default;
 
 void Loader::Load(const Label& label, const LocationRange& origin) {
   Load(BuildFileForLabel(label), origin, label.GetToolchainLabel());
@@ -102,18 +97,17 @@ LoaderImpl::LoaderImpl(const BuildSettings* build_settings)
     : pending_loads_(0), build_settings_(build_settings) {
   // There may not be an active TaskRunner at this point. When that's the case,
   // the calling code is expected to call set_task_runner().
-  if (base::ThreadTaskRunnerHandle::IsSet())
-    task_runner_ = base::ThreadTaskRunnerHandle::Get();
+  task_runner_ = MsgLoop::Current();
 }
 
-LoaderImpl::~LoaderImpl() {
-}
+LoaderImpl::~LoaderImpl() = default;
 
 void LoaderImpl::Load(const SourceFile& file,
                       const LocationRange& origin,
                       const Label& in_toolchain_name) {
   const Label& toolchain_name = in_toolchain_name.is_null()
-      ? default_toolchain_label_ : in_toolchain_name;
+                                    ? default_toolchain_label_
+                                    : in_toolchain_name;
   LoadID load_id(file, toolchain_name);
   if (!invocations_.insert(load_id).second)
     return;  // Already in set, so this file was already loaded or scheduled.
@@ -123,8 +117,8 @@ void LoaderImpl::Load(const SourceFile& file,
     // should not specify a toolchain.
     DCHECK(toolchain_name.is_null());
 
-    std::unique_ptr<ToolchainRecord> new_record(
-        new ToolchainRecord(build_settings_, Label(), Label()));
+    std::unique_ptr<ToolchainRecord> new_record =
+        std::make_unique<ToolchainRecord>(build_settings_, Label(), Label());
     ToolchainRecord* record = new_record.get();
     toolchain_records_[Label()] = std::move(new_record);
 
@@ -144,8 +138,9 @@ void LoaderImpl::Load(const SourceFile& file,
     DCHECK(!default_toolchain_label_.is_null());
 
     // No reference to this toolchain found yet, make one.
-    std::unique_ptr<ToolchainRecord> new_record(new ToolchainRecord(
-        build_settings_, toolchain_name, default_toolchain_label_));
+    std::unique_ptr<ToolchainRecord> new_record =
+        std::make_unique<ToolchainRecord>(build_settings_, toolchain_name,
+                                          default_toolchain_label_);
     record = new_record.get();
     toolchain_records_[toolchain_name] = std::move(new_record);
 
@@ -163,8 +158,9 @@ void LoaderImpl::ToolchainLoaded(const Toolchain* toolchain) {
   ToolchainRecord* record = toolchain_records_[toolchain->label()].get();
   if (!record) {
     DCHECK(!default_toolchain_label_.is_null());
-    std::unique_ptr<ToolchainRecord> new_record(new ToolchainRecord(
-        build_settings_, toolchain->label(), default_toolchain_label_));
+    std::unique_ptr<ToolchainRecord> new_record =
+        std::make_unique<ToolchainRecord>(build_settings_, toolchain->label(),
+                                          default_toolchain_label_);
     record = new_record.get();
     toolchain_records_[toolchain->label()] = std::move(new_record);
   }
@@ -211,8 +207,8 @@ void LoaderImpl::ScheduleLoadFile(const Settings* settings,
   Err err;
   pending_loads_++;
   if (!AsyncLoadFile(origin, settings->build_settings(), file,
-                     base::Bind(&LoaderImpl::BackgroundLoadFile, this,
-                                settings, file, origin),
+                     base::Bind(&LoaderImpl::BackgroundLoadFile, this, settings,
+                                file, origin),
                      &err)) {
     g_scheduler->FailWithError(err);
     DecrementPendingLoads();
@@ -226,8 +222,8 @@ void LoaderImpl::ScheduleLoadBuildConfig(
   pending_loads_++;
   if (!AsyncLoadFile(LocationRange(), settings->build_settings(),
                      settings->build_settings()->build_config_file(),
-                     base::Bind(&LoaderImpl::BackgroundLoadBuildConfig,
-                                this, settings, toolchain_overrides),
+                     base::Bind(&LoaderImpl::BackgroundLoadBuildConfig, this,
+                                settings, toolchain_overrides),
                      &err)) {
     g_scheduler->FailWithError(err);
     DecrementPendingLoads();
@@ -240,18 +236,20 @@ void LoaderImpl::BackgroundLoadFile(const Settings* settings,
                                     const ParseNode* root) {
   if (!root) {
     task_runner_->PostTask(
-        FROM_HERE, base::Bind(&LoaderImpl::DecrementPendingLoads, this));
+        base::BindOnce(&LoaderImpl::DecrementPendingLoads, this));
     return;
   }
 
   if (g_scheduler->verbose_logging()) {
-    g_scheduler->Log("Running", file_name.value() + " with toolchain " +
-                     settings->toolchain_label().GetUserVisibleName(false));
+    g_scheduler->Log("Running",
+                     file_name.value() + " with toolchain " +
+                         settings->toolchain_label().GetUserVisibleName(false));
   }
 
   Scope our_scope(settings->base_config());
   ScopePerFileProvider per_file_provider(&our_scope, true);
   our_scope.set_source_dir(file_name.GetDir());
+  our_scope.AddBuildDependencyFile(file_name);
 
   // Targets, etc. generated as part of running this file will end up here.
   Scope::ItemVector collected_items;
@@ -271,14 +269,13 @@ void LoaderImpl::BackgroundLoadFile(const Settings* settings,
     g_scheduler->FailWithError(err);
   }
 
-
   // Pass all of the items that were defined off to the builder.
   for (auto& item : collected_items)
     settings->build_settings()->ItemDefined(std::move(item));
 
   trace.Done();
 
-  task_runner_->PostTask(FROM_HERE, base::Bind(&LoaderImpl::DidLoadFile, this));
+  task_runner_->PostTask(base::BindOnce(&LoaderImpl::DidLoadFile, this));
 }
 
 void LoaderImpl::BackgroundLoadBuildConfig(
@@ -287,15 +284,17 @@ void LoaderImpl::BackgroundLoadBuildConfig(
     const ParseNode* root) {
   if (!root) {
     task_runner_->PostTask(
-        FROM_HERE, base::Bind(&LoaderImpl::DecrementPendingLoads, this));
+        base::BindOnce(&LoaderImpl::DecrementPendingLoads, this));
     return;
   }
 
   Scope* base_config = settings->base_config();
   base_config->set_source_dir(SourceDir("//"));
+  base_config->AddBuildDependencyFile(
+      settings->build_settings()->build_config_file());
 
-  settings->build_settings()->build_args().SetupRootScope(
-      base_config, toolchain_overrides);
+  settings->build_settings()->build_args().SetupRootScope(base_config,
+                                                          toolchain_overrides);
 
   base_config->SetProcessingBuildConfig();
 
@@ -305,7 +304,7 @@ void LoaderImpl::BackgroundLoadBuildConfig(
     base_config->SetProperty(kDefaultToolchainKey, &default_toolchain_label);
 
   ScopedTrace trace(TraceItem::TRACE_FILE_EXECUTE,
-      settings->build_settings()->build_config_file().value());
+                    settings->build_settings()->build_config_file().value());
   trace.SetToolchain(settings->toolchain_label());
 
   Err err;
@@ -326,7 +325,8 @@ void LoaderImpl::BackgroundLoadBuildConfig(
     // The default toolchain must have been set in the default build config
     // file.
     if (default_toolchain_label.is_null()) {
-      g_scheduler->FailWithError(Err(Location(),
+      g_scheduler->FailWithError(Err(
+          Location(),
           "The default build config file did not call set_default_toolchain()",
           "If you don't call this, I can't figure out what toolchain to use\n"
           "for all of this code."));
@@ -336,9 +336,8 @@ void LoaderImpl::BackgroundLoadBuildConfig(
     }
   }
 
-  task_runner_->PostTask(FROM_HERE,
-                         base::Bind(&LoaderImpl::DidLoadBuildConfig, this,
-                                    settings->toolchain_label()));
+  task_runner_->PostTask(base::BindOnce(&LoaderImpl::DidLoadBuildConfig, this,
+                                        settings->toolchain_label()));
 }
 
 void LoaderImpl::DidLoadFile() {
@@ -428,6 +427,5 @@ bool LoaderImpl::AsyncLoadFile(
     return g_scheduler->input_file_manager()->AsyncLoadFile(
         origin, build_settings, file_name, callback, err);
   }
-  return async_load_file_.Run(
-      origin, build_settings, file_name, callback, err);
+  return async_load_file_.Run(origin, build_settings, file_name, callback, err);
 }

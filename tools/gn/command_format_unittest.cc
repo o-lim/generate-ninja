@@ -2,31 +2,40 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/files/file_util.h"
-#include "base/path_service.h"
-#include "base/strings/string_util.h"
-#include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/command_format.h"
+
+#include "base/files/file_util.h"
+#include "base/strings/string_util.h"
 #include "tools/gn/commands.h"
 #include "tools/gn/setup.h"
+#include "tools/gn/test_with_scheduler.h"
+#include "util/exe_path.h"
+#include "util/test/test.h"
+
+using FormatTest = TestWithScheduler;
 
 #define FORMAT_TEST(n)                                                      \
-  TEST(Format, n) {                                                         \
+  TEST_F(FormatTest, n) {                                                   \
     ::Setup setup;                                                          \
     std::string out;                                                        \
     std::string expected;                                                   \
-    base::FilePath src_dir;                                                 \
-    PathService::Get(base::DIR_SOURCE_ROOT, &src_dir);                      \
+    base::FilePath src_dir =                                                \
+        GetExePath().DirName().Append(FILE_PATH_LITERAL("../.."));          \
     base::SetCurrentDirectory(src_dir);                                     \
     EXPECT_TRUE(commands::FormatFileToString(                               \
-        &setup, SourceFile("//tools/gn/format_test_data/" #n ".gn"), false, \
-        &out));                                                             \
+        &setup, SourceFile("//tools/gn/format_test_data/" #n ".gn"),        \
+        commands::TreeDumpMode::kInactive, &out));                          \
     ASSERT_TRUE(base::ReadFileToString(                                     \
         base::FilePath(FILE_PATH_LITERAL("tools/gn/format_test_data/")      \
                            FILE_PATH_LITERAL(#n)                            \
                                FILE_PATH_LITERAL(".golden")),               \
         &expected));                                                        \
     EXPECT_EQ(expected, out);                                               \
+    /* Make sure formatting the output doesn't cause further changes. */    \
+    std::string out_again;                                                  \
+    EXPECT_TRUE(commands::FormatStringToString(out,                         \
+        commands::TreeDumpMode::kInactive, &out_again));                    \
+    ASSERT_EQ(out, out_again);                                              \
   }
 
 // These are expanded out this way rather than a runtime loop so that
@@ -99,3 +108,11 @@ FORMAT_TEST(064)
 FORMAT_TEST(065)
 FORMAT_TEST(066)
 FORMAT_TEST(067)
+FORMAT_TEST(068)
+FORMAT_TEST(069)
+FORMAT_TEST(070)
+FORMAT_TEST(071)
+FORMAT_TEST(072)
+FORMAT_TEST(073)
+FORMAT_TEST(074)
+FORMAT_TEST(075)

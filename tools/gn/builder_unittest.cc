@@ -2,20 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/builder.h"
 #include "tools/gn/config.h"
 #include "tools/gn/loader.h"
 #include "tools/gn/target.h"
 #include "tools/gn/test_with_scope.h"
 #include "tools/gn/toolchain.h"
+#include "util/test/test.h"
 
-namespace {
+namespace gn_builder_unittest {
 
 class MockLoader : public Loader {
  public:
-  MockLoader() {
-  }
+  MockLoader() = default;
 
   // Loader implementation:
   void Load(const SourceFile& file,
@@ -29,9 +28,7 @@ class MockLoader : public Loader {
     return nullptr;
   }
 
-  bool HasLoadedNone() const {
-    return files_.empty();
-  }
+  bool HasLoadedNone() const { return files_.empty(); }
 
   // Returns true if one/two loads have been requested and they match the given
   // file(s). This will clear the records so it will be empty for the next call.
@@ -50,15 +47,14 @@ class MockLoader : public Loader {
       return false;
     }
 
-    bool match = (
-        (files_[0] == a && files_[1] == b) ||
-        (files_[0] == b && files_[1] == a));
+    bool match = ((files_[0] == a && files_[1] == b) ||
+                  (files_[0] == b && files_[1] == a));
     files_.clear();
     return match;
   }
 
  private:
-  ~MockLoader() override {}
+  ~MockLoader() override = default;
 
   std::vector<SourceFile> files_;
 };
@@ -90,8 +86,6 @@ class BuilderTest : public testing::Test {
   Settings settings_;
   Scope scope_;
 };
-
-}  // namespace
 
 TEST_F(BuilderTest, BasicDeps) {
   SourceDir toolchain_dir = settings_.toolchain_label().dir();
@@ -138,8 +132,7 @@ TEST_F(BuilderTest, BasicDeps) {
   EXPECT_EQ(1u, a_record->unresolved_deps().size());
   EXPECT_NE(a_record->all_deps().end(),
             a_record->all_deps().find(toolchain_record));
-  EXPECT_NE(a_record->all_deps().end(),
-            a_record->all_deps().find(b_record));
+  EXPECT_NE(a_record->all_deps().end(), a_record->all_deps().find(b_record));
   EXPECT_NE(a_record->unresolved_deps().end(),
             a_record->unresolved_deps().find(b_record));
 
@@ -199,10 +192,10 @@ TEST_F(BuilderTest, ShouldGenerate) {
 
   // Construct a dependency chain: A -> B. A is in the default toolchain, B
   // is not.
-  Label a_label(SourceDir("//foo/"), "a",
-                settings_.toolchain_label().dir(), "a");
-  Label b_label(SourceDir("//foo/"), "b",
-                toolchain_label2.dir(), toolchain_label2.name());
+  Label a_label(SourceDir("//foo/"), "a", settings_.toolchain_label().dir(),
+                "a");
+  Label b_label(SourceDir("//foo/"), "b", toolchain_label2.dir(),
+                toolchain_label2.name());
 
   // First define B.
   Target* b = new Target(&settings2, b_label);
@@ -248,3 +241,5 @@ TEST_F(BuilderTest, ConfigLoad) {
   // Should have requested that B is loaded.
   EXPECT_TRUE(loader_->HasLoadedTwo(SourceFile("//b/BUILD.gn"), SourceFile("//b/BUILD.gn")));
 }
+
+}  // namespace gn_builder_unittest

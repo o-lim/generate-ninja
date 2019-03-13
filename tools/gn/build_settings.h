@@ -44,8 +44,10 @@ class BuildSettings {
   // Absolute path of the source root on the local system. Everything is
   // relative to this. Does not end in a [back]slash.
   const base::FilePath& root_path() const { return root_path_; }
+  const base::FilePath& dotfile_name() const { return dotfile_name_; }
   const std::string& root_path_utf8() const { return root_path_utf8_; }
   void SetRootPath(const base::FilePath& r);
+  void set_dotfile_name(const base::FilePath& d) { dotfile_name_ = d; }
 
   // When nonempty, specifies a parallel directory higherarchy in which to
   // search for buildfiles if they're not found in the root higherarchy. This
@@ -84,12 +86,21 @@ class BuildSettings {
   // root source tree.
   base::FilePath GetFullPath(const SourceFile& file) const;
   base::FilePath GetFullPath(const SourceDir& dir) const;
+  // Works the same way as other GetFullPath.
+  // Parameter as_file defines whether path should be treated as a
+  // SourceFile or SourceDir value.
+  base::FilePath GetFullPath(const std::string& path, bool as_file) const;
 
   // Returns the absolute OS path inside the secondary source path. Will return
   // an empty FilePath if the secondary source path is empty. When loading a
   // buildfile, the GetFullPath should always be consulted first.
   base::FilePath GetFullPathSecondary(const SourceFile& file) const;
   base::FilePath GetFullPathSecondary(const SourceDir& dir) const;
+  // Works the same way as other GetFullPathSecondary.
+  // Parameter as_file defines whether path should be treated as a
+  // SourceFile or SourceDir value.
+  base::FilePath GetFullPathSecondary(const std::string& path,
+                                      bool as_file) const;
 
   // Called when an item is defined from a background thread.
   void ItemDefined(std::unique_ptr<Item> item) const;
@@ -117,6 +128,7 @@ class BuildSettings {
   base::FilePath dotfile_path_;
   std::string dotfile_path_utf8_;
   Label root_target_label_;
+  base::FilePath dotfile_name_;
   base::FilePath root_path_;
   std::string root_path_utf8_;
   base::FilePath secondary_source_path_;

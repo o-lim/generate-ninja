@@ -36,6 +36,7 @@ after_build:
 branches:
   except:
     - chromium-gn
+    - google-gn
 
 artifacts:
   - path: out\Release\gn-$(system).zip

@@ -42,14 +42,17 @@ void MergeConfigs(const UniqueVector<LabelConfigPair>& src,
 }
 
 Err MakeTestOnlyError(const Target* from, const Target* to) {
-  return Err(from->defined_from(), "Test-only dependency not allowed.",
-      from->label().GetUserVisibleName(false) + "\n"
-      "which is NOT marked testonly can't depend on\n" +
-      to->label().GetUserVisibleName(false) + "\n"
-      "which is marked testonly. Only targets with \"testonly = true\"\n"
-      "can depend on other test-only targets.\n"
-      "\n"
-      "Either mark it test-only or don't do this dependency.");
+  return Err(
+      from->defined_from(), "Test-only dependency not allowed.",
+      from->label().GetUserVisibleName(false) +
+          "\n"
+          "which is NOT marked testonly can't depend on\n" +
+          to->label().GetUserVisibleName(false) +
+          "\n"
+          "which is marked testonly. Only targets with \"testonly = true\"\n"
+          "can depend on other test-only targets.\n"
+          "\n"
+          "Either mark it test-only or don't do this dependency.");
 }
 
 // Set check_private_deps to true for the first invocation since a target
@@ -232,7 +235,7 @@ Executing target definitions and templates
       ... target parameter definitions ...
     }
 
-  There is also a generic "target" function for programatically defined types
+  There is also a generic "target" function for programmatically defined types
   (see "gn help target"). You can define new types using templates (see "gn
   help template"). A template defines some custom code that expands to one or
   more other targets.
@@ -270,8 +273,10 @@ Dependencies
   future, do not rely on this behavior.
 )";
 
-Target::Target(const Settings* settings, const Label& label)
-    : Item(settings, label),
+Target::Target(const Settings* settings,
+               const Label& label,
+               const std::set<SourceFile>& build_dependency_files)
+    : Item(settings, label, build_dependency_files),
       output_type_(UNKNOWN),
       output_prefix_override_(false),
       output_extension_set_(false),
@@ -282,8 +287,7 @@ Target::Target(const Settings* settings, const Label& label)
       toolchain_(settings->toolchain()) {
 }
 
-Target::~Target() {
-}
+Target::~Target() = default;
 
 // static
 const char* Target::GetStringForOutputType(OutputType type) {
@@ -312,6 +316,8 @@ const char* Target::GetStringForOutputType(OutputType type) {
       return functions::kBundleData;
     case CREATE_BUNDLE:
       return functions::kCreateBundle;
+    case GENERATED_FILE:
+      return functions::kGeneratedFile;
     default:
       return "";
   }
@@ -361,12 +367,14 @@ bool Target::OnResolved(Err* err) {
   // private deps. This step re-exports them as public configs for targets that
   // depend on this one.
   for (const auto& dep : public_deps_) {
-    if (dep.ptr->toolchain() == toolchain()) {
+    if (dep.ptr->toolchain() == toolchain() ||
+        dep.ptr->toolchain()->propagates_configs()) {
       MergeConfigs(dep.ptr->public_configs(), &public_configs_);
     }
   }
   for (const auto& dep : base::Reversed(public_deps_)) {
-    if (dep.ptr->toolchain() == toolchain()) {
+    if (dep.ptr->toolchain() == toolchain() ||
+        dep.ptr->toolchain()->propagates_configs()) {
       MergeConfigs(dep.ptr->public_reverse_configs(), &public_reverse_configs_);
     }
   }
@@ -418,14 +426,18 @@ bool Target::OnResolved(Err* err) {
   if (!write_runtime_deps_output_.value().empty())
     g_scheduler->AddWriteRuntimeDepsTarget(this);
 
+  if (output_type_ == GENERATED_FILE) {
+    DCHECK(!computed_outputs_.empty());
+    g_scheduler->AddGeneratedFile(
+        computed_outputs_[0].AsSourceFile(settings()->build_settings()));
+  }
+
   return true;
 }
 
 bool Target::IsBinary() const {
-  return output_type_ == EXECUTABLE ||
-         output_type_ == SHARED_LIBRARY ||
-         output_type_ == LOADABLE_MODULE ||
-         output_type_ == STATIC_LIBRARY ||
+  return output_type_ == EXECUTABLE || output_type_ == SHARED_LIBRARY ||
+         output_type_ == LOADABLE_MODULE || output_type_ == STATIC_LIBRARY ||
          output_type_ == SOURCE_SET;
 }
 
@@ -440,32 +452,29 @@ bool Target::IsLinkedBinary() const {
 }
 
 bool Target::IsFinal() const {
-  return output_type_ == EXECUTABLE ||
-         output_type_ == SHARED_LIBRARY ||
-         output_type_ == LOADABLE_MODULE ||
-         output_type_ == ACTION ||
-         output_type_ == ACTION_FOREACH ||
-         output_type_ == COPY_FILES ||
+  return output_type_ == EXECUTABLE || output_type_ == SHARED_LIBRARY ||
+         output_type_ == LOADABLE_MODULE || output_type_ == ACTION ||
+         output_type_ == ACTION_FOREACH || output_type_ == COPY_FILES ||
          output_type_ == CREATE_BUNDLE ||
          (output_type_ == STATIC_LIBRARY && complete_static_lib_);
 }
 
 DepsIteratorRange Target::GetDeps(DepsIterationType type) const {
   if (type == DEPS_LINKED) {
-    return DepsIteratorRange(DepsIterator(
-        &public_deps_, &private_deps_, nullptr));
+    return DepsIteratorRange(
+        DepsIterator(&public_deps_, &private_deps_, nullptr));
   }
   // All deps.
-  return DepsIteratorRange(DepsIterator(
-      &public_deps_, &private_deps_, &data_deps_));
+  return DepsIteratorRange(
+      DepsIterator(&public_deps_, &private_deps_, &data_deps_));
 }
 
 std::string Target::GetComputedOutputName() const {
   DCHECK(toolchain_)
       << "Toolchain must be specified before getting the computed output name.";
 
-  const std::string& name = output_name_.empty() ? label().name()
-                                                 : output_name_;
+  const std::string& name =
+      output_name_.empty() ? label().name() : output_name_;
 
   std::string result;
   const Tool* tool = toolchain_->GetToolForTargetFinalOutput(this);
@@ -508,18 +517,20 @@ bool Target::CheckToolchain(Err* err) {
 
   // Tool not specified for this target type.
   if (err) {
-    *err = Err(defined_from(), "This target uses an undefined tool.",
-        base::StringPrintf(
-            "The target %s\n"
-            "of type \"%s\"\n"
-            "uses toolchain %s\n"
-            "which doesn't have the tool \"%s\" defined.\n\n"
-            "Alas, I can not continue.",
-            label().GetUserVisibleName(false).c_str(),
-            GetStringForOutputType(output_type_),
-            label().GetToolchainLabel().GetUserVisibleName(false).c_str(),
-            Toolchain::ToolTypeToName(
-                toolchain_->GetToolTypeForTargetFinalOutput(this)).c_str()));
+    *err =
+        Err(defined_from(), "This target uses an undefined tool.",
+            base::StringPrintf(
+                "The target %s\n"
+                "of type \"%s\"\n"
+                "uses toolchain %s\n"
+                "which doesn't have the tool \"%s\" defined.\n\n"
+                "Alas, I can not continue.",
+                label().GetUserVisibleName(false).c_str(),
+                GetStringForOutputType(output_type_),
+                label().GetToolchainLabel().GetUserVisibleName(false).c_str(),
+                Toolchain::ToolTypeToName(
+                toolchain_->GetToolTypeForTargetFinalOutput(this))
+                    .c_str()));
   }
   return false;
 }
@@ -550,32 +561,34 @@ bool Target::GetOutputFilesForSource(const SourceFile& source,
     return false;  // Tool does not apply for this toolchain.file.
 
   // Figure out what output(s) this compiler produces.
-  SubstitutionWriter::ApplyListToCompilerAsOutputFile(
-      this, source, tool->outputs(), outputs);
+  SubstitutionWriter::ApplyListToCompilerAsOutputFile(this, source,
+                                                      tool->outputs(), outputs);
   return !outputs->empty();
 }
 
 void Target::PullDependentTargetConfigs() {
   const DepsIteratorRange deps_linked = GetDeps(DEPS_LINKED);
   for (const auto& pair : deps_linked) {
-    if (pair.ptr->toolchain() == toolchain()) {
+    if (pair.ptr->toolchain() == toolchain() ||
+        pair.ptr->toolchain()->propagates_configs())
       MergeConfigs(pair.ptr->all_dependent_configs(),
                    &configs_, &all_dependent_configs_);
-    }
   }
   for (const auto& pair : deps_linked) {
-    if (pair.ptr->toolchain() == toolchain()) {
+    if (pair.ptr->toolchain() == toolchain() ||
+        pair.ptr->toolchain()->propagates_configs())
       MergeConfigs(pair.ptr->public_configs(), &configs_);
-    }
   }
   for (const auto& pair : base::Reversed(deps_linked)) {
-    if (pair.ptr->toolchain() == toolchain()) {
+    if (pair.ptr->toolchain() == toolchain() ||
+        pair.ptr->toolchain()->propagates_configs()) {
       MergeConfigs(pair.ptr->all_dependent_reverse_configs(),
                    &reverse_configs_, &all_dependent_reverse_configs_);
     }
   }
   for (const auto& pair : base::Reversed(deps_linked)) {
-    if (pair.ptr->toolchain() == toolchain()) {
+    if (pair.ptr->toolchain() == toolchain() ||
+        pair.ptr->toolchain()->propagates_configs()) {
       MergeConfigs(pair.ptr->public_reverse_configs(), &reverse_configs_);
     }
   }
@@ -606,8 +619,8 @@ void Target::PullDependentTargetLibsFrom(const Target* dep, bool is_public) {
     // Static libraries and source sets aren't inherited across shared
     // library boundaries because they will be linked into the shared
     // library.
-    inherited_libraries_.AppendPublicSharedLibraries(
-        dep->inherited_libraries(), is_public);
+    inherited_libraries_.AppendPublicSharedLibraries(dep->inherited_libraries(),
+                                                     is_public);
   } else if (!dep->IsFinal()) {
     // The current target isn't linked, so propogate linked deps and
     // libraries up the dependency tree.
@@ -630,8 +643,7 @@ void Target::PullDependentTargetLibsFrom(const Target* dep, bool is_public) {
 
   // Direct dependent libraries.
   if (dep->output_type() == STATIC_LIBRARY ||
-      dep->output_type() == SHARED_LIBRARY ||
-      dep->output_type() == SOURCE_SET)
+      dep->output_type() == SHARED_LIBRARY || dep->output_type() == SOURCE_SET)
     inherited_libraries_.Append(dep, is_public);
 }
 
@@ -645,8 +657,18 @@ void Target::PullDependentTargetLibs() {
 void Target::PullRecursiveHardDeps() {
   for (const auto& pair : GetDeps(DEPS_LINKED)) {
     // Direct hard dependencies.
-    if (pair.ptr->hard_dep())
+    if (hard_dep() || pair.ptr->hard_dep()) {
       recursive_hard_deps_.insert(pair.ptr);
+      continue;
+    }
+
+    // If |pair.ptr| is binary target and |pair.ptr| has no public header,
+    // |this| target does not need to have |pair.ptr|'s hard_deps as its
+    // hard_deps to start compiles earlier.
+    if (pair.ptr->IsBinary() && !pair.ptr->all_headers_public() &&
+        pair.ptr->public_headers().empty()) {
+      continue;
+    }
 
     // Recursive hard dependencies of all dependencies.
     recursive_hard_deps_.insert(pair.ptr->recursive_hard_deps().begin(),
@@ -686,7 +708,8 @@ void Target::FillOutputFiles() {
     case SOURCE_SET:
     case COPY_FILES:
     case ACTION:
-    case ACTION_FOREACH: {
+    case ACTION_FOREACH:
+    case GENERATED_FILE: {
       // These don't get linked to and use stamps which should be the first
       // entry in the outputs. These stamps are named
       // "<target_out_dir>/<targetname>.stamp".
@@ -811,18 +834,21 @@ bool Target::ResolvePrecompiledHeaders(Err* err) {
       // Already have a precompiled header values, the settings must match.
       if (config_values_.precompiled_header() != cur.precompiled_header() ||
           config_values_.precompiled_source() != cur.precompiled_source()) {
-        *err = Err(defined_from(),
-            "Precompiled header setting conflict.",
-            "The target " + label().GetUserVisibleName(false) + "\n"
-            "has conflicting precompiled header settings.\n"
-            "\n"
-            "From " + pch_header_settings_from->GetUserVisibleName(false) +
-            "\n  header: " + config_values_.precompiled_header() +
-            "\n  source: " + config_values_.precompiled_source().value() +
-            "\n\n"
-            "From " + config->label().GetUserVisibleName(false) +
-            "\n  header: " + cur.precompiled_header() +
-            "\n  source: " + cur.precompiled_source().value());
+        *err = Err(
+            defined_from(), "Precompiled header setting conflict.",
+            "The target " + label().GetUserVisibleName(false) +
+                "\n"
+                "has conflicting precompiled header settings.\n"
+                "\n"
+                "From " +
+                pch_header_settings_from->GetUserVisibleName(false) +
+                "\n  header: " + config_values_.precompiled_header() +
+                "\n  source: " + config_values_.precompiled_source().value() +
+                "\n\n"
+                "From " +
+                config->label().GetUserVisibleName(false) +
+                "\n  header: " + cur.precompiled_header() +
+                "\n  source: " + cur.precompiled_source().value());
         return false;
       }
     } else {
@@ -871,12 +897,11 @@ bool Target::CheckAssertNoDeps(Err* err) const {
 
   if (!RecursiveCheckAssertNoDeps(this, false, assert_no_deps_, &visited,
                                   &failure_path_str, &failure_pattern)) {
-    *err = Err(defined_from(), "assert_no_deps failed.",
+    *err = Err(
+        defined_from(), "assert_no_deps failed.",
         label().GetUserVisibleName(false) +
-        " has an assert_no_deps entry:\n  " +
-        failure_pattern->Describe() +
-        "\nwhich fails for the dependency path:\n" +
-        failure_path_str);
+            " has an assert_no_deps entry:\n  " + failure_pattern->Describe() +
+            "\nwhich fails for the dependency path:\n" + failure_path_str);
     return false;
   }
   return true;
@@ -891,8 +916,10 @@ void Target::CheckSourcesGenerated() const {
   // See Scheduler::AddUnknownGeneratedInput's declaration for more.
   for (const SourceFile& file : sources_)
     CheckSourceGenerated(file);
-  for (const SourceFile& file : inputs_)
-    CheckSourceGenerated(file);
+  for (ConfigValuesIterator iter(this); !iter.done(); iter.Next()) {
+    for (const SourceFile& file : iter.cur().inputs())
+      CheckSourceGenerated(file);
+  }
   // TODO(agrieve): Check all_libs_ here as well (those that are source files).
   // http://crbug.com/571731
 }
@@ -921,7 +948,9 @@ void Target::CheckSourceGenerated(const SourceFile& source) const {
                                          &seen_targets)) {
     seen_targets.clear();
     // Allow dependency to be through data_deps for files generated by gn.
-    check_data_deps = g_scheduler->IsFileGeneratedByWriteRuntimeDeps(out_file);
+    check_data_deps =
+        g_scheduler->IsFileGeneratedByWriteRuntimeDeps(out_file) ||
+        g_scheduler->IsFileGeneratedByTarget(source);
     // Check object files (much slower and very rare) only if the "normal"
     // output check failed.
     consider_object_files = !check_data_deps;
@@ -930,4 +959,88 @@ void Target::CheckSourceGenerated(const SourceFile& source) const {
                                            check_data_deps, &seen_targets))
       g_scheduler->AddUnknownGeneratedInput(this, source);
   }
+}
+
+bool Target::GetMetadata(const std::vector<std::string>& keys_to_extract,
+                         const std::vector<std::string>& keys_to_walk,
+                         const SourceDir& rebase_dir,
+                         bool deps_only,
+                         std::vector<Value>* result,
+                         std::set<const Target*>* targets_walked,
+                         Err* err) const {
+  std::vector<Value> next_walk_keys;
+  std::vector<Value> current_result;
+  // If deps_only, this is the top-level target and thus we don't want to
+  // collect its metadata, only that of its deps and data_deps.
+  if (deps_only) {
+    // Empty string will be converted below to mean all deps and data_deps.
+    // Origin is null because this isn't declared anywhere, and should never
+    // trigger any errors.
+    next_walk_keys.push_back(Value(nullptr, ""));
+  } else {
+    // Otherwise, we walk this target and collect the appropriate data.
+    if (!metadata_.WalkStep(settings()->build_settings(), keys_to_extract,
+                            keys_to_walk, rebase_dir, &next_walk_keys,
+                            &current_result, err))
+      return false;
+  }
+
+  // Gather walk keys and find the appropriate target. Targets identified in
+  // the walk key set must be deps or data_deps of the declaring target.
+  const DepsIteratorRange& all_deps = GetDeps(Target::DEPS_ALL);
+  for (const auto& next : next_walk_keys) {
+    DCHECK(next.type() == Value::STRING);
+
+    // If we hit an empty string in this list, add all deps and data_deps. The
+    // ordering in the resulting list of values as a result will be the data
+    // from each explicitly listed dep prior to this, followed by all data in
+    // walk order of the remaining deps.
+    if (next.string_value().empty()) {
+      for (const auto& dep : all_deps) {
+        // If we haven't walked this dep yet, go down into it.
+        auto pair = targets_walked->insert(dep.ptr);
+        if (pair.second) {
+          if (!dep.ptr->GetMetadata(keys_to_extract, keys_to_walk, rebase_dir,
+                                    false, result, targets_walked, err))
+            return false;
+        }
+      }
+
+      // Any other walk keys are superfluous, as they can only be a subset of
+      // all deps.
+      break;
+    }
+
+    // Otherwise, look through the target's deps for the specified one.
+    bool found_next = false;
+    for (const auto& dep : all_deps) {
+      // Match against the label with the toolchain.
+      if (dep.label.GetUserVisibleName(true) == next.string_value()) {
+        // If we haven't walked this dep yet, go down into it.
+        auto pair = targets_walked->insert(dep.ptr);
+        if (pair.second) {
+          if (!dep.ptr->GetMetadata(keys_to_extract, keys_to_walk, rebase_dir,
+                                    false, result, targets_walked, err))
+            return false;
+        }
+        // We found it, so we can exit this search now.
+        found_next = true;
+        break;
+      }
+    }
+    // If we didn't find the specified dep in the target, that's an error.
+    // Propagate it back to the user.
+    if (!found_next) {
+      *err = Err(next.origin(),
+                 std::string("I was expecting ") + next.string_value() +
+                     std::string(" to be a dependency of ") +
+                     label().GetUserVisibleName(true) +
+                     ". Make sure it's included in the deps or data_deps, and "
+                     "that you've specified the appropriate toolchain.");
+      return false;
+    }
+  }
+  result->insert(result->end(), std::make_move_iterator(current_result.begin()),
+                 std::make_move_iterator(current_result.end()));
+  return true;
 }

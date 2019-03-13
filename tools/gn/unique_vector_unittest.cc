@@ -6,9 +6,8 @@
 
 #include <algorithm>
 
-#include "base/time/time.h"
-#include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/unique_vector.h"
+#include "util/test/test.h"
 
 TEST(UniqueVector, PushBack) {
   UniqueVector<int> foo;

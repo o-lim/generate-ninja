@@ -2,9 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "tools/gn/commands.h"
 #include "tools/gn/err.h"
@@ -47,8 +49,7 @@ std::string ExtractGNBuildCommands(const base::FilePath& build_ninja_file) {
 namespace commands {
 
 const char kClean[] = "clean";
-const char kClean_HelpShort[] =
-    "clean: Cleans the output directory.";
+const char kClean_HelpShort[] = "clean: Cleans the output directory.";
 const char kClean_Help[] =
     "gn clean: Cleans the output directory.\n"
     "\n"
@@ -59,11 +60,12 @@ const char kClean_Help[] =
 
 int RunClean(const std::vector<std::string>& args) {
   if (args.size() != 1) {
-    Err(Location(), "You're holding it wrong.",
-        "Usage: \"gn clean <out_dir>\"").PrintToStdout();
+    Err(Location(), "You're holding it wrong.", "Usage: \"gn clean <out_dir>\"")
+        .PrintToStdout();
     return 1;
   }
 
+  // Deliberately leaked to avoid expensive process teardown.
   Setup* setup = new Setup;
   if (!setup->DoSetup(args[0], false))
     return 1;
@@ -95,20 +97,14 @@ int RunClean(const std::vector<std::string>& args) {
     return 1;
   }
 
-  // Read the args.gn file, if any. Not all GN builds have one.
-  base::FilePath gn_args_file = build_dir.AppendASCII("args.gn");
-  std::string args_contents;
-  base::ReadFileToString(gn_args_file, &args_contents);
-
-  base::DeleteFile(build_dir, true);
-
-  // Put back the args.gn file (if any).
-  base::CreateDirectory(build_dir);
-  if (!args_contents.empty()) {
-    if (base::WriteFile(gn_args_file, args_contents.data(),
-                        static_cast<int>(args_contents.size())) == -1) {
-      Err(Location(), std::string("Failed to write args.gn.")).PrintToStdout();
-      return 1;
+  base::FileEnumerator traversal(
+      build_dir, false,
+      base::FileEnumerator::FILES | base::FileEnumerator::DIRECTORIES);
+  for (base::FilePath current = traversal.Next(); !current.empty();
+       current = traversal.Next()) {
+    if (base::ToLowerASCII(current.BaseName().value()) !=
+        FILE_PATH_LITERAL("args.gn")) {
+      base::DeleteFile(current, true);
     }
   }
 

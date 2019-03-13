@@ -2,28 +2,9 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/android/config.gni")
 import("//build/config/clang/clang.gni")
-import("//build/config/sanitizers/sanitizers.gni")
-import("//build/config/v8_target_cpu.gni")
 import("//build/toolchain/cc_wrapper.gni")
-import("//build/toolchain/clang_static_analyzer.gni")
-import("//build/toolchain/goma.gni")
 import("//build/toolchain/toolchain.gni")
-
-if (is_nacl) {
-  # To keep NaCl variables out of builds that don't include NaCl, all
-  # variables defined in nacl/config.gni referenced here should be protected by
-  # is_nacl conditions.
-  import("//build/config/nacl/config.gni")
-}
-
-# Path to the Clang static analysis wrapper script.
-# REVIEWERS: can you suggest a better location for this?
-# GN is really picky about dead stores of variables except at the global scope.
-analyzer_wrapper =
-    rebase_path("//build/toolchain/clang_static_analyzer_wrapper.py",
-                root_build_dir) + " --mode=clang"
 
 # This template defines a toolchain for something that works like gcc
 # (including clang).
@@ -130,55 +111,13 @@ template("gcc_toolchain") {
       }
     }
 
-    # When the invoker has explicitly overridden use_goma or cc_wrapper in the
-    # toolchain args, use those values, otherwise default to the global one.
-    # This works because the only reasonable override that toolchains might
-    # supply for these values are to force-disable them.
-    if (defined(toolchain_args.use_goma)) {
-      toolchain_uses_goma = toolchain_args.use_goma
-    } else {
-      toolchain_uses_goma = use_goma
-    }
     if (defined(toolchain_args.cc_wrapper)) {
       toolchain_cc_wrapper = toolchain_args.cc_wrapper
     } else {
       toolchain_cc_wrapper = cc_wrapper
     }
-    assert(!(toolchain_cc_wrapper != "" && toolchain_uses_goma),
-           "Goma and cc_wrapper can't be used together.")
 
-    # When the invoker has explicitly overridden use_goma or cc_wrapper in the
-    # toolchain args, use those values, otherwise default to the global one.
-    # This works because the only reasonable override that toolchains might
-    # supply for these values are to force-disable them.
-    if (toolchain_uses_goma) {
-      goma_path = "$goma_dir/gomacc"
-
-      # Use the static analysis script if static analysis is turned on
-      # AND the tool has not opted out by setting
-      # 'is_clang_static_analysis_supported' to false.
-      if (is_clang && use_clang_static_analyzer &&
-          (!defined(invoker.is_clang_analysis_supported) ||
-           invoker.is_clang_analysis_supported)) {
-        compiler_prefix = "${analyzer_wrapper} ${goma_path} "
-
-        # Create a distinct variable for "asm", since analysis runs pass
-        # a bunch of flags to clang/clang++ that are nonsensical on assembler
-        # runs.
-        asm = "${goma_path} ${invoker.cc}"
-      } else {
-        compiler_prefix = "${goma_path} "
-      }
-    } else {
-      if (is_clang && use_clang_static_analyzer &&
-          (!defined(invoker.is_clang_analysis_supported) ||
-           invoker.is_clang_analysis_supported)) {
-        compiler_prefix = "${analyzer_wrapper} "
-        asm = invoker.cc
-      } else {
-        compiler_prefix = "${toolchain_cc_wrapper} "
-      }
-    }
+    compiler_prefix = "${toolchain_cc_wrapper} "
 
     cc = compiler_prefix + invoker.cc
     cxx = compiler_prefix + invoker.cxx
@@ -283,14 +222,8 @@ template("gcc_toolchain") {
       outputs = [
         # The whitelist file is also an output, but ninja does not
         # currently support multiple outputs for tool("cc").
-        "$object_subdir/{{source_name_part}}.o",
+        "$object_subdir/{{source_file_part}}.o",
       ]
-      if (enable_resource_whitelist_generation) {
-        compile_wrapper =
-            rebase_path("//build/toolchain/gcc_compile_wrapper.py",
-                        root_build_dir)
-        command = "$python_path \"$compile_wrapper\" --resource-whitelist=\"{{output}}.whitelist\" $command"
-      }
     }
 
     tool("cxx") {
@@ -301,14 +234,8 @@ template("gcc_toolchain") {
       outputs = [
         # The whitelist file is also an output, but ninja does not
         # currently support multiple outputs for tool("cxx").
-        "$object_subdir/{{source_name_part}}.o",
+        "$object_subdir/{{source_file_part}}.o",
       ]
-      if (enable_resource_whitelist_generation) {
-        compile_wrapper =
-            rebase_path("//build/toolchain/gcc_compile_wrapper.py",
-                        root_build_dir)
-        command = "$python_path \"$compile_wrapper\" --resource-whitelist=\"{{output}}.whitelist\" $command"
-      }
     }
 
     tool("asm") {
@@ -318,15 +245,12 @@ template("gcc_toolchain") {
       depsformat = "gcc"
       description = "ASM {{output}}"
       outputs = [
-        "$object_subdir/{{source_name_part}}.o",
+        "$object_subdir/{{source_file_part}}.o",
       ]
     }
 
     tool("alink") {
       whitelist_flag = " "
-      if (enable_resource_whitelist_generation) {
-        whitelist_flag = " --resource-whitelist=\"{{output}}.whitelist\""
-      }
 
       # This needs a Python script to avoid using simple sh features in this
       # command, in case the host does not use a POSIX shell (e.g. compiling
@@ -357,10 +281,6 @@ template("gcc_toolchain") {
       sofile = "{{output_dir}}/$soname"  # Possibly including toolchain dir.
       pool = "//build/toolchain:link_pool($default_toolchain)"
       whitelist_flag = " "
-      if (enable_resource_whitelist_generation) {
-        whitelist_file = "$sofile.whitelist"
-        whitelist_flag = " --resource-whitelist=\"$whitelist_file\""
-      }
 
       if (defined(invoker.strip)) {
         unstripped_sofile = "{{root_out_dir}}/lib.unstripped/$soname"
@@ -425,9 +345,6 @@ template("gcc_toolchain") {
         sofile,
         tocfile,
       ]
-      if (enable_resource_whitelist_generation) {
-        outputs += [ whitelist_file ]
-      }
       if (sofile != unstripped_sofile) {
         outputs += [ unstripped_sofile ]
         if (defined(invoker.use_unstripped_as_runtime_outputs) &&

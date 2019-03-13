@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <utility>
 
 #include "tools/gn/action_target_generator.h"
@@ -18,7 +19,9 @@
 #include "tools/gn/err.h"
 #include "tools/gn/filesystem_utils.h"
 #include "tools/gn/functions.h"
+#include "tools/gn/generated_file_target_generator.h"
 #include "tools/gn/group_target_generator.h"
+#include "tools/gn/metadata.h"
 #include "tools/gn/parse_tree.h"
 #include "tools/gn/scheduler.h"
 #include "tools/gn/scope.h"
@@ -34,11 +37,9 @@ TargetGenerator::TargetGenerator(Target* target,
     : target_(target),
       scope_(scope),
       function_call_(function_call),
-      err_(err) {
-}
+      err_(err) {}
 
-TargetGenerator::~TargetGenerator() {
-}
+TargetGenerator::~TargetGenerator() = default;
 
 void TargetGenerator::Run() {
   // All target types use these.
@@ -49,6 +50,9 @@ void TargetGenerator::Run() {
     return;
 
   if (!FillDependencies())
+    return;
+
+  if (!FillMetadata())
     return;
 
   if (!FillTestonly())
@@ -75,9 +79,8 @@ void TargetGenerator::GenerateTarget(Scope* scope,
                                      Err* err) {
   // Name is the argument to the function.
   if (args.size() != 1u || args[0].type() != Value::STRING) {
-    *err = Err(function_call,
-        "Target generator requires one string argument.",
-        "Otherwise I'm not sure what to call this target.");
+    *err = Err(function_call, "Target generator requires one string argument.",
+               "Otherwise I'm not sure what to call this target.");
     return;
   }
 
@@ -90,13 +93,14 @@ void TargetGenerator::GenerateTarget(Scope* scope,
   if (g_scheduler->verbose_logging())
     g_scheduler->Log("Defining target", label.GetUserVisibleName(true));
 
-  std::unique_ptr<Target> target(new Target(scope->settings(), label));
+  std::unique_ptr<Target> target = std::make_unique<Target>(
+      scope->settings(), label, scope->build_dependency_files());
   target->set_defined_from(function_call);
 
   // Create and call out to the proper generator.
   if (output_type == functions::kBundleData) {
-    BundleDataTargetGenerator generator(
-        target.get(), scope, function_call, err);
+    BundleDataTargetGenerator generator(target.get(), scope, function_call,
+                                        err);
     generator.Run();
   } else if (output_type == functions::kCreateBundle) {
     CreateBundleTargetGenerator generator(target.get(), scope, function_call,
@@ -135,6 +139,10 @@ void TargetGenerator::GenerateTarget(Scope* scope,
   } else if (output_type == functions::kStaticLibrary) {
     BinaryTargetGenerator generator(target.get(), scope, function_call,
                                     Target::STATIC_LIBRARY, err);
+    generator.Run();
+  } else if (output_type == functions::kGeneratedFile) {
+    GeneratedFileTargetGenerator generator(target.get(), scope, function_call,
+                                           Target::GENERATED_FILE, err);
     generator.Run();
   } else {
     *err = Err(function_call, "Not a known target type",
@@ -195,19 +203,6 @@ bool TargetGenerator::FillPublic() {
   return true;
 }
 
-bool TargetGenerator::FillInputs() {
-  const Value* value = scope_->GetValue(variables::kInputs, true);
- if (!value)
-   return true;
-
-  Target::FileList dest_inputs;
-  if (!ExtractListOfRelativeFiles(scope_->settings()->build_settings(), *value,
-                                  scope_->GetSourceDir(), &dest_inputs, err_))
-    return false;
-  target_->inputs().swap(dest_inputs);
-  return true;
-}
-
 bool TargetGenerator::FillConfigs() {
   return FillGenericConfigs(variables::kConfigs, &target_->configs());
 }
@@ -243,24 +238,18 @@ bool TargetGenerator::FillData() {
     const Value& input = input_list[i];
     if (!input.VerifyTypeIs(Value::STRING, err_))
       return false;
-    const std::string& input_str = input.string_value();
+    const std::string input_str = input.string_value();
 
     // Treat each input as either a file or a directory, depending on the
     // last character.
-    if (!input_str.empty() && input_str[input_str.size() - 1] == '/') {
-      // Resolve as directory.
-      SourceDir resolved =
-          dir.ResolveRelativeDir(input, input_str, err_, root_path);
-      if (err_->has_error())
-        return false;
-      output_list.push_back(resolved.value());
-    } else {
-      // Resolve as file.
-      SourceFile resolved = dir.ResolveRelativeFile(input, err_, root_path);
-      if (err_->has_error())
-        return false;
-      output_list.push_back(resolved.value());
-    }
+    bool as_dir = !input_str.empty() && input_str[input_str.size() - 1] == '/';
+
+    std::string resolved =
+        dir.ResolveRelativeAs(!as_dir, input, err_, root_path, &input_str);
+    if (err_->has_error())
+      return false;
+
+    output_list.push_back(resolved);
   }
   return true;
 }
@@ -280,6 +269,36 @@ bool TargetGenerator::FillDependencies() {
       return false;
   }
 
+  return true;
+}
+
+bool TargetGenerator::FillMetadata() {
+  // Need to get a mutable value to mark all values in the scope as used. This
+  // cannot be done on a const Scope.
+  Value* value = scope_->GetMutableValue(variables::kMetadata,
+                                         Scope::SEARCH_CURRENT, true);
+
+  if (!value)
+    return true;
+
+  if (!value->VerifyTypeIs(Value::SCOPE, err_))
+    return false;
+
+  Scope* scope_value = value->scope_value();
+
+  scope_value->GetCurrentScopeValues(&target_->metadata().contents());
+  scope_value->MarkAllUsed();
+
+  // Metadata values should always hold lists of Values, such that they can be
+  // collected and concatenated. Any additional specific type verification is
+  // done at walk time.
+  for (const auto& iter : target_->metadata().contents()) {
+    if (!iter.second.VerifyTypeIs(Value::LIST, err_))
+      return false;
+  }
+
+  target_->metadata().set_source_dir(scope_->GetSourceDir());
+  target_->metadata().set_origin(value->origin());
   return true;
 }
 
@@ -314,18 +333,19 @@ bool TargetGenerator::FillOutputs(bool allow_substitutions) {
   if (!allow_substitutions) {
     // Verify no substitutions were actually used.
     if (!outputs.required_types().empty()) {
-      *err_ = Err(*value, "Source expansions not allowed here.",
-          "The outputs of this target used source {{expansions}} but this "
-          "target type\ndoesn't support them. Just express the outputs "
-          "literally.");
+      *err_ =
+          Err(*value, "Source expansions not allowed here.",
+              "The outputs of this target used source {{expansions}} but this "
+              "target type\ndoesn't support them. Just express the outputs "
+              "literally.");
       return false;
     }
   }
 
   // Check the substitutions used are valid for this purpose.
   if (!EnsureValidSubstitutions(outputs.required_types(),
-                                &IsValidSourceSubstitution,
-                                value->origin(), err_))
+                                &IsValidSourceSubstitution, value->origin(),
+                                err_))
     return false;
 
   // Validate that outputs are in the output dir.
@@ -359,19 +379,19 @@ bool TargetGenerator::EnsureSubstitutionIsInOutputDir(
 
   if (pattern.ranges()[0].type == SUBSTITUTION_LITERAL) {
     // If the first thing is a literal, it must start with the output dir.
-    if (!EnsureStringIsInOutputDir(
-            GetBuildSettings()->build_dir(),
-            pattern.ranges()[0].literal, original_value.origin(), err_))
+    if (!EnsureStringIsInOutputDir(GetBuildSettings()->build_dir(),
+                                   pattern.ranges()[0].literal,
+                                   original_value.origin(), err_))
       return false;
   } else {
     // Otherwise, the first subrange must be a pattern that expands to
     // something in the output directory.
     if (!SubstitutionIsInOutputDir(pattern.ranges()[0].type)) {
-      *err_ = Err(original_value,
-          "File is not inside output directory.",
-          "The given file should be in the output directory. Normally you\n"
-          "would specify\n\"$target_out_dir/foo\" or "
-          "\"{{source_gen_dir}}/foo\".");
+      *err_ =
+          Err(original_value, "File is not inside output directory.",
+              "The given file should be in the output directory. Normally you\n"
+              "would specify\n\"$target_out_dir/foo\" or "
+              "\"{{source_gen_dir}}/foo\".");
       return false;
     }
   }
@@ -410,7 +430,7 @@ bool TargetGenerator::FillWriteRuntimeDeps() {
   if (err_->has_error())
     return false;
   if (!EnsureStringIsInOutputDir(GetBuildSettings()->build_dir(),
-          source_file.value(), value->origin(), err_))
+                                 source_file.value(), value->origin(), err_))
     return false;
   OutputFile output_file(GetBuildSettings(), source_file);
   target_->set_write_runtime_deps_output(output_file);

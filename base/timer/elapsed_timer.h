@@ -5,14 +5,13 @@
 #ifndef BASE_TIMER_ELAPSED_TIMER_H_
 #define BASE_TIMER_ELAPSED_TIMER_H_
 
-#include "base/base_export.h"
 #include "base/macros.h"
-#include "base/time/time.h"
+#include "util/ticks.h"
 
 namespace base {
 
-// A simple wrapper around TimeTicks::Now().
-class BASE_EXPORT ElapsedTimer {
+// A simple wrapper around TicksNow().
+class ElapsedTimer {
  public:
   ElapsedTimer();
   ElapsedTimer(ElapsedTimer&& other);
@@ -20,10 +19,10 @@ class BASE_EXPORT ElapsedTimer {
   void operator=(ElapsedTimer&& other);
 
   // Returns the time elapsed since object construction.
-  TimeDelta Elapsed() const;
+  TickDelta Elapsed() const;
 
  private:
-  TimeTicks begin_;
+  Ticks begin_;
 
   DISALLOW_COPY_AND_ASSIGN(ElapsedTimer);
 };

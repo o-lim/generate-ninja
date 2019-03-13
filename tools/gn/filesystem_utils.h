@@ -116,6 +116,16 @@ bool MakeAbsolutePathRelativeIfPossible(const base::StringPiece& source_root,
                                         const base::StringPiece& path,
                                         std::string* dest);
 
+// Given two absolute paths |base| and |target|, returns a relative path to
+// |target| as if the current directory was |base|.  The relative path returned
+// is minimal.  For example, if "../../a/b/" and "../b" are both valid, then the
+// latter will be returned.  On Windows, it's impossible to have a relative path
+// from C:\foo to D:\bar, so the absolute path |target| is returned instead for
+// this case.
+base::FilePath MakeAbsoluteFilePathRelativeIfPossible(
+    const base::FilePath& base,
+    const base::FilePath& target);
+
 // Collapses "." and sequential "/"s and evaluates "..". |path| may be
 // system-absolute, source-absolute, or relative. If |path| is source-absolute
 // and |source_root| is non-empty, |path| may be system absolute after this
@@ -141,6 +151,31 @@ std::string RebasePath(
     const std::string& input,
     const SourceDir& dest_dir,
     const base::StringPiece& source_root = base::StringPiece());
+
+// Resolves a file or dir name (parameter input) relative to
+// value directory. Will return an empty SourceDir/File on error
+// and set the give *err pointer (required). Empty input is always an error.
+// Returned value can be used to set value in either SourceFile or SourceDir
+// (based on as_file parameter).
+//
+// Parameter as_file defines whether result path will look like a file path
+// or it should be treated as a directory (contains "/" and the end
+// of the string).
+//
+// If source_root is supplied, these functions will additionally handle the
+// case where the input is a system-absolute but still inside the source
+// tree. This is the case for some external tools.
+template <typename StringType>
+std::string ResolveRelative(const StringType& input,
+                            const std::string& value,
+                            bool as_file,
+                            const base::StringPiece& source_root);
+
+// Resolves source file or directory relative to some given source root. Returns
+// an empty file path on error.
+base::FilePath ResolvePath(const std::string& value,
+                           bool as_file,
+                           const base::FilePath& source_root);
 
 // Returns the given directory with no terminating slash at the end, such that
 // appending a slash and more stuff will produce a valid path.
@@ -180,7 +215,8 @@ bool WriteFileIfChanged(const base::FilePath& file_path,
 
 // Writes given stream contents to the given file. Returns true if data was
 // successfully written, false otherwise. |err| is set on error if not nullptr.
-bool WriteFile(const base::FilePath& file_path, const std::string& data,
+bool WriteFile(const base::FilePath& file_path,
+               const std::string& data,
                Err* err);
 
 // -----------------------------------------------------------------------------

@@ -6,7 +6,7 @@
 
 #include <sstream>
 
-#include "testing/gtest/include/gtest/gtest.h"
+#include "util/test/test.h"
 
 namespace {
 

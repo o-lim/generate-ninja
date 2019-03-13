@@ -27,7 +27,7 @@ hi def link     gnPredefVar         Constant
 " Target declarations
 syn keyword     gnTarget action action_foreach copy executable group
 syn keyword     gnTarget shared_library source_set static_library
-syn keyword     gnTarget loadable_module
+syn keyword     gnTarget loadable_module generated_file
 hi def link     gnTarget            Type
 
 " Buildfile functions
@@ -39,7 +39,7 @@ syn keyword     gnFunctions mark_used mark_used_from not_needed
 syn keyword     gnFunctions process_file_template read_file rebase_path
 syn keyword     gnFunctions set_default_toolchain set_defaults
 syn keyword     gnFunctions set_sources_assignment_filter target template tool
-syn keyword     gnFunctions toolchain toolchain_args write_file
+syn keyword     gnFunctions toolchain toolchain_args propagates_configs write_file
 hi def link     gnFunctions         Macro
 
 " Variables
@@ -64,7 +64,8 @@ syn keyword     gnVariable precompiled_header_type precompiled_source
 syn keyword     gnVariable restat runtime_link_output public public_configs
 syn keyword     gnVariable public_deps rspfile rspfile_content script sources
 syn keyword     gnVariable sys_include_dirs sys_include_switch testonly
-syn keyword     gnVariable visibility write_runtime_deps
+syn keyword     gnVariable visibility contents output_conversion rebase
+syn keyword     gnVariable data_keys walk_keys
 hi def link     gnVariable          Keyword
 
 " Strings

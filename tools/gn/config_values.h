@@ -23,12 +23,12 @@ class ConfigValues {
   // Appends the values from the given config to this one.
   void AppendValues(const ConfigValues& append);
 
-#define STRING_VALUES_ACCESSOR(name) \
-    const std::vector<std::string>& name() const { return name##_; } \
-    std::vector<std::string>& name() { return name##_; }
-#define DIR_VALUES_ACCESSOR(name) \
-    const std::vector<SourceDir>& name() const { return name##_; } \
-    std::vector<SourceDir>& name() { return name##_; }
+#define STRING_VALUES_ACCESSOR(name)                               \
+  const std::vector<std::string>& name() const { return name##_; } \
+  std::vector<std::string>& name() { return name##_; }
+#define DIR_VALUES_ACCESSOR(name)                                \
+  const std::vector<SourceDir>& name() const { return name##_; } \
+  std::vector<SourceDir>& name() { return name##_; }
 
   // =================================================================
   // IMPORTANT: If you add a new one, be sure to update AppendValues()
@@ -48,10 +48,10 @@ class ConfigValues {
   STRING_VALUES_ACCESSOR(cppflags_objc)
   STRING_VALUES_ACCESSOR(cppflags_objcc)
   STRING_VALUES_ACCESSOR(defines)
-  DIR_VALUES_ACCESSOR   (include_dirs)
-  DIR_VALUES_ACCESSOR   (sys_include_dirs)
+  DIR_VALUES_ACCESSOR(include_dirs)
+  DIR_VALUES_ACCESSOR(sys_include_dirs)
   STRING_VALUES_ACCESSOR(ldflags)
-  DIR_VALUES_ACCESSOR   (lib_dirs)
+  DIR_VALUES_ACCESSOR(lib_dirs)
   // =================================================================
   // IMPORTANT: If you add a new one, be sure to update AppendValues()
   //            and command_desc.cc.
@@ -60,24 +60,19 @@ class ConfigValues {
 #undef STRING_VALUES_ACCESSOR
 #undef DIR_VALUES_ACCESSOR
 
+  const std::vector<SourceFile>& inputs() const { return inputs_; }
+  std::vector<SourceFile>& inputs() { return inputs_; }
+
   const std::vector<LibFile>& libs() const { return libs_; }
   std::vector<LibFile>& libs() { return libs_; }
 
   bool has_precompiled_headers() const {
     return !precompiled_header_.empty() || !precompiled_source_.is_null();
   }
-  const std::string& precompiled_header() const {
-    return precompiled_header_;
-  }
-  void set_precompiled_header(const std::string& f) {
-    precompiled_header_ = f;
-  }
-  const SourceFile& precompiled_source() const {
-    return precompiled_source_;
-  }
-  void set_precompiled_source(const SourceFile& f) {
-    precompiled_source_ = f;
-  }
+  const std::string& precompiled_header() const { return precompiled_header_; }
+  void set_precompiled_header(const std::string& f) { precompiled_header_ = f; }
+  const SourceFile& precompiled_source() const { return precompiled_source_; }
+  void set_precompiled_source(const SourceFile& f) { precompiled_source_ = f; }
 
  private:
   std::vector<std::string> arflags_;
@@ -94,11 +89,12 @@ class ConfigValues {
   std::vector<std::string> cppflags_objc_;
   std::vector<std::string> cppflags_objcc_;
   std::vector<std::string> defines_;
-  std::vector<SourceDir>   include_dirs_;
-  std::vector<SourceDir>   sys_include_dirs_;
+  std::vector<SourceDir> include_dirs_;
+  std::vector<SourceDir> sys_include_dirs_;
+  std::vector<SourceFile> inputs_;
   std::vector<std::string> ldflags_;
-  std::vector<SourceDir>   lib_dirs_;
-  std::vector<LibFile>     libs_;
+  std::vector<SourceDir> lib_dirs_;
+  std::vector<LibFile> libs_;
   // If you add a new one, be sure to update AppendValues().
 
   std::string precompiled_header_;

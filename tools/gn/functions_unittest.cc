@@ -4,13 +4,13 @@
 
 #include "tools/gn/functions.h"
 
+#include <memory>
 #include <utility>
 
-#include "base/memory/ptr_util.h"
-#include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/parse_tree.h"
 #include "tools/gn/test_with_scope.h"
 #include "tools/gn/value.h"
+#include "util/test/test.h"
 
 TEST(Functions, Defined) {
   TestWithScope setup;
@@ -22,7 +22,7 @@ TEST(Functions, Defined) {
   Token undefined_token(Location(), Token::IDENTIFIER, "undef");
   ListNode args_list_identifier_undefined;
   args_list_identifier_undefined.append_item(
-      std::unique_ptr<ParseNode>(new IdentifierNode(undefined_token)));
+      std::make_unique<IdentifierNode>(undefined_token));
   Value result = functions::RunDefined(setup.scope(), &function_call,
                                        &args_list_identifier_undefined, &err);
   ASSERT_EQ(Value::BOOLEAN, result.type());
@@ -31,14 +31,13 @@ TEST(Functions, Defined) {
   // Define a value that's itself a scope value.
   const char kDef[] = "def";  // Defined variable name.
   setup.scope()->SetValue(
-      kDef, Value(nullptr, std::unique_ptr<Scope>(new Scope(setup.scope()))),
-      nullptr);
+      kDef, Value(nullptr, std::make_unique<Scope>(setup.scope())), nullptr);
 
   // Test the defined identifier.
   Token defined_token(Location(), Token::IDENTIFIER, kDef);
   ListNode args_list_identifier_defined;
   args_list_identifier_defined.append_item(
-      std::unique_ptr<ParseNode>(new IdentifierNode(defined_token)));
+      std::make_unique<IdentifierNode>(defined_token));
   result = functions::RunDefined(setup.scope(), &function_call,
                                  &args_list_identifier_defined, &err);
   ASSERT_EQ(Value::BOOLEAN, result.type());
@@ -46,9 +45,10 @@ TEST(Functions, Defined) {
 
   // Should also work by passing an accessor node so you can do
   // "defined(def.foo)" to see if foo is defined on the def scope.
-  std::unique_ptr<AccessorNode> undef_accessor(new AccessorNode);
+  std::unique_ptr<AccessorNode> undef_accessor =
+      std::make_unique<AccessorNode>();
   undef_accessor->set_base(defined_token);
-  undef_accessor->set_member(base::MakeUnique<IdentifierNode>(undefined_token));
+  undef_accessor->set_member(std::make_unique<IdentifierNode>(undefined_token));
   ListNode args_list_accessor_defined;
   args_list_accessor_defined.append_item(std::move(undef_accessor));
   result = functions::RunDefined(setup.scope(), &function_call,
@@ -110,8 +110,7 @@ TEST(Functions, SplitList) {
 
       // Rounding.
       "out6 = split_list([1, 2, 3, 4, 5, 6], 4)\n"
-      "print(\"rounding = $out6\")\n"
-      );
+      "print(\"rounding = $out6\")\n");
   ASSERT_FALSE(input.has_error());
 
   Err err;
@@ -123,6 +122,39 @@ TEST(Functions, SplitList) {
       "one = [[1]] [[1], []]\n"
       "many = [[1, 2, 3, 4, 5], [6, 7, 8, 9]]\n"
       "rounding = [[1, 2], [3, 4], [5], [6]]\n",
+      setup.print_output());
+}
+
+TEST(Functions, StringReplace) {
+  TestWithScope setup;
+
+  TestParseInput input(
+      // Replace all occurrences of string.
+      "out1 = string_replace(\"abbcc\", \"b\", \"d\")\n"
+      "print(out1)\n"
+
+      // Replace only the first occurrence.
+      "out2 = string_replace(\"abbcc\", \"b\", \"d\", 1)\n"
+      "print(out2)\n"
+
+      // Duplicate string to be replaced.
+      "out3 = string_replace(\"abbcc\", \"b\", \"bb\")\n"
+      "print(out3)\n"
+
+      // Handle overlapping occurrences.
+      "out4 = string_replace(\"aaa\", \"aa\", \"b\")\n"
+      "print(out4)\n");
+  ASSERT_FALSE(input.has_error());
+
+  Err err;
+  input.parsed()->Execute(setup.scope(), &err);
+  ASSERT_FALSE(err.has_error()) << err.message();
+
+  EXPECT_EQ(
+      "addcc\n"
+      "adbcc\n"
+      "abbbbcc\n"
+      "ba\n",
       setup.print_output());
 }
 
@@ -169,4 +201,16 @@ TEST(Functions, DeclareArgs) {
   TestWithScope setup2;
   reading_from_different_call.parsed()->Execute(setup2.scope(), &err);
   ASSERT_FALSE(err.has_error());
+}
+
+TEST(Functions, NotNeeded) {
+  TestWithScope setup;
+
+  TestParseInput input("not_needed({ a = 1 }, \"*\")");
+  ASSERT_FALSE(input.has_error());
+
+  Err err;
+  input.parsed()->Execute(setup.scope(), &err);
+  ASSERT_FALSE(err.has_error())
+      << err.message() << err.location().Describe(true);
 }

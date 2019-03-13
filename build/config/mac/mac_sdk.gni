@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/chrome_build.gni")
 import("//build/config/mac/mac_sdk_overrides.gni")
 import("//build/toolchain/toolchain.gni")
 
@@ -20,18 +19,6 @@ declare_args() {
   mac_sdk_name = "macosx"
 }
 
-# Check that the version of macOS SDK used is the one requested when building
-# a version of Chrome shipped to the users. Disable the check if building for
-# iOS as the version macOS SDK used is not relevant for the tool build for the
-# host (they are not shipped) --- this is required as Chrome on iOS is usually
-# build with the latest version of Xcode that may not ship with the version of
-# the macOS SDK used to build Chrome on mac.
-# TODO(crbug.com/635745): the check for target_os should be replaced by a
-# check that current_toolchain is default_toolchain, and the file should
-# assert that current_os is "mac" once this file is no longer included by
-# iOS toolchains.
-_verify_sdk = is_chrome_branded && is_official_build && target_os != "ios"
-
 find_sdk_args = [ "--print_sdk_path" ]
 if (!use_system_xcode) {
   find_sdk_args += [
@@ -39,15 +26,7 @@ if (!use_system_xcode) {
     hermetic_xcode_path,
   ]
 }
-if (_verify_sdk) {
-  find_sdk_args += [
-    "--verify",
-    mac_sdk_min,
-    "--sdk_path=" + mac_sdk_path,
-  ]
-} else {
-  find_sdk_args += [ mac_sdk_min ]
-}
+find_sdk_args += [ mac_sdk_min ]
 
 # The tool will print the SDK path on the first line, and the version on the
 # second line.

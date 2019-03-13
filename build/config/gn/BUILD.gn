@@ -18,6 +18,7 @@ config("ldconfig") {
   if (is_linux) {
     ldflags = [
       "-static",
+      "-Wl,--whole-archive", "-lpthread", "-Wl,--no-whole-archive",
     ]
   }
 }

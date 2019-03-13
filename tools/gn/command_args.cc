@@ -12,10 +12,9 @@
 #include "base/command_line.h"
 #include "base/environment.h"
 #include "base/files/file_util.h"
-#include "base/process/launch.h"
+#include "base/json/json_writer.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "build/build_config.h"
 #include "tools/gn/commands.h"
 #include "tools/gn/filesystem_utils.h"
 #include "tools/gn/input_file.h"
@@ -24,9 +23,11 @@
 #include "tools/gn/standard_out.h"
 #include "tools/gn/tokenizer.h"
 #include "tools/gn/trace.h"
+#include "util/build_config.h"
 
 #if defined(OS_WIN)
 #include <windows.h>
+
 #include <shellapi.h>
 #endif
 
@@ -37,6 +38,7 @@ namespace {
 const char kSwitchList[] = "list";
 const char kSwitchShort[] = "short";
 const char kSwitchOverridesOnly[] = "overrides-only";
+const char kSwitchJson[] = "json";
 
 bool DoesLineBeginWithComment(const base::StringPiece& line) {
   // Skip whitespace.
@@ -56,7 +58,7 @@ size_t BackUpToLineBegin(const std::string& data, size_t offset) {
 
   size_t cur = offset;
   do {
-    cur --;
+    cur--;
     if (Tokenizer::IsNewline(data, cur))
       return cur + 1;  // Want the first character *after* the newline.
   } while (cur > 0);
@@ -64,26 +66,35 @@ size_t BackUpToLineBegin(const std::string& data, size_t offset) {
 }
 
 // Assumes DoesLineBeginWithComment(), this strips the # character from the
-// beginning and normalizes preceeding whitespace.
-std::string StripHashFromLine(const base::StringPiece& line) {
+// beginning and normalizes preceding whitespace.
+std::string StripHashFromLine(const base::StringPiece& line, bool pad) {
   // Replace the # sign and everything before it with 3 spaces, so that a
   // normal comment that has a space after the # will be indented 4 spaces
   // (which makes our formatting come out nicely). If the comment is indented
   // from there, we want to preserve that indenting.
-  return "   " + line.substr(line.find('#') + 1).as_string();
+  std::string line_stripped = line.substr(line.find('#') + 1).as_string();
+  if (pad)
+    return "   " + line_stripped;
+
+  // If not padding, strip the leading space if present.
+  if (!line_stripped.empty() && line_stripped[0] == ' ')
+    return line_stripped.substr(1);
+  return line_stripped;
 }
 
 // Tries to find the comment before the setting of the given value.
 void GetContextForValue(const Value& value,
                         std::string* location_str,
-                        std::string* comment) {
+                        int* line_no,
+                        std::string* comment,
+                        bool pad_comment = true) {
   Location location = value.origin()->GetRange().begin();
   const InputFile* file = location.file();
   if (!file)
     return;
 
-  *location_str = file->name().value() + ":" +
-      base::IntToString(location.line_number());
+  *location_str = file->name().value();
+  *line_no = location.line_number();
 
   const std::string& data = file->contents();
   size_t line_off =
@@ -98,7 +109,7 @@ void GetContextForValue(const Value& value,
     if (!DoesLineBeginWithComment(line))
       break;
 
-    comment->insert(0, StripHashFromLine(line) + "\n");
+    comment->insert(0, StripHashFromLine(line, pad_comment) + "\n");
     line_off = previous_line_offset;
   }
 }
@@ -112,9 +123,11 @@ void GetContextForValue(const Value& value,
 void PrintDefaultValueInfo(base::StringPiece name, const Value& value) {
   OutputString(value.ToString(true) + "\n");
   if (value.origin()) {
+    int line_no;
     std::string location, comment;
-    GetContextForValue(value, &location, &comment);
-    OutputString("      From " + location + "\n");
+    GetContextForValue(value, &location, &line_no, &comment);
+    OutputString("      From " + location + ":" + base::IntToString(line_no) +
+                 "\n");
     if (!comment.empty())
       OutputString("\n" + comment);
   } else {
@@ -134,9 +147,11 @@ void PrintArgHelp(const base::StringPiece& name,
     OutputString("    Current value = " + val.override_value.ToString(true) +
                  "\n");
     if (val.override_value.origin()) {
+      int line_no;
       std::string location, comment;
-      GetContextForValue(val.override_value, &location, &comment);
-      OutputString("      From " + location + "\n");
+      GetContextForValue(val.override_value, &location, &line_no, &comment);
+      OutputString("      From " + location + ":" + base::IntToString(line_no) +
+                   "\n");
     }
     OutputString("    Overridden from the default = ");
     PrintDefaultValueInfo(name, val.default_value);
@@ -147,7 +162,50 @@ void PrintArgHelp(const base::StringPiece& name,
   }
 }
 
+void BuildArgJson(base::Value& dict,
+                  const base::StringPiece& name,
+                  const Args::ValueWithOverride& arg,
+                  bool short_only) {
+  assert(dict.is_dict());
+
+  // Fetch argument name.
+  dict.SetKey("name", base::Value(name));
+
+  // Fetch overridden value inforrmation (if present).
+  if (arg.has_override) {
+    base::DictionaryValue override_dict;
+    override_dict.SetKey("value",
+                         base::Value(arg.override_value.ToString(true)));
+    if (arg.override_value.origin() && !short_only) {
+      int line_no;
+      std::string location, comment;
+      GetContextForValue(arg.override_value, &location, &line_no, &comment,
+                         /*pad_comment=*/false);
+      override_dict.SetKey("file", base::Value(location));
+      override_dict.SetKey("line", base::Value(line_no));
+    }
+    dict.SetKey("current", std::move(override_dict));
+  }
+
+  // Fetch default value information, and comment (if present).
+  base::DictionaryValue default_dict;
+  std::string comment;
+  default_dict.SetKey("value", base::Value(arg.default_value.ToString(true)));
+  if (arg.default_value.origin() && !short_only) {
+    int line_no;
+    std::string location;
+    GetContextForValue(arg.default_value, &location, &line_no, &comment,
+                       /*pad_comment=*/false);
+    default_dict.SetKey("file", base::Value(location));
+    default_dict.SetKey("line", base::Value(line_no));
+  }
+  dict.SetKey("default", std::move(default_dict));
+  if (!comment.empty() && !short_only)
+    dict.SetKey("comment", base::Value(comment));
+}
+
 int ListArgs(const std::string& build_dir) {
+  // Deliberately leaked to avoid expensive process teardown.
   Setup* setup = new Setup;
   if (!setup->DoSetup(build_dir, false) || !setup->Run())
     return 1;
@@ -161,8 +219,10 @@ int ListArgs(const std::string& build_dir) {
     auto found = args.find(list_value);
     if (found == args.end()) {
       Err(Location(), "Unknown build argument.",
-          "You asked for \"" + list_value + "\" which I didn't find in any "
-          "build file\nassociated with this build.").PrintToStdout();
+          "You asked for \"" + list_value +
+              "\" which I didn't find in any "
+              "build file\nassociated with this build.")
+          .PrintToStdout();
       return 1;
     }
 
@@ -175,8 +235,26 @@ int ListArgs(const std::string& build_dir) {
   // Cache this to avoid looking it up for each |arg| in the loops below.
   const bool overrides_only =
       base::CommandLine::ForCurrentProcess()->HasSwitch(kSwitchOverridesOnly);
+  const bool short_only =
+      base::CommandLine::ForCurrentProcess()->HasSwitch(kSwitchShort);
 
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(kSwitchShort)) {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(kSwitchJson)) {
+    // Convert all args to JSON, serialize and print them
+    auto list = std::make_unique<base::ListValue>();
+    for (const auto& arg : args) {
+      if (overrides_only && !arg.second.has_override)
+        continue;
+      list->GetList().emplace_back(base::DictionaryValue());
+      BuildArgJson(list->GetList().back(), arg.first, arg.second, short_only);
+    }
+    std::string s;
+    base::JSONWriter::WriteWithOptions(
+        *list.get(), base::JSONWriter::OPTIONS_PRETTY_PRINT, &s);
+    OutputString(s);
+    return 0;
+  }
+
+  if (short_only) {
     // Short <key>=<current_value> output.
     for (const auto& arg : args) {
       if (overrides_only && !arg.second.has_override)
@@ -215,8 +293,8 @@ bool RunEditor(const base::FilePath& file_to_edit) {
   info.lpClass = L".txt";
   if (!::ShellExecuteEx(&info)) {
     Err(Location(), "Couldn't run editor.",
-        "Just edit \"" + FilePathToUTF8(file_to_edit) +
-        "\" manually instead.").PrintToStdout();
+        "Just edit \"" + FilePathToUTF8(file_to_edit) + "\" manually instead.")
+        .PrintToStdout();
     return false;
   }
 
@@ -256,8 +334,7 @@ bool RunEditor(const base::FilePath& file_to_edit) {
   cmd.append(escaped_name);
   cmd.push_back('"');
 
-  OutputString("Waiting for editor on \"" + file_to_edit.value() +
-               "\"...\n");
+  OutputString("Waiting for editor on \"" + file_to_edit.value() + "\"...\n");
   return system(cmd.c_str()) == 0;
 }
 
@@ -303,8 +380,8 @@ int EditArgsFile(const std::string& build_dir) {
 #if defined(OS_WIN)
     // Use Windows lineendings for this file since it will often open in
     // Notepad which can't handle Unix ones.
-    base::ReplaceSubstringsAfterOffset(
-        &argfile_default_contents, 0, "\n", "\r\n");
+    base::ReplaceSubstringsAfterOffset(&argfile_default_contents, 0, "\n",
+                                       "\r\n");
 #endif
     base::CreateDirectory(arg_file.DirName());
     base::WriteFile(arg_file, argfile_default_contents.c_str(),
@@ -352,10 +429,10 @@ int EditArgsFile(const std::string& build_dir) {
 
 }  // namespace
 
-extern const char kArgs[] = "args";
-extern const char kArgs_HelpShort[] =
+const char kArgs[] = "args";
+const char kArgs_HelpShort[] =
     "args: Display or configure arguments declared by the build.";
-extern const char kArgs_Help[] =
+const char kArgs_Help[] =
     R"(gn args: Display or configure arguments declared by the build.
 
   gn args <out_dir> [--list] [--short] [--args] [--overrides-only]
@@ -380,14 +457,14 @@ Usage
       Note: you can edit the build args manually by editing the file "args.gn"
       in the build directory and then running "gn gen <out_dir>".
 
-  gn args <out_dir> --list[=<exact_arg>] [--short] [--overrides-only]
+  gn args <out_dir> --list[=<exact_arg>] [--short] [--overrides-only] [--json]
       Lists all build arguments available in the current configuration, or, if
       an exact_arg is specified for the list flag, just that one build
       argument.
 
       The output will list the declaration location, current value for the
       build, default value (if different than the current value), and comment
-      preceeding the declaration.
+      preceding the declaration.
 
       If --short is specified, only the names and current values will be
       printed.
@@ -396,6 +473,25 @@ Usage
       arguments that have been overridden (i.e. non-default arguments) will
       be printed. Overrides come from the <out_dir>/args.gn file and //.gn
 
+      If --json is specified, the output will be emitted in json format.
+      JSON schema for output:
+      [
+        {
+          "name": variable_name,
+          "current": {
+            "value": overridden_value,
+            "file": file_name,
+            "line": line_no
+          },
+          "default": {
+            "value": default_value,
+            "file": file_name,
+            "line": line_no
+          },
+          "comment": comment_string
+        },
+        ...
+      ]
 
 Examples
 
@@ -422,7 +518,8 @@ int RunArgs(const std::vector<std::string>& args) {
   if (args.size() != 1) {
     Err(Location(), "Exactly one build dir needed.",
         "Usage: \"gn args <out_dir>\"\n"
-        "Or see \"gn help args\" for more variants.").PrintToStdout();
+        "Or see \"gn help args\" for more variants.")
+        .PrintToStdout();
     return 1;
   }
 

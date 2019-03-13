@@ -9,11 +9,11 @@
 #include "base/files/file_util.h"
 #include "tools/gn/filesystem_utils.h"
 
-BuildSettings::BuildSettings() {
-}
+BuildSettings::BuildSettings() = default;
 
 BuildSettings::BuildSettings(const BuildSettings& other)
-    : root_path_(other.root_path_),
+    : dotfile_name_(other.dotfile_name_),
+      root_path_(other.root_path_),
       root_path_utf8_(other.root_path_utf8_),
       secondary_source_path_(other.secondary_source_path_),
       python_path_(other.python_path_),
@@ -22,8 +22,7 @@ BuildSettings::BuildSettings(const BuildSettings& other)
       build_dir_(other.build_dir_),
       build_args_(other.build_args_) {}
 
-BuildSettings::~BuildSettings() {
-}
+BuildSettings::~BuildSettings() = default;
 
 void BuildSettings::SetDotFilePath(const base::FilePath& d) {
   DCHECK(d.value()[d.value().size() - 1] != base::FilePath::kSeparators[0]);
@@ -57,14 +56,24 @@ base::FilePath BuildSettings::GetFullPath(const SourceDir& dir) const {
   return dir.Resolve(root_path_).NormalizePathSeparatorsTo('/');
 }
 
+base::FilePath BuildSettings::GetFullPath(const std::string& path,
+                                          bool as_file) const {
+  return ResolvePath(path, as_file, root_path_).NormalizePathSeparatorsTo('/');
+}
+
 base::FilePath BuildSettings::GetFullPathSecondary(
     const SourceFile& file) const {
   return file.Resolve(secondary_source_path_).NormalizePathSeparatorsTo('/');
 }
 
-base::FilePath BuildSettings::GetFullPathSecondary(
-    const SourceDir& dir) const {
+base::FilePath BuildSettings::GetFullPathSecondary(const SourceDir& dir) const {
   return dir.Resolve(secondary_source_path_).NormalizePathSeparatorsTo('/');
+}
+
+base::FilePath BuildSettings::GetFullPathSecondary(const std::string& path,
+                                                   bool as_file) const {
+  return ResolvePath(path, as_file, secondary_source_path_)
+      .NormalizePathSeparatorsTo('/');
 }
 
 void BuildSettings::ItemDefined(std::unique_ptr<Item> item) const {

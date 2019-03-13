@@ -6,13 +6,15 @@
 #define TOOLS_GN_ARGS_H_
 
 #include <map>
+#include <mutex>
+#include <set>
+#include <unordered_map>
 
-#include "base/containers/hash_tables.h"
 #include "base/macros.h"
-#include "base/synchronization/lock.h"
 #include "tools/gn/scope.h"
 
 class Err;
+class SourceFile;
 
 extern const char kBuildArgs_Help[];
 
@@ -32,7 +34,7 @@ class Args {
 
     Value default_value;  // Default value given in declare_args.
 
-    bool has_override;  // True indicates override_value is valid.
+    bool has_override;     // True indicates override_value is valid.
     Value override_value;  // From .gn or the current build's "gn args".
   };
   using ValueWithOverrideMap = std::map<base::StringPiece, ValueWithOverride>;
@@ -45,6 +47,10 @@ class Args {
   // on the command line.
   void AddArgOverride(const char* name, const Value& value);
   void AddArgOverrides(const Scope::KeyValueMap& overrides);
+
+  // Specifies default overrides of the build arguments. These are normally
+  // specified in the .gn file.
+  void AddDefaultArgOverrides(const Scope::KeyValueMap& overrides);
 
   // Returns the value corresponding to the given argument name, or NULL if no
   // argument is set.
@@ -73,14 +79,25 @@ class Args {
   // arguments. If there are, this returns false and sets the error.
   bool VerifyAllOverridesUsed(Err* err) const;
 
-  // Returns information about all arguements, both defaults and overrides.
+  // Returns information about all arguments, both defaults and overrides.
   // This is used for the help system which is not performance critical. Use a
-  // map instead of a hash map so the arguements are sorted alphabetically.
+  // map instead of a hash map so the arguments are sorted alphabetically.
   ValueWithOverrideMap GetAllArguments() const;
+
+  // Returns the set of build files that may affect the build arguments, please
+  // refer to Scope for how this is determined.
+  const std::set<SourceFile>& build_args_dependency_files() const {
+    return build_args_dependency_files_;
+  }
+
+  void set_build_args_dependency_files(
+      const std::set<SourceFile>& build_args_dependency_files) {
+    build_args_dependency_files_ = build_args_dependency_files;
+  }
 
  private:
   using ArgumentsPerToolchain =
-      base::hash_map<const Settings*, Scope::KeyValueMap>;
+      std::unordered_map<const Settings*, Scope::KeyValueMap>;
 
   // Sets the default config based on the current system.
   void SetSystemVarsLocked(Scope* scope) const;
@@ -106,7 +123,7 @@ class Args {
   // this is not protected by the lock. It should be set only during init.
   Scope::KeyValueMap overrides_;
 
-  mutable base::Lock lock_;
+  mutable std::mutex lock_;
 
   // Maintains a list of all overrides we've ever seen. This is the main
   // |overrides_| as well as toolchain overrides. Tracking this allows us to
@@ -124,6 +141,8 @@ class Args {
   // can apply the correct override for the current toolchain, once
   // we see an argument declaration.
   mutable ArgumentsPerToolchain toolchain_overrides_;
+
+  std::set<SourceFile> build_args_dependency_files_;
 
   DISALLOW_ASSIGN(Args);
 };

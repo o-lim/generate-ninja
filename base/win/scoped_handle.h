@@ -5,11 +5,9 @@
 #ifndef BASE_WIN_SCOPED_HANDLE_H_
 #define BASE_WIN_SCOPED_HANDLE_H_
 
-#include <windows.h>
+#include "base/win/windows_types.h"
 
-#include "base/base_export.h"
 #include "base/gtest_prod_util.h"
-#include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
 
@@ -18,8 +16,8 @@
 #include <intrin.h>
 #define BASE_WIN_GET_CALLER _ReturnAddress()
 #elif defined(COMPILER_GCC)
-#define BASE_WIN_GET_CALLER __builtin_extract_return_addr(\\
-    __builtin_return_address(0))
+#define BASE_WIN_GET_CALLER \
+  __builtin_extract_return_addr(\ __builtin_return_address(0))
 #endif
 
 namespace base {
@@ -50,13 +48,9 @@ class GenericScopedHandle {
     Set(other.Take());
   }
 
-  ~GenericScopedHandle() {
-    Close();
-  }
+  ~GenericScopedHandle() { Close(); }
 
-  bool IsValid() const {
-    return Traits::IsHandleValid(handle_);
-  }
+  bool IsValid() const { return Traits::IsHandleValid(handle_); }
 
   GenericScopedHandle& operator=(GenericScopedHandle&& other) {
     DCHECK_NE(this, &other);
@@ -72,34 +66,23 @@ class GenericScopedHandle {
 
       if (Traits::IsHandleValid(handle)) {
         handle_ = handle;
-        Verifier::StartTracking(handle, this, BASE_WIN_GET_CALLER,
-                                GetProgramCounter());
       }
       ::SetLastError(last_error);
     }
   }
 
-  Handle Get() const {
-    return handle_;
-  }
+  Handle Get() const { return handle_; }
 
   // Transfers ownership away from this object.
   Handle Take() {
     Handle temp = handle_;
     handle_ = Traits::NullHandle();
-    if (Traits::IsHandleValid(temp)) {
-      Verifier::StopTracking(temp, this, BASE_WIN_GET_CALLER,
-                             GetProgramCounter());
-    }
     return temp;
   }
 
   // Explicitly closes the owned handle.
   void Close() {
     if (Traits::IsHandleValid(handle_)) {
-      Verifier::StopTracking(handle_, this, BASE_WIN_GET_CALLER,
-                             GetProgramCounter());
-
       Traits::CloseHandle(handle_);
       handle_ = Traits::NullHandle();
     }
@@ -121,7 +104,7 @@ class HandleTraits {
   typedef HANDLE Handle;
 
   // Closes the handle.
-  static bool BASE_EXPORT CloseHandle(HANDLE handle);
+  static bool CloseHandle(HANDLE handle);
 
   // Returns true if the handle value is valid.
   static bool IsHandleValid(HANDLE handle) {
@@ -129,9 +112,7 @@ class HandleTraits {
   }
 
   // Returns NULL handle value.
-  static HANDLE NullHandle() {
-    return NULL;
-  }
+  static HANDLE NullHandle() { return NULL; }
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(HandleTraits);
@@ -142,24 +123,32 @@ class DummyVerifierTraits {
  public:
   typedef HANDLE Handle;
 
-  static void StartTracking(HANDLE handle, const void* owner,
-                            const void* pc1, const void* pc2) {}
-  static void StopTracking(HANDLE handle, const void* owner,
-                           const void* pc1, const void* pc2) {}
+  static void StartTracking(HANDLE handle,
+                            const void* owner,
+                            const void* pc1,
+                            const void* pc2) {}
+  static void StopTracking(HANDLE handle,
+                           const void* owner,
+                           const void* pc1,
+                           const void* pc2) {}
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(DummyVerifierTraits);
 };
 
 // Performs actual run-time tracking.
-class BASE_EXPORT VerifierTraits {
+class VerifierTraits {
  public:
   typedef HANDLE Handle;
 
-  static void StartTracking(HANDLE handle, const void* owner,
-                            const void* pc1, const void* pc2);
-  static void StopTracking(HANDLE handle, const void* owner,
-                           const void* pc1, const void* pc2);
+  static void StartTracking(HANDLE handle,
+                            const void* owner,
+                            const void* pc1,
+                            const void* pc2);
+  static void StopTracking(HANDLE handle,
+                           const void* owner,
+                           const void* pc1,
+                           const void* pc2);
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(VerifierTraits);
@@ -170,18 +159,13 @@ typedef GenericScopedHandle<HandleTraits, VerifierTraits> ScopedHandle;
 // This function may be called by the embedder to disable the use of
 // VerifierTraits at runtime. It has no effect if DummyVerifierTraits is used
 // for ScopedHandle.
-BASE_EXPORT void DisableHandleVerifier();
+void DisableHandleVerifier();
 
 // This should be called whenever the OS is closing a handle, if extended
 // verification of improper handle closing is desired. If |handle| is being
 // tracked by the handle verifier and ScopedHandle is not the one closing it,
 // a CHECK is generated.
-BASE_EXPORT void OnHandleBeingClosed(HANDLE handle);
-
-// This testing function returns the module that the ActiveVerifier concrete
-// implementation was instantiated in.
-BASE_EXPORT HMODULE GetHandleVerifierModuleForTesting();
-
+void OnHandleBeingClosed(HANDLE handle);
 }  // namespace win
 }  // namespace base
 

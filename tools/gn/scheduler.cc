@@ -8,84 +8,32 @@
 #include <sstream>
 
 #include "base/bind.h"
-#include "base/command_line.h"
 #include "base/files/file_util.h"
-#include "base/single_thread_task_runner.h"
-#include "base/strings/string_number_conversions.h"
-#include "build/build_config.h"
 #include "tools/gn/filesystem_utils.h"
 #include "tools/gn/standard_out.h"
-#include "tools/gn/switches.h"
 #include "tools/gn/target.h"
 
-#if defined(OS_WIN)
-#include <windows.h>
-#else
-#include <unistd.h>
-#endif
+namespace {}  // namespace
 
 Scheduler* g_scheduler = nullptr;
 
-namespace {
-
-#if defined(OS_WIN)
-int GetCPUCount() {
-  SYSTEM_INFO sysinfo;
-  ::GetSystemInfo(&sysinfo);
-  return sysinfo.dwNumberOfProcessors;
-}
-#else
-int GetCPUCount() {
-  return static_cast<int>(sysconf(_SC_NPROCESSORS_ONLN));
-}
-#endif
-
-int GetThreadCount() {
-  std::string thread_count =
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          switches::kThreads);
-
-  // See if an override was specified on the command line.
-  int result;
-  if (!thread_count.empty() && base::StringToInt(thread_count, &result))
-    return result;
-
-  // Base the default number of worker threads on number of cores in the
-  // system. When building large projects, the speed can be limited by how fast
-  // the main thread can dispatch work and connect the dependency graph. If
-  // there are too many worker threads, the main thread can be starved and it
-  // will run slower overall.
-  //
-  // One less worker thread than the number of physical CPUs seems to be a
-  // good value, both theoretically and experimentally. But always use at
-  // least some workers to prevent us from being too sensitive to I/O latency
-  // on low-end systems.
-  //
-  // The minimum thread count is based on measuring the optimal threads for the
-  // Chrome build on a several-year-old 4-core MacBook.
-  int num_cores = GetCPUCount() / 2;  // Almost all CPUs now are hyperthreaded.
-  return std::max(num_cores - 1, 8);
-}
-
-}  // namespace
-
 Scheduler::Scheduler()
-    : pool_(new base::SequencedWorkerPool(GetThreadCount(),
-                                          "worker_",
-                                          base::TaskPriority::USER_VISIBLE)),
+    : main_thread_run_loop_(MsgLoop::Current()),
       input_file_manager_(new InputFileManager),
       verbose_logging_(false),
       verbose_log_file_(),
       env_logging_(false),
-      work_count_(0),
+      pool_work_count_lock_(),
+      pool_work_count_cv_(),
+      worker_pool_(),
       is_failed_(false),
+      suppress_output_for_testing_(false),
       has_been_shutdown_(false) {
   g_scheduler = this;
 }
 
 Scheduler::~Scheduler() {
-  if (!has_been_shutdown_)
-    pool_->Shutdown();
+  WaitForPoolTasks();
   g_scheduler = nullptr;
 }
 
@@ -96,33 +44,26 @@ void Scheduler::set_verbose_log(const base::FilePath& file_name) {
 }
 
 bool Scheduler::Run() {
-  runner_.Run();
+  main_thread_run_loop_->Run();
   bool local_is_failed;
   {
-    base::AutoLock lock(lock_);
+    std::lock_guard<std::mutex> lock(lock_);
     local_is_failed = is_failed();
     has_been_shutdown_ = true;
   }
-  // Don't do this inside the lock since it will block on the workers, which
-  // may be in turn waiting on the lock.
-  pool_->Shutdown();
+  // Don't do this while holding |lock_|, since it will block on the workers,
+  // which may be in turn waiting on the lock.
+  WaitForPoolTasks();
   return !local_is_failed;
 }
 
 void Scheduler::Log(const std::string& verb, const std::string& msg) {
-  if (task_runner()->BelongsToCurrentThread()) {
-    LogOnMainThread(verb, msg);
-  } else {
-    // The run loop always joins on the sub threads, so the lifetime of this
-    // object outlives the invocations of this function, hence "unretained".
-    task_runner()->PostTask(FROM_HERE,
-                            base::Bind(&Scheduler::LogOnMainThread,
-                                       base::Unretained(this), verb, msg));
-  }
+  task_runner()->PostTask(base::BindOnce(&Scheduler::LogOnMainThread,
+                                         base::Unretained(this), verb, msg));
 }
 
 void Scheduler::LogEnv(const std::string& var, const std::string& value) {
-  base::AutoLock lock(lock_);
+  std::lock_guard<std::mutex> lock(lock_);
   if (env_logging_)
     env_vars_.insert(std::make_pair(var, value));
 }
@@ -140,66 +81,66 @@ void Scheduler::SaveEnvLog(const base::FilePath& file_name) {
 void Scheduler::FailWithError(const Err& err) {
   DCHECK(err.has_error());
   {
-    base::AutoLock lock(lock_);
+    std::lock_guard<std::mutex> lock(lock_);
 
     if (is_failed_ || has_been_shutdown_)
       return;  // Ignore errors once we see one.
     is_failed_ = true;
   }
 
-  if (task_runner()->BelongsToCurrentThread()) {
-    FailWithErrorOnMainThread(err);
-  } else {
-    // The run loop always joins on the sub threads, so the lifetime of this
-    // object outlives the invocations of this function, hence "unretained".
-    task_runner()->PostTask(FROM_HERE,
-                            base::Bind(&Scheduler::FailWithErrorOnMainThread,
-                                       base::Unretained(this), err));
-  }
+  task_runner()->PostTask(base::BindOnce(&Scheduler::FailWithErrorOnMainThread,
+                                         base::Unretained(this), err));
 }
 
-void Scheduler::ScheduleWork(const base::Closure& work) {
+void Scheduler::ScheduleWork(Task work) {
   IncrementWorkCount();
-  pool_->PostWorkerTaskWithShutdownBehavior(
-      FROM_HERE, base::Bind(&Scheduler::DoWork,
-                            base::Unretained(this), work),
-      base::SequencedWorkerPool::BLOCK_SHUTDOWN);
+  pool_work_count_.Increment();
+  worker_pool_.PostTask(base::BindOnce(
+      [](Scheduler* self, Task work) {
+        std::move(work).Run();
+        self->DecrementWorkCount();
+        if (!self->pool_work_count_.Decrement()) {
+          std::unique_lock<std::mutex> auto_lock(self->pool_work_count_lock_);
+          self->pool_work_count_cv_.notify_one();
+        }
+      },
+      this, std::move(work)));
 }
 
 void Scheduler::AddGenDependency(const base::FilePath& file) {
-  base::AutoLock lock(lock_);
+  std::lock_guard<std::mutex> lock(lock_);
   gen_dependencies_.push_back(file);
 }
 
 std::vector<base::FilePath> Scheduler::GetGenDependencies() const {
-  base::AutoLock lock(lock_);
+  std::lock_guard<std::mutex> lock(lock_);
   return gen_dependencies_;
 }
 
 void Scheduler::AddWrittenFile(const SourceFile& file) {
-  base::AutoLock lock(lock_);
+  std::lock_guard<std::mutex> lock(lock_);
   written_files_.push_back(file);
 }
 
 void Scheduler::AddUnknownGeneratedInput(const Target* target,
                                          const SourceFile& file) {
-  base::AutoLock lock(lock_);
+  std::lock_guard<std::mutex> lock(lock_);
   unknown_generated_inputs_.insert(std::make_pair(file, target));
 }
 
 void Scheduler::AddWriteRuntimeDepsTarget(const Target* target) {
-  base::AutoLock lock(lock_);
+  std::lock_guard<std::mutex> lock(lock_);
   write_runtime_deps_targets_.push_back(target);
 }
 
 std::vector<const Target*> Scheduler::GetWriteRuntimeDepsTargets() const {
-  base::AutoLock lock(lock_);
+  std::lock_guard<std::mutex> lock(lock_);
   return write_runtime_deps_targets_;
 }
 
 bool Scheduler::IsFileGeneratedByWriteRuntimeDeps(
     const OutputFile& file) const {
-  base::AutoLock lock(lock_);
+  std::lock_guard<std::mutex> lock(lock_);
   // Number of targets should be quite small, so brute-force search is fine.
   for (const Target* target : write_runtime_deps_targets_) {
     if (file == target->write_runtime_deps_output()) {
@@ -209,9 +150,19 @@ bool Scheduler::IsFileGeneratedByWriteRuntimeDeps(
   return false;
 }
 
-std::multimap<SourceFile, const Target*>
-    Scheduler::GetUnknownGeneratedInputs() const {
-  base::AutoLock lock(lock_);
+void Scheduler::AddGeneratedFile(const SourceFile& entry) {
+  std::lock_guard<std::mutex> lock(lock_);
+  generated_files_.insert(std::make_pair(entry, true));
+}
+
+bool Scheduler::IsFileGeneratedByTarget(const SourceFile& file) const {
+  std::lock_guard<std::mutex> lock(lock_);
+  return generated_files_.find(file) != generated_files_.end();
+}
+
+std::multimap<SourceFile, const Target*> Scheduler::GetUnknownGeneratedInputs()
+    const {
+  std::lock_guard<std::mutex> lock(lock_);
 
   // Remove all unknown inputs that were written files. These are OK as inputs
   // to build steps since they were written as a side-effect of running GN.
@@ -226,7 +177,7 @@ std::multimap<SourceFile, const Target*>
 }
 
 void Scheduler::ClearUnknownGeneratedInputsAndWrittenFiles() {
-  base::AutoLock lock(lock_);
+  std::lock_guard<std::mutex> lock(lock_);
   unknown_generated_inputs_.clear();
   written_files_.clear();
 }
@@ -237,13 +188,14 @@ void Scheduler::IncrementWorkCount() {
 
 void Scheduler::DecrementWorkCount() {
   if (!work_count_.Decrement()) {
-    if (task_runner()->BelongsToCurrentThread()) {
-      OnComplete();
-    } else {
-      task_runner()->PostTask(FROM_HERE, base::Bind(&Scheduler::OnComplete,
-                                                    base::Unretained(this)));
-    }
+    task_runner()->PostTask(
+        base::BindOnce(&Scheduler::OnComplete, base::Unretained(this)));
   }
+}
+
+void Scheduler::SuppressOutputForTesting(bool suppress) {
+  std::lock_guard<std::mutex> lock(lock_);
+  suppress_output_for_testing_ = suppress;
 }
 
 void Scheduler::LogOnMainThread(const std::string& verb,
@@ -258,17 +210,19 @@ void Scheduler::LogOnMainThread(const std::string& verb,
 }
 
 void Scheduler::FailWithErrorOnMainThread(const Err& err) {
-  err.PrintToStdout();
-  runner_.Quit();
-}
-
-void Scheduler::DoWork(const base::Closure& closure) {
-  closure.Run();
-  DecrementWorkCount();
+  if (!suppress_output_for_testing_)
+    err.PrintToStdout();
+  task_runner()->PostQuit();
 }
 
 void Scheduler::OnComplete() {
   // Should be called on the main thread.
-  DCHECK(task_runner()->BelongsToCurrentThread());
-  runner_.Quit();
+  DCHECK(task_runner() == MsgLoop::Current());
+  task_runner()->PostQuit();
+}
+
+void Scheduler::WaitForPoolTasks() {
+  std::unique_lock<std::mutex> lock(pool_work_count_lock_);
+  while (!pool_work_count_.IsZero())
+    pool_work_count_cv_.wait(lock);
 }

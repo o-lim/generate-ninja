@@ -63,7 +63,7 @@ variable name or the '{{' and '}}' which surround it."
 (defvar gn-font-lock-target-declaration-keywords
   '("action" "action_foreach" "bundle_data" "copy" "create_bundle" "executable"
     "group" "loadable_module" "shared_library" "source_set" "static_library"
-    "target"))
+    "generated_file" "target"))
 
 ;; pool() is handled specially since it's also a variable name
 (defvar gn-font-lock-buildfile-fun-keywords
@@ -72,7 +72,7 @@ variable name or the '{{' and '}}' which surround it."
     "get_target_outputs" "getenv" "import" "mark_used" "mark_used_from"
     "not_needed" "print" "process_file_template" "read_file" "rebase_path"
     "set_default_toolchain" "set_defaults" "set_sources_assignment_filter"
-    "split_list" "template" "tool" "toolchain" "toolchain_args" "write_file"))
+    "tool" "toolchain" "propagates_configs" "write_file"))
 
 (defvar gn-font-lock-predefined-var-keywords
   '("console_pool" "current_cpu" "current_os" "current_toolchain"
@@ -96,8 +96,8 @@ variable name or the '{{' and '}}' which surround it."
     "outputs" "precompiled_header" "precompiled_header_type"
     "precompiled_source" "public" "public_configs" "public_deps" "rspfile"
     "rspfile_content" "runtime_link_output" "script" "sources"
-    "sys_include_dirs" "sys_include_switch" "testonly" "visibility"
-    "write_runtime_deps"))
+    "testonly" "visibility" "write_runtime_deps" "bundle_contents_dir"
+    "contents" "output_conversion" "rebase" "data_keys" "walk_keys"))
 
 (defconst gn-font-lock-keywords
   `((,(regexp-opt gn-font-lock-reserved-keywords 'words) .

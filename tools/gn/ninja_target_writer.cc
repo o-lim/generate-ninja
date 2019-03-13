@@ -8,6 +8,7 @@
 
 #include "base/files/file_util.h"
 #include "base/strings/string_util.h"
+#include "tools/gn/config_values_extractors.h"
 #include "tools/gn/err.h"
 #include "tools/gn/escape.h"
 #include "tools/gn/filesystem_utils.h"
@@ -16,6 +17,7 @@
 #include "tools/gn/ninja_bundle_data_target_writer.h"
 #include "tools/gn/ninja_copy_target_writer.h"
 #include "tools/gn/ninja_create_bundle_target_writer.h"
+#include "tools/gn/ninja_generated_file_target_writer.h"
 #include "tools/gn/ninja_group_target_writer.h"
 #include "tools/gn/ninja_utils.h"
 #include "tools/gn/output_file.h"
@@ -25,18 +27,15 @@
 #include "tools/gn/target.h"
 #include "tools/gn/trace.h"
 
-NinjaTargetWriter::NinjaTargetWriter(const Target* target,
-                                     std::ostream& out)
+NinjaTargetWriter::NinjaTargetWriter(const Target* target, std::ostream& out)
     : settings_(target->settings()),
       target_(target),
       out_(out),
       path_output_(settings_->build_settings()->build_dir(),
                    settings_->build_settings()->root_path_utf8(),
-                   ESCAPE_NINJA) {
-}
+                   ESCAPE_NINJA) {}
 
-NinjaTargetWriter::~NinjaTargetWriter() {
-}
+NinjaTargetWriter::~NinjaTargetWriter() = default;
 
 // static
 std::string NinjaTargetWriter::RunAndWriteFile(const Target* target) {
@@ -85,6 +84,9 @@ std::string NinjaTargetWriter::RunAndWriteFile(const Target* target) {
   } else if (target->output_type() == Target::GROUP) {
     NinjaGroupTargetWriter writer(target, rules);
     writer.Run();
+  } else if (target->output_type() == Target::GENERATED_FILE) {
+    NinjaGeneratedFileTargetWriter writer(target, rules);
+    writer.Run();
   } else if (target->IsBinary()) {
     needs_file_write = true;
     NinjaBinaryTargetWriter writer(target, rules);
@@ -108,7 +110,7 @@ std::string NinjaTargetWriter::RunAndWriteFile(const Target* target) {
     std::string result = "subninja ";
     result.append(EscapeString(
         OutputFile(target->settings()->build_settings(), ninja_file).value(),
-                   options, nullptr));
+        options, nullptr));
     result.push_back('\n');
     return result;
   }
@@ -122,9 +124,8 @@ void NinjaTargetWriter::WriteEscapedSubstitution(SubstitutionType type) {
   opts.mode = ESCAPE_NINJA;
 
   out_ << kSubstitutionNinjaNames[type] << " = ";
-  EscapeStringToStream(out_,
-      SubstitutionWriter::GetTargetSubstitution(target_, type),
-      opts);
+  EscapeStringToStream(
+      out_, SubstitutionWriter::GetTargetSubstitution(target_, type), opts);
   out_ << std::endl;
 }
 
@@ -179,11 +180,11 @@ void NinjaTargetWriter::WriteSharedVars(const SubstitutionBits& bits) {
     out_ << std::endl;
 }
 
-OutputFile NinjaTargetWriter::WriteInputDepsStampAndGetDep(
-    const std::vector<const Target*>& extra_hard_deps) const {
-  CHECK(target_->toolchain())
-      << "Toolchain not set on target "
-      << target_->label().GetUserVisibleName(true);
+std::vector<OutputFile> NinjaTargetWriter::WriteInputDepsStampAndGetDep(
+    const std::vector<const Target*>& extra_hard_deps,
+    size_t num_stamp_uses) const {
+  CHECK(target_->toolchain()) << "Toolchain not set on target "
+                              << target_->label().GetUserVisibleName(true);
 
   // ----------
   // Collect all input files that are input deps of this target. Knowing the
@@ -202,8 +203,10 @@ OutputFile NinjaTargetWriter::WriteInputDepsStampAndGetDep(
   // implicit dependency instead. The implicit depedency in this case is
   // handled separately by the binary target writer.
   if (!target_->IsBinary()) {
-    for (const auto& input : target_->inputs())
-      input_deps_sources.push_back(&input);
+    for (ConfigValuesIterator iter(target_); !iter.done(); iter.Next()) {
+      for (const auto& input : iter.cur().inputs())
+        input_deps_sources.push_back(&input);
+    }
   }
 
   // For an action (where we run a script only once) the sources are the same
@@ -250,17 +253,38 @@ OutputFile NinjaTargetWriter::WriteInputDepsStampAndGetDep(
   // Write the outputs.
 
   if (input_deps_sources.size() + input_deps_targets.size() == 0)
-    return OutputFile();  // No input dependencies.
+    return std::vector<OutputFile>();  // No input dependencies.
 
   // If we're only generating one input dependency, return it directly instead
   // of writing a stamp file for it.
   if (input_deps_sources.size() == 1 && input_deps_targets.size() == 0)
-    return OutputFile(settings_->build_settings(), *input_deps_sources[0]);
+    return std::vector<OutputFile>{
+        OutputFile(settings_->build_settings(), *input_deps_sources[0])};
   if (input_deps_sources.size() == 0 && input_deps_targets.size() == 1) {
     const OutputFile& dep = input_deps_targets[0]->dependency_output_file();
     DCHECK(!dep.value().empty());
-    return dep;
+    return std::vector<OutputFile>{dep};
   }
+
+  std::vector<OutputFile> outs;
+  // File input deps.
+  for (const SourceFile* source : input_deps_sources)
+    outs.push_back(OutputFile(settings_->build_settings(), *source));
+  // Target input deps. Sort by label so the output is deterministic (otherwise
+  // some of the targets will have gone through std::sets which will have
+  // sorted them by pointer).
+  std::sort(
+      input_deps_targets.begin(), input_deps_targets.end(),
+      [](const Target* a, const Target* b) { return a->label() < b->label(); });
+  for (auto* dep : input_deps_targets) {
+    DCHECK(!dep->dependency_output_file().value().empty());
+    outs.push_back(dep->dependency_output_file());
+  }
+
+  // If there are multiple inputs, but the stamp file would be referenced only
+  // once, don't write it but depend on the inputs directly.
+  if (num_stamp_uses == 1u)
+    return outs;
 
   // Make a stamp file.
   OutputFile input_stamp_file =
@@ -270,30 +294,12 @@ OutputFile NinjaTargetWriter::WriteInputDepsStampAndGetDep(
 
   out_ << "build ";
   path_output_.WriteFile(out_, input_stamp_file);
-  out_ << ": "
-       << GetNinjaRulePrefixForToolchain(settings_)
+  out_ << ": " << GetNinjaRulePrefixForToolchain(settings_)
        << Toolchain::ToolTypeToName(Toolchain::TYPE_STAMP);
-
-  // File input deps.
-  for (const SourceFile* source : input_deps_sources) {
-    out_ << " ";
-    path_output_.WriteFile(out_, *source);
-  }
-
-  // Target input deps. Sort by label so the output is deterministic (otherwise
-  // some of the targets will have gone through std::sets which will have
-  // sorted them by pointer).
-  std::sort(
-      input_deps_targets.begin(), input_deps_targets.end(),
-      [](const Target* a, const Target* b) { return a->label() < b->label(); });
-  for (auto* dep : input_deps_targets) {
-    DCHECK(!dep->dependency_output_file().value().empty());
-    out_ << " ";
-    path_output_.WriteFile(out_, dep->dependency_output_file());
-  }
+  path_output_.WriteFiles(out_, outs);
 
   out_ << "\n";
-  return input_stamp_file;
+  return std::vector<OutputFile>{input_stamp_file};
 }
 
 void NinjaTargetWriter::WriteStampForTarget(
@@ -311,8 +317,7 @@ void NinjaTargetWriter::WriteStampForTarget(
   out_ << "build ";
   path_output_.WriteFile(out_, stamp_file);
 
-  out_ << ": "
-       << GetNinjaRulePrefixForToolchain(settings_)
+  out_ << ": " << GetNinjaRulePrefixForToolchain(settings_)
        << Toolchain::ToolTypeToName(Toolchain::TYPE_STAMP);
   path_output_.WriteFiles(out_, files);
 

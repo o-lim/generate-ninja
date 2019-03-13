@@ -4,11 +4,11 @@
 
 #include <sstream>
 
-#include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/config.h"
 #include "tools/gn/config_values_extractors.h"
 #include "tools/gn/target.h"
 #include "tools/gn/test_with_scope.h"
+#include "util/test/test.h"
 
 namespace {
 
@@ -107,8 +107,7 @@ TEST(ConfigValuesExtractors, IncludeOrdering) {
 
   // Additionally add some values directly on "target".
   target.config_values().cflags().push_back("--target");
-  target.config_values().include_dirs().push_back(
-      SourceDir("//target/"));
+  target.config_values().include_dirs().push_back(SourceDir("//target/"));
 
   // Mark targets resolved. This should push dependent configs.
   ASSERT_TRUE(dep2.OnResolved(&err));

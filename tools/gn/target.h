@@ -20,6 +20,7 @@
 #include "tools/gn/label_pattern.h"
 #include "tools/gn/label_ptr.h"
 #include "tools/gn/lib_file.h"
+#include "tools/gn/metadata.h"
 #include "tools/gn/ordered_set.h"
 #include "tools/gn/output_file.h"
 #include "tools/gn/source_file.h"
@@ -45,17 +46,22 @@ class Target : public Item {
     ACTION_FOREACH,
     BUNDLE_DATA,
     CREATE_BUNDLE,
+    GENERATED_FILE,
   };
 
   enum DepsIterationType {
-    DEPS_ALL,  // Iterates through all public, private, and data deps.
+    DEPS_ALL,     // Iterates through all public, private, and data deps.
     DEPS_LINKED,  // Iterates through all non-data dependencies.
   };
 
   typedef std::vector<SourceFile> FileList;
   typedef std::vector<std::string> StringVector;
 
-  Target(const Settings* settings, const Label& label);
+  // We track the set of build files that may affect this target, please refer
+  // to Scope for how this is determined.
+  Target(const Settings* settings,
+         const Label& label,
+         const std::set<SourceFile>& build_dependency_files = {});
   ~Target() override;
 
   // Returns a string naming the output type.
@@ -117,9 +123,7 @@ class Target : public Item {
     output_extension_ = extension;
     output_extension_set_ = true;
   }
-  bool output_extension_set() const {
-    return output_extension_set_;
-  }
+  bool output_extension_set() const { return output_extension_set_; }
 
   const FileList& sources() const { return sources_; }
   FileList& sources() { return sources_; }
@@ -145,6 +149,36 @@ class Target : public Item {
     complete_static_lib_ = complete;
   }
 
+  // Metadata. Target takes ownership of the resulting scope.
+  const Metadata& metadata() const { return metadata_; }
+  Metadata& metadata() { return metadata_; }
+
+  // Get metadata from this target and its dependencies. This is intended to
+  // be called after the target is resolved.
+  bool GetMetadata(const std::vector<std::string>& keys_to_extract,
+                   const std::vector<std::string>& keys_to_walk,
+                   const SourceDir& rebase_dir,
+                   bool deps_only,
+                   std::vector<Value>* result,
+                   std::set<const Target*>* targets_walked,
+                   Err* err) const;
+
+  // GeneratedFile-related methods.
+  bool GenerateFile(Err* err) const;
+
+  const Value& contents() const { return contents_; }
+  void set_contents(const Value& value) { contents_ = value; }
+  const Value& output_conversion() const { return output_conversion_; }
+  void set_output_conversion(const Value& value) { output_conversion_ = value; }
+
+  // Metadata collection methods for GeneratedFile targets.
+  const SourceDir& rebase() const { return rebase_; }
+  void set_rebase(const SourceDir& value) { rebase_ = value; }
+  const std::vector<std::string>& data_keys() const { return data_keys_; }
+  std::vector<std::string>& data_keys() { return data_keys_; }
+  const std::vector<std::string>& walk_keys() const { return walk_keys_; }
+  std::vector<std::string>& walk_keys() { return walk_keys_; }
+
   bool testonly() const { return testonly_; }
   void set_testonly(bool value) { testonly_ = value; }
 
@@ -154,10 +188,6 @@ class Target : public Item {
   void set_write_runtime_deps_output(const OutputFile& value) {
     write_runtime_deps_output_ = value;
   }
-
-  // Compile-time extra dependencies.
-  const FileList& inputs() const { return inputs_; }
-  FileList& inputs() { return inputs_; }
 
   // Runtime dependencies. These are "file-like things" that can either be
   // directories or files. They do not need to exist, these are just passed as
@@ -173,10 +203,9 @@ class Target : public Item {
   // Returns true if targets depending on this one should have an order
   // dependency.
   bool hard_dep() const {
-    return output_type_ == ACTION ||
-           output_type_ == ACTION_FOREACH ||
-           output_type_ == COPY_FILES ||
-           output_type_ == CREATE_BUNDLE;
+    return output_type_ == ACTION || output_type_ == ACTION_FOREACH ||
+           output_type_ == COPY_FILES || output_type_ == CREATE_BUNDLE ||
+           output_type_ == BUNDLE_DATA || output_type_ == GENERATED_FILE;
   }
 
   // Returns the iterator range which can be used in range-based for loops
@@ -216,9 +245,7 @@ class Target : public Item {
   const UniqueVector<LabelConfigPair>& public_configs() const {
     return public_configs_;
   }
-  UniqueVector<LabelConfigPair>& public_configs() {
-    return public_configs_;
-  }
+  UniqueVector<LabelConfigPair>& public_configs() { return public_configs_; }
 
   // List of reverse configs that this class inherits settings from.
   const UniqueVector<LabelConfigPair>& reverse_configs() const {
@@ -262,9 +289,10 @@ class Target : public Item {
     return recursive_hard_deps_;
   }
 
-  std::vector<LabelPattern>& assert_no_deps() {
-    return assert_no_deps_;
-  }
+  std::vector<LabelPattern>& friends() { return friends_; }
+  const std::vector<LabelPattern>& friends() const { return friends_; }
+
+  std::vector<LabelPattern>& assert_no_deps() { return assert_no_deps_; }
   const std::vector<LabelPattern>& assert_no_deps() const {
     return assert_no_deps_;
   }
@@ -309,9 +337,7 @@ class Target : public Item {
   // These are only known once the target is resolved and will be empty before
   // that. This is a cache of the files to prevent every target that depends on
   // a given library from recomputing the same pattern.
-  const OutputFile& link_output_file() const {
-    return link_output_file_;
-  }
+  const OutputFile& link_output_file() const { return link_output_file_; }
   const OutputFile& dependency_output_file() const {
     return dependency_output_file_;
   }
@@ -334,7 +360,7 @@ class Target : public Item {
                                std::vector<OutputFile>* outputs) const;
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(Target, ResolvePrecompiledHeaders);
+  FRIEND_TEST_ALL_PREFIXES(TargetTest, ResolvePrecompiledHeaders);
 
   // Pulls necessary information from dependencies to this one when all
   // dependencies have been resolved.
@@ -371,7 +397,6 @@ class Target : public Item {
   bool check_includes_;
   bool complete_static_lib_;
   bool testonly_;
-  FileList inputs_;
   std::vector<std::string> data_;
   BundleData bundle_data_;
   OutputFile write_runtime_deps_output_;
@@ -404,11 +429,12 @@ class Target : public Item {
   // target is marked resolved. This will not include the current target.
   std::set<const Target*> recursive_hard_deps_;
 
+  std::vector<LabelPattern> friends_;
   std::vector<LabelPattern> assert_no_deps_;
 
-  // Used for all binary targets. The precompiled header values in this struct
-  // will be resolved to the ones to use for this target, if precompiled
-  // headers are used.
+  // Used for all binary targets, and for inputs in regular targets. The
+  // precompiled header values in this struct will be resolved to the ones to
+  // use for this target, if precompiled headers are used.
   ConfigValues config_values_;
 
   // Used for action[_foreach] targets.
@@ -422,6 +448,17 @@ class Target : public Item {
   OutputFile link_output_file_;
   OutputFile dependency_output_file_;
   std::vector<OutputFile> runtime_outputs_;
+
+  Metadata metadata_;
+
+  // GeneratedFile values.
+  Value output_conversion_;
+  Value contents_;  // Value::NONE if metadata collection should occur.
+
+  // GeneratedFile as metadata collection values.
+  SourceDir rebase_;
+  std::vector<std::string> data_keys_;
+  std::vector<std::string> walk_keys_;
 
   DISALLOW_COPY_AND_ASSIGN(Target);
 };

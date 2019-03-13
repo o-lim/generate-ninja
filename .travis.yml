@@ -37,6 +37,7 @@ script:
 branches:
   except:
     - chromium-gn
+    - google-gn
 
 notifications:
   email: false

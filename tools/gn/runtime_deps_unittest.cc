@@ -5,11 +5,12 @@
 #include <stddef.h>
 
 #include "base/stl_util.h"
-#include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/runtime_deps.h"
 #include "tools/gn/scheduler.h"
 #include "tools/gn/target.h"
+#include "tools/gn/test_with_scheduler.h"
 #include "tools/gn/test_with_scope.h"
+#include "util/test/test.h"
 
 namespace {
 
@@ -39,8 +40,10 @@ std::string GetVectorDescription(
 
 }  // namespace
 
+using RuntimeDeps = TestWithScheduler;
+
 // Tests an exe depending on different types of libraries.
-TEST(RuntimeDeps, Libs) {
+TEST_F(RuntimeDeps, Libs) {
   TestWithScope setup;
   Err err;
 
@@ -112,7 +115,7 @@ TEST(RuntimeDeps, Libs) {
 
 // Tests that executables that aren't listed as data deps aren't included in
 // the output, but executables that are data deps are included.
-TEST(RuntimeDeps, ExeDataDep) {
+TEST_F(RuntimeDeps, ExeDataDep) {
   TestWithScope setup;
   Err err;
 
@@ -164,7 +167,7 @@ TEST(RuntimeDeps, ExeDataDep) {
       << GetVectorDescription(result);
 }
 
-TEST(RuntimeDeps, ActionSharedLib) {
+TEST_F(RuntimeDeps, ActionSharedLib) {
   TestWithScope setup;
   Err err;
 
@@ -207,7 +210,7 @@ TEST(RuntimeDeps, ActionSharedLib) {
 // Tests that action and copy outputs are considered if they're data deps, but
 // not if they're regular deps. Action and copy "data" files are always
 // included.
-TEST(RuntimeDeps, ActionOutputs) {
+TEST_F(RuntimeDeps, ActionOutputs) {
   TestWithScope setup;
   Err err;
 
@@ -234,8 +237,7 @@ TEST(RuntimeDeps, ActionOutputs) {
   Target dep(setup.settings(), Label(SourceDir("//"), "dep"));
   InitTargetWithType(setup, &dep, Target::ACTION);
   dep.data().push_back("//dep.data");
-  dep.action_values().outputs() =
-      SubstitutionList::MakeForTest("//dep.output");
+  dep.action_values().outputs() = SubstitutionList::MakeForTest("//dep.output");
   ASSERT_TRUE(dep.OnResolved(&err));
 
   Target dep_copy(setup.settings(), Label(SourceDir("//"), "dep_copy"));
@@ -293,7 +295,7 @@ TEST(RuntimeDeps, ActionOutputs) {
 // Tests that the search for dependencies terminates at a bundle target,
 // ignoring any shared libraries or loadable modules that get copied into the
 // bundle.
-TEST(RuntimeDeps, CreateBundle) {
+TEST_F(RuntimeDeps, CreateBundle) {
   TestWithScope setup;
   Err err;
 
@@ -392,7 +394,7 @@ TEST(RuntimeDeps, CreateBundle) {
 
 // Tests that a dependency duplicated in regular and data deps is processed
 // as a data dep.
-TEST(RuntimeDeps, Dupe) {
+TEST_F(RuntimeDeps, Dupe) {
   TestWithScope setup;
   Err err;
 
@@ -417,8 +419,7 @@ TEST(RuntimeDeps, Dupe) {
 }
 
 // Tests that actions can't have output substitutions.
-TEST(RuntimeDeps, WriteRuntimeDepsVariable) {
-  Scheduler scheduler;
+TEST_F(RuntimeDeps, WriteRuntimeDepsVariable) {
   TestWithScope setup;
   Err err;
 
@@ -428,8 +429,8 @@ TEST(RuntimeDeps, WriteRuntimeDepsVariable) {
 
   // Should fail for garbage inputs.
   err = Err();
-  EXPECT_FALSE(setup.ExecuteSnippet(
-      "group(\"foo\") { write_runtime_deps = 0 }", &err));
+  EXPECT_FALSE(
+      setup.ExecuteSnippet("group(\"foo\") { write_runtime_deps = 0 }", &err));
 
   // Should be able to write inside the out dir, and shouldn't write the one
   // in the else clause.
@@ -439,7 +440,8 @@ TEST(RuntimeDeps, WriteRuntimeDepsVariable) {
       "  group(\"foo\") { write_runtime_deps = \"//out/Debug/foo.txt\" }\n"
       "} else {\n"
       "  group(\"bar\") { write_runtime_deps = \"//out/Debug/bar.txt\" }\n"
-      "}", &err));
+      "}",
+      &err));
   EXPECT_EQ(1U, setup.items().size());
-  EXPECT_EQ(1U, scheduler.GetWriteRuntimeDepsTargets().size());
+  EXPECT_EQ(1U, scheduler().GetWriteRuntimeDepsTargets().size());
 }

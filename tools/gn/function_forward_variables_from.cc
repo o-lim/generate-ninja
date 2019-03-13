@@ -25,8 +25,7 @@ void ForwardAllValues(const FunctionCallNode* function,
   options.skip_private_vars = true;
   options.mark_dest_used = false;
   options.excluded_values = exclusion_set;
-  source->NonRecursiveMergeTo(dest, options, function,
-                              "source scope", err);
+  source->NonRecursiveMergeTo(dest, options, function, "source scope", err);
   source->MarkAllUsed(exclusion_set);
 }
 
@@ -50,19 +49,22 @@ void ForwardValuesFromList(Scope* source,
       base::StringPiece storage_key = source->GetStorageKey(cur.string_value());
       if (storage_key.empty()) {
         // Programmatic value, don't allow copying.
-        *err = Err(cur, "This value can't be forwarded.",
-            "The variable \"" + cur.string_value() + "\" is a built-in.");
+        *err =
+            Err(cur, "This value can't be forwarded.",
+                "The variable \"" + cur.string_value() + "\" is a built-in.");
         return;
       }
 
       // Don't allow clobbering existing values when clobber is false.
       const Value* existing_value = dest->GetValue(storage_key);
       if (!clobber && existing_value) {
-        *err = Err(cur, "Clobbering existing value.",
+        *err = Err(
+            cur, "Clobbering existing value.",
             "The current scope already defines a value \"" +
-             cur.string_value() + "\".\nforward_variables_from() won't clobber "
-             "existing values. If you want to\nmerge lists, you'll need to "
-             "do this explicitly.");
+                cur.string_value() +
+                "\".\nforward_variables_from() won't clobber "
+                "existing values. If you want to\nmerge lists, you'll need to "
+                "do this explicitly.");
         err->AppendSubErr(Err(*existing_value, "value being clobbered."));
         return;
       }
@@ -109,8 +111,7 @@ const char kForwardVariablesFrom_Help[] =
   implicit configs list, which means it wouldn't work at all if it didn't
   clobber).
 
-  The sources assignment filter (see "gn help "
-     "set_sources_assignment_filter")
+  The sources assignment filter (see "gn help set_sources_assignment_filter")
   is never applied by this function. It's assumed than any desired filtering
   was already done when sources was set on the from_scope.
 
@@ -119,6 +120,13 @@ const char kForwardVariablesFrom_Help[] =
   variable_list_or_star has a value of "*".
 
 Examples
+
+  # forward_variables_from(invoker, ["foo"])
+  # is equivalent to:
+  assert(!defined(foo))
+  if (defined(invoker.foo)) {
+    foo = invoker.foo
+  }
 
   # This is a common action template. It would invoke a script with some given
   # parameters, and wants to use the various types of deps and the visibility
@@ -138,8 +146,8 @@ Examples
     }
   }
 
-  # This is a template around either a target whose type depends on a global
-  # variable. It forwards all values from the invoker.
+  # This is a template around a target whose type depends on a global variable.
+  # It forwards all values from the invoker.
   template("my_wrapper") {
     target(my_wrapper_target_type, target_name) {
       forward_variables_from(invoker, "*")
@@ -174,7 +182,7 @@ Value RunForwardVariablesFrom(Scope* scope,
   }
 
   Value* value = nullptr;  // Value to use, may point to result_value.
-  Value result_value;  // Storage for the "evaluate" case.
+  Value result_value;      // Storage for the "evaluate" case.
   const IdentifierNode* identifier = args_vector[0]->AsIdentifier();
   if (identifier) {
     // Optimize the common case where the input scope is an identifier. This

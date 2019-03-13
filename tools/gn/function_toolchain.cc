@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <utility>
 
 #include "tools/gn/err.h"
@@ -117,8 +118,9 @@ bool ValidateSubstitutionList(const std::vector<SubstitutionType>& list,
   for (const auto& cur_type : list) {
     if (!validate(cur_type)) {
       *err = Err(*origin, "Pattern not valid here.",
-          "You used the pattern " + std::string(kSubstitutionNames[cur_type]) +
-          " which is not valid\nfor this variable.");
+                 "You used the pattern " +
+                     std::string(kSubstitutionNames[cur_type]) +
+                     " which is not valid\nfor this variable.");
       return false;
     }
   }
@@ -231,19 +233,15 @@ bool ReadDepsFormat(Scope* scope, Tool* tool, Err* err) {
 }
 
 bool IsCompilerTool(Toolchain::ToolType type) {
-  return type == Toolchain::TYPE_CC ||
-         type == Toolchain::TYPE_CXX ||
-         type == Toolchain::TYPE_OBJC ||
-         type == Toolchain::TYPE_OBJCXX ||
-         type == Toolchain::TYPE_RC ||
-         type == Toolchain::TYPE_ASM;
+  return type == Toolchain::TYPE_CC || type == Toolchain::TYPE_CXX ||
+         type == Toolchain::TYPE_OBJC || type == Toolchain::TYPE_OBJCXX ||
+         type == Toolchain::TYPE_RC || type == Toolchain::TYPE_ASM;
 }
 
 bool IsLinkerTool(Toolchain::ToolType type) {
   // "alink" is not counted as in the generic "linker" tool list.
   return type == Toolchain::TYPE_SOLINK ||
-         type == Toolchain::TYPE_SOLINK_MODULE ||
-         type == Toolchain::TYPE_LINK;
+         type == Toolchain::TYPE_SOLINK_MODULE || type == Toolchain::TYPE_LINK;
 }
 
 bool IsPatternInOutputList(const SubstitutionList& output_list,
@@ -256,7 +254,6 @@ bool IsPatternInOutputList(const SubstitutionList& output_list,
   }
   return false;
 }
-
 
 bool ValidateOutputs(const Tool* tool, Err* err) {
   if (tool->outputs().list().empty()) {
@@ -282,8 +279,8 @@ bool ValidateLinkAndDependOutput(const Tool* tool,
   if (tool_type != Toolchain::TYPE_SOLINK &&
       tool_type != Toolchain::TYPE_SOLINK_MODULE) {
     *err = Err(tool->defined_from(),
-        "This tool specifies a " + std::string(variable_name) + ".",
-        "This is only valid for solink and solink_module tools.");
+               "This tool specifies a " + std::string(variable_name) + ".",
+               "This is only valid for solink and solink_module tools.");
     return false;
   }
 
@@ -304,7 +301,7 @@ bool ValidateRuntimeOutputs(const Tool* tool,
 
   if (!IsLinkerTool(tool_type)) {
     *err = Err(tool->defined_from(), "This tool specifies runtime_outputs.",
-        "This is only valid for linker tools (alink doesn't count).");
+               "This is only valid for linker tools (alink doesn't count).");
     return false;
   }
 
@@ -312,7 +309,7 @@ bool ValidateRuntimeOutputs(const Tool* tool,
     if (!IsPatternInOutputList(tool->outputs(), pattern)) {
       *err = Err(tool->defined_from(), "This tool's runtime_outputs is bad.",
                  "It must be a subset of the outputs. The bad one is:\n  " +
-                  pattern.AsString());
+                     pattern.AsString());
       return false;
     }
   }
@@ -324,8 +321,7 @@ bool ValidateRuntimeOutputs(const Tool* tool,
 // toolchain -------------------------------------------------------------------
 
 const char kToolchain[] = "toolchain";
-const char kToolchain_HelpShort[] =
-    "toolchain: Defines a toolchain.";
+const char kToolchain_HelpShort[] = "toolchain: Defines a toolchain.";
 const char kToolchain_Help[] =
     R"*(toolchain: Defines a toolchain.
 
@@ -348,7 +344,7 @@ Toolchain overview
   When a target has a dependency on a target using different toolchain (see "gn
   help labels" for how to specify this), GN will start a build using that
   secondary toolchain to resolve the target. GN will load the build config file
-  with the build arguements overridden as specified in the toolchain_args.
+  with the build arguments overridden as specified in the toolchain_args.
   Because the default toolchain is already known, calls to
   set_default_toolchain() are ignored.
 
@@ -372,10 +368,10 @@ Toolchain overview
 Functions and variables
 
   tool()
-    The tool() function call specifies the commands commands to run for a given
-    step. See "gn help tool".
+    The tool() function call specifies the commands to run for a given step. See
+    "gn help tool".
 
-  toolchain_args
+  toolchain_args [scope]
     Overrides for build arguments to pass to the toolchain when invoking it.
     This is a variable of type "scope" where the variable names correspond to
     variables in declare_args() blocks.
@@ -394,7 +390,25 @@ Functions and variables
 
     See also "gn help buildargs" for an overview of these arguments.
 
-  deps
+  propagates_configs [boolean, default=false]
+    Determines whether public_configs and all_dependent_configs in this
+    toolchain propagate to targets in other toolchains.
+
+    When false (the default), this toolchain will not propagate any configs to
+    targets in other toolchains that depend on it targets inside this
+    toolchain. This matches the most common usage of toolchains where they
+    represent different architectures or compilers and the settings that apply
+    to one won't necessarily apply to others.
+
+    When true, configs (public and all-dependent) will cross the boundary out
+    of this toolchain as if the toolchain boundary wasn't there. This only
+    affects one direction of dependencies: a toolchain can't control whether
+    it accepts such configs, only whether it pushes them. The build is
+    responsible for ensuring that any external targets depending on targets in
+    this toolchain are compatible with the compiler flags, etc. that may be
+    propagated.
+
+  deps [string list]
     Dependencies of this toolchain. These dependencies will be resolved before
     any target in the toolchain is compiled. To avoid circular dependencies
     these must be targets defined in another toolchain.
@@ -495,7 +509,8 @@ Value RunToolchain(Scope* scope,
 
   // This object will actually be copied into the one owned by the toolchain
   // manager, but that has to be done in the lock.
-  std::unique_ptr<Toolchain> toolchain(new Toolchain(scope->settings(), label));
+  std::unique_ptr<Toolchain> toolchain = std::make_unique<Toolchain>(
+      scope->settings(), label, scope->build_dependency_files());
   toolchain->set_defined_from(function);
   toolchain->visibility().SetPublic();
 
@@ -509,9 +524,9 @@ Value RunToolchain(Scope* scope,
   // Read deps (if any).
   const Value* deps_value = block_scope.GetValue(variables::kDeps, true);
   if (deps_value) {
-    ExtractListOfLabels(
-        *deps_value, block_scope.GetSourceDir(),
-        ToolchainLabelForScope(&block_scope), &toolchain->deps(), err);
+    ExtractListOfLabels(*deps_value, block_scope.GetSourceDir(),
+                        ToolchainLabelForScope(&block_scope),
+                        &toolchain->deps(), err);
     if (err->has_error())
       return Value();
   }
@@ -525,6 +540,15 @@ Value RunToolchain(Scope* scope,
     Scope::KeyValueMap values;
     toolchain_args->scope_value()->GetCurrentScopeValues(&values);
     toolchain->args() = values;
+  }
+
+  // Read propagates_configs (if present).
+  const Value* propagates_configs =
+      block_scope.GetValue("propagates_configs", true);
+  if (propagates_configs) {
+    if (!propagates_configs->VerifyTypeIs(Value::BOOLEAN, err))
+      return Value();
+    toolchain->set_propagates_configs(propagates_configs->boolean_value());
   }
 
   // Read switch and extensions variables (if any).
@@ -561,8 +585,7 @@ Value RunToolchain(Scope* scope,
 // tool ------------------------------------------------------------------------
 
 const char kTool[] = "tool";
-const char kTool_HelpShort[] =
-    "tool: Specify arguments to a toolchain tool.";
+const char kTool_HelpShort[] = "tool: Specify arguments to a toolchain tool.";
 const char kTool_Help[] =
     R"(tool: Specify arguments to a toolchain tool.
 
@@ -848,7 +871,7 @@ Expansions for tool variables
         the linker tool of "lib".
 
 )"  // String break to prevent overflowing the 16K max VC string length.
-R"(  Compiler tools have the notion of a single input and a single output, along
+    R"(  Compiler tools have the notion of a single input and a single output, along
   with a set of compiler-specific flags. The following expansions are
   available:
 
@@ -898,7 +921,7 @@ R"(  Compiler tools have the notion of a single input and a single output, along
         same directory as the target is declared in, they will will be the same
         as the "target" versions above. Example: "gen/base/test"
 
-  Linker tools have multiple inputs and (potentially) multiple outputs The
+  Linker tools have multiple inputs and (potentially) multiple outputs. The
   static library tool ("alink") is not considered a linker tool. The following
   expansions are available:
 
@@ -921,10 +944,10 @@ R"(  Compiler tools have the notion of a single input and a single output, along
 
     {{libs}}
         Expands to the list of system libraries to link to. Each will be
-        be prefixed by the "lib_switch".
+        prefixed by the "lib_switch".
 
         As a special case to support Mac, libraries with names ending in
-        ".framework" will be added to the {{libs}} with "-framework" preceeding
+        ".framework" will be added to the {{libs}} with "-framework" preceding
         it, and the lib switch will be ignored.
 
         Example: "-lfoo -lbar"
@@ -951,7 +974,7 @@ R"(  Compiler tools have the notion of a single input and a single output, along
         Example: ".so"
 
     {{solibs}}
-        Extra libraries from shared library dependencide not specified in the
+        Extra libraries from shared library dependencies not specified in the
         {{inputs}}. This is the list of link_output files from shared libraries
         (if the solink tool specifies a "link_output" variable separate from
         the "depend_output").
@@ -961,7 +984,7 @@ R"(  Compiler tools have the notion of a single input and a single output, along
         Example: "libfoo.so libbar.so"
 
 )"  // String break to prevent overflowing the 16K max VC string length.
-R"(  The static library ("alink") tool allows {{arflags}} plus the common tool
+    R"(  The static library ("alink") tool allows {{arflags}} plus the common tool
   substitutions.
 
   The copy tool allows the common compiler/linker substitutions, plus
@@ -978,7 +1001,7 @@ R"(  The static library ("alink") tool allows {{arflags}} plus the common tool
 
   The compile_xcassets tool will be called with one or more source (each an
   asset catalog) that needs to be compiled to a single output. The following
-  substitutions are avaiable:
+  substitutions are available:
 
     {{inputs}}
         Expands to the list of .xcassets to use as input to compile the asset
@@ -1056,8 +1079,8 @@ Value RunTool(Scope* scope,
       scope->GetProperty(&kToolchainPropertyKey, nullptr));
   if (!toolchain) {
     *err = Err(function->function(), "tool() called outside of toolchain().",
-        "The tool() function can only be used inside a toolchain() "
-        "definition.");
+               "The tool() function can only be used inside a toolchain() "
+               "definition.");
     return Value();
   }
 
@@ -1103,7 +1126,7 @@ Value RunTool(Scope* scope,
     subst_output_validator = &IsValidToolSubstitution;
   }
 
-  std::unique_ptr<Tool> tool(new Tool);
+  std::unique_ptr<Tool> tool = std::make_unique<Tool>();
   tool->set_defined_from(function);
 
   if (!ReadPattern(&block_scope, "command", subst_validator, tool.get(),
@@ -1165,8 +1188,9 @@ Value RunTool(Scope* scope,
     return Value();
   if ((!tool->link_output().empty() && tool->depend_output().empty()) ||
       (tool->link_output().empty() && !tool->depend_output().empty())) {
-    *err = Err(function, "Both link_output and depend_output should either "
-        "be specified or they should both be empty.");
+    *err = Err(function,
+               "Both link_output and depend_output should either "
+               "be specified or they should both be empty.");
     return Value();
   }
 

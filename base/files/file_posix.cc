@@ -11,15 +11,9 @@
 #include <unistd.h>
 
 #include "base/logging.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/thread_restrictions.h"
-#include "build/build_config.h"
-
-#if defined(OS_ANDROID)
-#include "base/os_compat_android.h"
-#endif
+#include "util/build_config.h"
 
 namespace base {
 
@@ -30,14 +24,13 @@ static_assert(File::FROM_BEGIN == SEEK_SET && File::FROM_CURRENT == SEEK_CUR &&
 
 namespace {
 
-#if defined(OS_BSD) || defined(OS_MACOSX) || defined(OS_NACL)
-int CallFstat(int fd, stat_wrapper_t *sb) {
-  AssertBlockingAllowed();
+#if defined(OS_BSD) || defined(OS_MACOSX) || defined(OS_NACL) || \
+    defined(OS_ANDROID) && __ANDROID_API__ < 21
+int CallFstat(int fd, stat_wrapper_t* sb) {
   return fstat(fd, sb);
 }
 #else
-int CallFstat(int fd, stat_wrapper_t *sb) {
-  AssertBlockingAllowed();
+int CallFstat(int fd, stat_wrapper_t* sb) {
   return fstat64(fd, sb);
 }
 #endif
@@ -53,23 +46,6 @@ int CallFtruncate(PlatformFile file, int64_t length) {
   return HANDLE_EINTR(ftruncate(file, length));
 }
 
-int CallFutimes(PlatformFile file, const struct timeval times[2]) {
-#ifdef __USE_XOPEN2K8
-  // futimens should be available, but futimes might not be
-  // http://pubs.opengroup.org/onlinepubs/9699919799/
-
-  timespec ts_times[2];
-  ts_times[0].tv_sec  = times[0].tv_sec;
-  ts_times[0].tv_nsec = times[0].tv_usec * 1000;
-  ts_times[1].tv_sec  = times[1].tv_sec;
-  ts_times[1].tv_nsec = times[1].tv_usec * 1000;
-
-  return futimens(file, ts_times);
-#else
-  return futimes(file, times);
-#endif
-}
-
 #if !defined(OS_FUCHSIA)
 File::Error CallFcntlFlock(PlatformFile file, bool do_lock) {
   struct flock lock;
@@ -78,7 +54,7 @@ File::Error CallFcntlFlock(PlatformFile file, bool do_lock) {
   lock.l_start = 0;
   lock.l_len = 0;  // Lock entire file.
   if (HANDLE_EINTR(fcntl(file, F_SETLK, &lock)) == -1)
-    return File::OSErrorToFileError(errno);
+    return File::GetLastFileError();
   return File::FILE_OK;
 }
 #endif
@@ -97,11 +73,6 @@ int CallFtruncate(PlatformFile file, int64_t length) {
   return 0;
 }
 
-int CallFutimes(PlatformFile file, const struct timeval times[2]) {
-  NOTIMPLEMENTED();  // NaCl doesn't implement futimes.
-  return 0;
-}
-
 File::Error CallFcntlFlock(PlatformFile file, bool do_lock) {
   NOTIMPLEMENTED();  // NaCl doesn't implement flock struct.
   return File::FILE_ERROR_INVALID_OPERATION;
@@ -115,50 +86,35 @@ void File::Info::FromStat(const stat_wrapper_t& stat_info) {
   is_symbolic_link = S_ISLNK(stat_info.st_mode);
   size = stat_info.st_size;
 
-#if defined(OS_LINUX)
-  time_t last_modified_sec = stat_info.st_mtim.tv_sec;
-  int64_t last_modified_nsec = stat_info.st_mtim.tv_nsec;
-  time_t last_accessed_sec = stat_info.st_atim.tv_sec;
-  int64_t last_accessed_nsec = stat_info.st_atim.tv_nsec;
-  time_t creation_time_sec = stat_info.st_ctim.tv_sec;
-  int64_t creation_time_nsec = stat_info.st_ctim.tv_nsec;
-#elif defined(OS_ANDROID)
-  time_t last_modified_sec = stat_info.st_mtime;
-  int64_t last_modified_nsec = stat_info.st_mtime_nsec;
-  time_t last_accessed_sec = stat_info.st_atime;
-  int64_t last_accessed_nsec = stat_info.st_atime_nsec;
-  time_t creation_time_sec = stat_info.st_ctime;
-  int64_t creation_time_nsec = stat_info.st_ctime_nsec;
-#elif defined(OS_MACOSX) || defined(OS_IOS) || defined(OS_BSD)
+#if defined(OS_MACOSX)
   time_t last_modified_sec = stat_info.st_mtimespec.tv_sec;
   int64_t last_modified_nsec = stat_info.st_mtimespec.tv_nsec;
   time_t last_accessed_sec = stat_info.st_atimespec.tv_sec;
   int64_t last_accessed_nsec = stat_info.st_atimespec.tv_nsec;
   time_t creation_time_sec = stat_info.st_ctimespec.tv_sec;
   int64_t creation_time_nsec = stat_info.st_ctimespec.tv_nsec;
-#else
+#elif defined(OS_AIX)
   time_t last_modified_sec = stat_info.st_mtime;
   int64_t last_modified_nsec = 0;
   time_t last_accessed_sec = stat_info.st_atime;
   int64_t last_accessed_nsec = 0;
   time_t creation_time_sec = stat_info.st_ctime;
   int64_t creation_time_nsec = 0;
+#elif defined(OS_POSIX)
+  time_t last_modified_sec = stat_info.st_mtim.tv_sec;
+  int64_t last_modified_nsec = stat_info.st_mtim.tv_nsec;
+  time_t last_accessed_sec = stat_info.st_atim.tv_sec;
+  int64_t last_accessed_nsec = stat_info.st_atim.tv_nsec;
+  time_t creation_time_sec = stat_info.st_ctim.tv_sec;
+  int64_t creation_time_nsec = stat_info.st_ctim.tv_nsec;
+#else
+#error
 #endif
 
-  last_modified =
-      Time::FromTimeT(last_modified_sec) +
-      TimeDelta::FromMicroseconds(last_modified_nsec /
-                                  Time::kNanosecondsPerMicrosecond);
-
-  last_accessed =
-      Time::FromTimeT(last_accessed_sec) +
-      TimeDelta::FromMicroseconds(last_accessed_nsec /
-                                  Time::kNanosecondsPerMicrosecond);
-
-  creation_time =
-      Time::FromTimeT(creation_time_sec) +
-      TimeDelta::FromMicroseconds(creation_time_nsec /
-                                  Time::kNanosecondsPerMicrosecond);
+  constexpr uint64_t kNano = 1'000'000'000;
+  last_modified = last_modified_sec * kNano + last_modified_nsec;
+  last_accessed = last_accessed_sec * kNano + last_accessed_nsec;
+  creation_time = creation_time_sec * kNano + creation_time_nsec;
 }
 
 bool File::IsValid() const {
@@ -177,41 +133,27 @@ void File::Close() {
   if (!IsValid())
     return;
 
-  SCOPED_FILE_TRACE("Close");
-  AssertBlockingAllowed();
   file_.reset();
 }
 
 int64_t File::Seek(Whence whence, int64_t offset) {
-  AssertBlockingAllowed();
   DCHECK(IsValid());
 
-  SCOPED_FILE_TRACE_WITH_SIZE("Seek", offset);
-
-#if defined(OS_ANDROID)
-  static_assert(sizeof(int64_t) == sizeof(off64_t), "off64_t must be 64 bits");
-  return lseek64(file_.get(), static_cast<off64_t>(offset),
-                 static_cast<int>(whence));
-#else
   static_assert(sizeof(int64_t) == sizeof(off_t), "off_t must be 64 bits");
   return lseek(file_.get(), static_cast<off_t>(offset),
                static_cast<int>(whence));
-#endif
 }
 
 int File::Read(int64_t offset, char* data, int size) {
-  AssertBlockingAllowed();
   DCHECK(IsValid());
   if (size < 0)
     return -1;
 
-  SCOPED_FILE_TRACE_WITH_SIZE("Read", size);
-
   int bytes_read = 0;
   int rv;
   do {
-    rv = HANDLE_EINTR(pread(file_.get(), data + bytes_read,
-                            size - bytes_read, offset + bytes_read));
+    rv = HANDLE_EINTR(pread(file_.get(), data + bytes_read, size - bytes_read,
+                            offset + bytes_read));
     if (rv <= 0)
       break;
 
@@ -222,12 +164,9 @@ int File::Read(int64_t offset, char* data, int size) {
 }
 
 int File::ReadAtCurrentPos(char* data, int size) {
-  AssertBlockingAllowed();
   DCHECK(IsValid());
   if (size < 0)
     return -1;
-
-  SCOPED_FILE_TRACE_WITH_SIZE("ReadAtCurrentPos", size);
 
   int bytes_read = 0;
   int rv;
@@ -243,33 +182,25 @@ int File::ReadAtCurrentPos(char* data, int size) {
 }
 
 int File::ReadNoBestEffort(int64_t offset, char* data, int size) {
-  AssertBlockingAllowed();
   DCHECK(IsValid());
-  SCOPED_FILE_TRACE_WITH_SIZE("ReadNoBestEffort", size);
   return HANDLE_EINTR(pread(file_.get(), data, size, offset));
 }
 
 int File::ReadAtCurrentPosNoBestEffort(char* data, int size) {
-  AssertBlockingAllowed();
   DCHECK(IsValid());
   if (size < 0)
     return -1;
 
-  SCOPED_FILE_TRACE_WITH_SIZE("ReadAtCurrentPosNoBestEffort", size);
   return HANDLE_EINTR(read(file_.get(), data, size));
 }
 
 int File::Write(int64_t offset, const char* data, int size) {
-  AssertBlockingAllowed();
-
   if (IsOpenAppend(file_.get()))
     return WriteAtCurrentPos(data, size);
 
   DCHECK(IsValid());
   if (size < 0)
     return -1;
-
-  SCOPED_FILE_TRACE_WITH_SIZE("Write", size);
 
   int bytes_written = 0;
   int rv;
@@ -286,18 +217,15 @@ int File::Write(int64_t offset, const char* data, int size) {
 }
 
 int File::WriteAtCurrentPos(const char* data, int size) {
-  AssertBlockingAllowed();
   DCHECK(IsValid());
   if (size < 0)
     return -1;
 
-  SCOPED_FILE_TRACE_WITH_SIZE("WriteAtCurrentPos", size);
-
   int bytes_written = 0;
   int rv;
   do {
-    rv = HANDLE_EINTR(write(file_.get(), data + bytes_written,
-                            size - bytes_written));
+    rv = HANDLE_EINTR(
+        write(file_.get(), data + bytes_written, size - bytes_written));
     if (rv <= 0)
       break;
 
@@ -308,19 +236,15 @@ int File::WriteAtCurrentPos(const char* data, int size) {
 }
 
 int File::WriteAtCurrentPosNoBestEffort(const char* data, int size) {
-  AssertBlockingAllowed();
   DCHECK(IsValid());
   if (size < 0)
     return -1;
 
-  SCOPED_FILE_TRACE_WITH_SIZE("WriteAtCurrentPosNoBestEffort", size);
   return HANDLE_EINTR(write(file_.get(), data, size));
 }
 
 int64_t File::GetLength() {
   DCHECK(IsValid());
-
-  SCOPED_FILE_TRACE("GetLength");
 
   stat_wrapper_t file_info;
   if (CallFstat(file_.get(), &file_info))
@@ -330,30 +254,13 @@ int64_t File::GetLength() {
 }
 
 bool File::SetLength(int64_t length) {
-  AssertBlockingAllowed();
   DCHECK(IsValid());
 
-  SCOPED_FILE_TRACE_WITH_SIZE("SetLength", length);
   return !CallFtruncate(file_.get(), length);
-}
-
-bool File::SetTimes(Time last_access_time, Time last_modified_time) {
-  AssertBlockingAllowed();
-  DCHECK(IsValid());
-
-  SCOPED_FILE_TRACE("SetTimes");
-
-  timeval times[2];
-  times[0] = last_access_time.ToTimeVal();
-  times[1] = last_modified_time.ToTimeVal();
-
-  return !CallFutimes(file_.get(), times);
 }
 
 bool File::GetInfo(Info* info) {
   DCHECK(IsValid());
-
-  SCOPED_FILE_TRACE("GetInfo");
 
   stat_wrapper_t file_info;
   if (CallFstat(file_.get(), &file_info))
@@ -365,12 +272,10 @@ bool File::GetInfo(Info* info) {
 
 #if !defined(OS_FUCHSIA)
 File::Error File::Lock() {
-  SCOPED_FILE_TRACE("Lock");
   return CallFcntlFlock(file_.get(), true);
 }
 
 File::Error File::Unlock() {
-  SCOPED_FILE_TRACE("Unlock");
   return CallFcntlFlock(file_.get(), false);
 }
 #endif
@@ -379,11 +284,9 @@ File File::Duplicate() const {
   if (!IsValid())
     return File();
 
-  SCOPED_FILE_TRACE("Duplicate");
-
   PlatformFile other_fd = HANDLE_EINTR(dup(GetPlatformFile()));
   if (other_fd == -1)
-    return File(OSErrorToFileError(errno));
+    return File(File::GetLastFileError());
 
   File other(other_fd);
   if (async())
@@ -420,10 +323,8 @@ File::Error File::OSErrorToFileError(int saved_errno) {
     case ENOTDIR:
       return FILE_ERROR_NOT_A_DIRECTORY;
     default:
-#if !defined(OS_NACL)  // NaCl build has no metrics code.
-      UMA_HISTOGRAM_SPARSE_SLOWLY("PlatformFile.UnknownErrors.Posix",
-                                  saved_errno);
-#endif
+      // This function should only be called for errors.
+      DCHECK_NE(0, saved_errno);
       return FILE_ERROR_FAILED;
   }
 }
@@ -432,7 +333,6 @@ File::Error File::OSErrorToFileError(int saved_errno) {
 #if !defined(OS_NACL)
 // TODO(erikkay): does it make sense to support FLAG_EXCLUSIVE_* here?
 void File::DoInitialize(const FilePath& path, uint32_t flags) {
-  AssertBlockingAllowed();
   DCHECK(!IsValid());
 
   int open_flags = 0;
@@ -464,10 +364,8 @@ void File::DoInitialize(const FilePath& path, uint32_t flags) {
     open_flags |= O_RDWR;
   } else if (flags & FLAG_WRITE) {
     open_flags |= O_WRONLY;
-  } else if (!(flags & FLAG_READ) &&
-             !(flags & FLAG_WRITE_ATTRIBUTES) &&
-             !(flags & FLAG_APPEND) &&
-             !(flags & FLAG_OPEN_ALWAYS)) {
+  } else if (!(flags & FLAG_READ) && !(flags & FLAG_WRITE_ATTRIBUTES) &&
+             !(flags & FLAG_APPEND) && !(flags & FLAG_OPEN_ALWAYS)) {
     NOTREACHED();
   }
 
@@ -482,17 +380,13 @@ void File::DoInitialize(const FilePath& path, uint32_t flags) {
   static_assert(O_RDONLY == 0, "O_RDONLY must equal zero");
 
   int mode = S_IRUSR | S_IWUSR;
-#if defined(OS_CHROMEOS)
-  mode |= S_IRGRP | S_IROTH;
-#endif
-
   int descriptor = HANDLE_EINTR(open(path.value().c_str(), open_flags, mode));
 
   if (flags & FLAG_OPEN_ALWAYS) {
     if (descriptor < 0) {
       open_flags |= O_CREAT;
       if (flags & FLAG_EXCLUSIVE_READ || flags & FLAG_EXCLUSIVE_WRITE)
-        open_flags |= O_EXCL;   // together with O_CREAT implies O_NOFOLLOW
+        open_flags |= O_EXCL;  // together with O_CREAT implies O_NOFOLLOW
 
       descriptor = HANDLE_EINTR(open(path.value().c_str(), open_flags, mode));
       if (descriptor >= 0)
@@ -501,7 +395,7 @@ void File::DoInitialize(const FilePath& path, uint32_t flags) {
   }
 
   if (descriptor < 0) {
-    error_details_ = File::OSErrorToFileError(errno);
+    error_details_ = File::GetLastFileError();
     return;
   }
 
@@ -518,14 +412,9 @@ void File::DoInitialize(const FilePath& path, uint32_t flags) {
 #endif  // !defined(OS_NACL)
 
 bool File::Flush() {
-  AssertBlockingAllowed();
   DCHECK(IsValid());
-  SCOPED_FILE_TRACE("Flush");
 
-#if defined(OS_NACL)
-  NOTIMPLEMENTED();  // NaCl doesn't implement fsync.
-  return true;
-#elif defined(OS_LINUX) || defined(OS_ANDROID)
+#if defined(OS_LINUX)
   return !HANDLE_EINTR(fdatasync(file_.get()));
 #else
   return !HANDLE_EINTR(fsync(file_.get()));
@@ -535,6 +424,11 @@ bool File::Flush() {
 void File::SetPlatformFile(PlatformFile file) {
   DCHECK(!file_.is_valid());
   file_.reset(file);
+}
+
+// static
+File::Error File::GetLastFileError() {
+  return base::File::OSErrorToFileError(errno);
 }
 
 }  // namespace base
