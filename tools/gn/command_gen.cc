@@ -53,6 +53,7 @@ const char kSwitchJsonIdeScript[] = "json-ide-script";
 const char kSwitchJsonIdeScriptArgs[] = "json-ide-script-args";
 const char kSwitchJsonIdeScriptInterpreter[] = "json-ide-script-interpreter";
 const char kSwitchExportCompileCommands[] = "export-compile-commands";
+const char kSwitchExportCompileCommandsPerToolchain[] = "export-compile-commands-per-toolchain";
 
 // Collects Ninja rules for each toolchain. The lock protectes the rules.
 struct TargetWriteInfo {
@@ -288,6 +289,7 @@ bool RunIdeWriter(const std::string& ide,
 
 bool RunCompileCommandsWriter(const BuildSettings* build_settings,
                               const Builder& builder,
+                              bool commands_per_toolchain,
                               Err* err) {
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
@@ -297,6 +299,7 @@ bool RunCompileCommandsWriter(const BuildSettings* build_settings,
   std::string file_name = "compile_commands.json";
 
   bool res = CompileCommandsWriter::RunAndWriteFiles(build_settings, builder,
+                                                     commands_per_toolchain,
                                                      file_name, quiet, err);
   if (res && !quiet) {
     OutputString("Generating compile_commands took " +
@@ -443,6 +446,14 @@ Compilation Database
       specifies one way a translation unit is compiled in the project. This is
       used for various Clang-based tooling, allowing for the replay of individual
       compilations independent of the build system.
+
+  --export-compile-commands-per-toolchain
+      Produces a separate compile_commands.json file per toolchain in the root of
+      each toolchain's output directory containing an array of “command objects”,
+      where each command object specifies one way a translation unit is compiled
+      in the project for that toolchain. This is used for various Clang-based
+      tooling, allowing for the replay of individual compilations independent of
+      the build system.
 )";
 
 int RunGen(const std::vector<std::string>& args) {
@@ -521,7 +532,14 @@ int RunGen(const std::vector<std::string>& args) {
 
   if (command_line->HasSwitch(kSwitchExportCompileCommands) &&
       !RunCompileCommandsWriter(&setup->build_settings(), setup->builder(),
-                                &err)) {
+                                false, &err)) {
+    err.PrintToStdout();
+    return 1;
+  }
+
+  if (command_line->HasSwitch(kSwitchExportCompileCommandsPerToolchain) &&
+      !RunCompileCommandsWriter(&setup->build_settings(), setup->builder(),
+                                true, &err)) {
     err.PrintToStdout();
     return 1;
   }

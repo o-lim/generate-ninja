@@ -825,6 +825,14 @@
       specifies one way a translation unit is compiled in the project. This is
       used for various Clang-based tooling, allowing for the replay of individual
       compilations independent of the build system.
+
+  --export-compile-commands-per-toolchain
+      Produces a separate compile_commands.json file per toolchain in the root of
+      each toolchain's output directory containing an array of “command objects”,
+      where each command object specifies one way a translation unit is compiled
+      in the project for that toolchain. This is used for various Clang-based
+      tooling, allowing for the replay of individual compilations independent of
+      the build system.
 ```
 ### <a name="cmd_help"></a>**gn help**: Does what you think.
 ```

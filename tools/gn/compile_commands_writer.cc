@@ -5,6 +5,8 @@
 #include "tools/gn/compile_commands_writer.h"
 
 #include <sstream>
+#include <map>
+#include <vector>
 
 #include "base/json/string_escape.h"
 #include "base/strings/stringprintf.h"
@@ -335,6 +337,7 @@ void CompileCommandsWriter::RenderJSON(const BuildSettings* build_settings,
 bool CompileCommandsWriter::RunAndWriteFiles(
     const BuildSettings* build_settings,
     const Builder& builder,
+    bool commands_per_toolchain,
     const std::string& file_name,
     bool quiet,
     Err* err) {
@@ -343,13 +346,29 @@ bool CompileCommandsWriter::RunAndWriteFiles(
   if (output_file.is_null())
     return false;
 
-  base::FilePath output_path = build_settings->GetFullPath(output_file);
-
+  std::map<SourceFile, std::vector<const Target*>> tc_targets;
   std::vector<const Target*> all_targets = builder.GetAllResolvedTargets();
+  if (commands_per_toolchain) {
+    for (auto target : all_targets) {
+      const SourceDir toolchain_root = GetBuildDirAsSourceDir(
+          BuildDirContext(target), BuildDirType::TOOLCHAIN_ROOT);
+      SourceFile out_file = toolchain_root.ResolveRelativeFile(
+          Value(nullptr, file_name), err);
+      if (out_file.is_null())
+        return false;
 
-  std::string json;
-  RenderJSON(build_settings, all_targets, &json);
-  if (!WriteFileIfChanged(output_path, json, err))
-    return false;
+      tc_targets[out_file].push_back(target);
+    }
+  } else {
+    tc_targets[output_file].swap(all_targets);
+  }
+
+  for (auto & targets : tc_targets) {
+    std::string json;
+    base::FilePath output_path = build_settings->GetFullPath(targets.first);
+    RenderJSON(build_settings, targets.second, &json);
+    if (!WriteFileIfChanged(output_path, json, err))
+      return false;
+  }
   return true;
 }

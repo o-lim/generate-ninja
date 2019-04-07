@@ -38,6 +38,7 @@ minor features as well as some bug fixes:
  - Support custom interpreter for action scripts and exec scripts
  - Support custom interpreter for JSON IDE scripts
  - Support `--all-toolchains` option for QtCreator generator
+ - Support separate compilation database per toolchain
  - Add `define_switch` and `include_switch` variables to toolchain function
  - Add `color_console` built-in variable
  - Add `console_pool` built-in variable

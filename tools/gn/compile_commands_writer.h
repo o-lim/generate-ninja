@@ -15,6 +15,7 @@ class CompileCommandsWriter {
  public:
   static bool RunAndWriteFiles(const BuildSettings* build_setting,
                                const Builder& builder,
+                               bool commands_per_toolchain,
                                const std::string& file_name,
                                bool quiet,
                                Err* err);
