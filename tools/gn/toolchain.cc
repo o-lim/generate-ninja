@@ -85,7 +85,7 @@ SourceFileType Toolchain::GetSourceFileType(const SourceFile& file) const {
       (extension == "mm" || extension == "M"))
     return SOURCE_MM;
   if (!ToolHasSourceExtensions(TYPE_RC) &&
-      extension == "rc")
+      (extension == "rc" || extension == "rc2"))
     return SOURCE_RC;
   if (!ToolHasSourceExtensions(TYPE_ASM) &&
       (extension == "S" || extension == "s" || extension == "sx"))
