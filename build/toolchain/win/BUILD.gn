@@ -15,25 +15,8 @@ assert(is_win)
 # "environment.x86" and "environment.x64" to the build directory and return a
 # list to us.
 
-# This tool will is used as a wrapper for various commands below.
+# This tool is used as a wrapper for various commands below.
 tool_wrapper_path = rebase_path("tool_wrapper.py", root_build_dir)
-
-# Copy the VS runtime DLL for the default toolchain to the root build directory
-# so things will run.
-if (current_toolchain == default_toolchain) {
-  if (is_debug) {
-    configuration_name = "Debug"
-  } else {
-    configuration_name = "Release"
-  }
-  exec_script("../../vs_toolchain.py",
-              [
-                "copy_dlls",
-                rebase_path(root_build_dir),
-                configuration_name,
-                target_cpu,
-              ])
-}
 
 # Parameters:
 #   environment: File name of environment file.
@@ -222,11 +205,10 @@ template("msvc_toolchain") {
     tool("link") {
       exename = "{{output_dir}}/{{target_output_name}}{{output_extension}}"
       pdbname = "$exename.pdb"
-      #rspfile = "$exename.rsp"
+      rspfile = "$exename.rsp"
       pool = "//build/toolchain:link_pool($default_toolchain)"
 
-      #command = "$python_path $tool_wrapper_path link-wrapper $env False $link /nologo /OUT:$exename /PDB:$pdbname @$rspfile"
-      command = "$python_path $tool_wrapper_path link-wrapper $env False $link /nologo /OUT:$exename /PDB:$pdbname {{inputs}} {{libs}} {{solibs}} {{ldflags}}"
+      command = "$python_path $tool_wrapper_path link-wrapper $env False $link /nologo /OUT:$exename /PDB:$pdbname @$rspfile"
 
       if (is_official_build) {
         # On bots, the binary's PDB grow and eventually exceed 4G, causing the
@@ -259,7 +241,7 @@ template("msvc_toolchain") {
 
       # The use of inputs_newline is to work around a fixed per-line buffer
       # size in the linker.
-      #rspfile_content = "{{inputs_newline}} {{libs}} {{solibs}} {{ldflags}}"
+      rspfile_content = "{{inputs_newline}} {{libs}} {{solibs}} {{ldflags}}"
     }
 
     # These two are really entirely generic, but have to be repeated in
