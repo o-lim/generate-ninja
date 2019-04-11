@@ -17,19 +17,17 @@ config("ldconfig") {
 
   if (is_linux) {
     ldflags = [
-      "-static",
-      "-Wl,--whole-archive", "-lpthread", "-Wl,--no-whole-archive",
     ]
   }
 }
 
 config("executable_config") {
-  configs = [ ":ldconfig", ":static_config" ]
+  configs = [ ":ldconfig" ]
 }
 
 # Shared libaries should not have RPATH or RUNPATH set. This allows the
 # shared libs to inherit RPATH from the parent executable that is loading
 # the shared library. (See internal b/37514052 for more details.)
 config("shared_library_config") {
-  configs = [ ":static_config" ]
+  #configs = [ ":static_config" ]
 }

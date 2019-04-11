@@ -63,7 +63,7 @@ declare_args() {
   linkrepro_root_dir = ""
 
   # Whether or not we should use position independent code.
-  use_pic = false
+  use_pic = true
 }
 
 # Exclude unwind tables for official builds as unwinding can be done from stack
