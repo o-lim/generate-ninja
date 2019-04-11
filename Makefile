@@ -1,7 +1,14 @@
 
+EMPTY :=
+SPACE := $(EMPTY) $(EMPTY)
+COMMA := ,
+
 COMMIT_HASH := $Format:%h$
+REF_NAMES := $Format:%D$
+REF_NAMES := $(filter-out ->,$(subst $(COMMA),$(SPACE),$(subst :$(SPACE),:,$(REF_NAMES))))
+VERSION_SUFFIX = $(if $(filter tag:v$(GN_VERSION),$(REF_NAMES)),,-$(COMMIT_HASH))
 GN_VERSION := 0.3.2
-export GN_VERSION := $(if $(filter-out %:%h,$(COMMIT_HASH)),$(GN_VERSION)-$(COMMIT_HASH))
+export GN_VERSION := $(if $(filter-out %:%h %:%h$$,$(COMMIT_HASH)),$(GN_VERSION)$(VERSION_SUFFIX))
 
 .PHONY: all
 all: gn_all gn_test
