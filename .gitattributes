@@ -1,1 +1,2 @@
 /Makefile export-subst
+/build/gen.py export-subst

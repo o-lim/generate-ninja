@@ -13,11 +13,7 @@
 #include "util/build_config.h"
 #include "util/sys_info.h"
 
-#if defined(GN_BUILD)
 #include "tools/gn/last_commit_position.h"
-#else
-#define LAST_COMMIT_POSITION "UNKNOWN"
-#endif
 
 const char kBuildArgs_Help[] =
     R"(Build Arguments Overview

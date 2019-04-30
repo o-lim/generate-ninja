@@ -80,7 +80,6 @@ TEST(ArgsTest, VerifyOverrideScope) {
   EXPECT_EQ(Value(nullptr, "cvalue2"), *setup.scope()->GetValue("c"));
 }
 
-#if defined(GN_BUILD)
 TEST(ArgsTest, VerifyGnVersionScope) {
   TestWithScope setup;
   Args args;
@@ -102,4 +101,3 @@ TEST(ArgsTest, VerifyGnVersionScope) {
 
   EXPECT_EQ(version_string, ss.str());
 }
-#endif

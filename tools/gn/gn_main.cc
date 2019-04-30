@@ -16,7 +16,7 @@
 #include "util/msg_loop.h"
 #include "util/sys_info.h"
 
-#include "last_commit_position.h"
+#include "tools/gn/last_commit_position.h"
 
 namespace {
 
