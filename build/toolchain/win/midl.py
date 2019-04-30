@@ -6,6 +6,7 @@ import array
 import difflib
 import distutils.dir_util
 import filecmp
+import functools
 import operator
 import os
 import re
@@ -131,7 +132,7 @@ def overwrite_cls_guid_tlb(tlb_file, dynamic_guid):
         '<16sII', contents, guidind)
     words = struct.unpack('<8H', guidbytes)
     # midl seems to use the following simple hash function for GUIDs:
-    guidhash = reduce(operator.xor, [w for w in words]) % (0x80 / 4)
+    guidhash = functools.reduce(operator.xor, [w for w in words]) % (0x80 / 4)
     nextguid = hashtab[guidhash]
     struct.pack_into('<I', contents, guidind + 0x14, nextguid)
     hashtab[guidhash] = guidind - guid_off
@@ -199,13 +200,13 @@ def main(arch, outdir, dynamic_guid, tlb, h, dlldata, iid, proxy, idl, *flags):
     # to filter is pairs of lines that look like this:
     # Processing C:\Program Files (x86)\Microsoft SDKs\...\include\objidl.idl
     # objidl.idl
-    lines = out.splitlines()
+    lines = out.decode('utf-8').splitlines()
     prefixes = ('Processing ', '64 bit Processing ')
     processing = set(os.path.basename(x)
                      for x in lines if x.startswith(prefixes))
     for line in lines:
       if not line.startswith(prefixes) and line not in processing:
-        print line
+        print(line)
     if popen.returncode != 0:
       return popen.returncode
 
@@ -215,18 +216,18 @@ def main(arch, outdir, dynamic_guid, tlb, h, dlldata, iid, proxy, idl, *flags):
     # Now compare the output in tmp_dir to the copied-over outputs.
     diff = filecmp.dircmp(tmp_dir, outdir)
     if diff.diff_files:
-      print 'midl.exe output different from files in %s, see %s' \
-          % (outdir, tmp_dir)
+      print('midl.exe output different from files in %s, see %s'
+          % (outdir, tmp_dir))
       for f in diff.diff_files:
         if f.endswith('.tlb'): continue
         fromfile = os.path.join(outdir, f)
         tofile = os.path.join(tmp_dir, f)
-        print ''.join(difflib.unified_diff(open(fromfile, 'U').readlines(),
+        print(''.join(difflib.unified_diff(open(fromfile, 'U').readlines(),
                                            open(tofile, 'U').readlines(),
-                                           fromfile, tofile))
+                                           fromfile, tofile)))
       delete_tmp_dir = False
-      print 'To rebaseline:'
-      print '  copy /y %s\* %s' % (tmp_dir, source)
+      print('To rebaseline:')
+      print('  copy /y %s\* %s' % (tmp_dir, source))
       sys.exit(1)
     return 0
   finally:

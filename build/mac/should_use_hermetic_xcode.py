@@ -38,5 +38,5 @@ def main():
 
 
 if __name__ == '__main__':
-  print main()
+  print(main())
   sys.exit(0)

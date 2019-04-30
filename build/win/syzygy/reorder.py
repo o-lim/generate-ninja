@@ -32,6 +32,11 @@ def _Shell(*cmd, **kw):
   if prog.returncode != 0:
     raise RuntimeError('Command "%s" returned %d.' % (cmd, prog.returncode))
 
+  if stdout != None:
+    stdout = stdout.decode('utf-8')
+  if stderr != None:
+    stderr = stderr.decode('utf-8')
+
   return stdout, stderr
 
 

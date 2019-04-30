@@ -193,7 +193,7 @@ def CompileAssetCatalog(output, platform, product_type, min_deployment_target,
     stdout, _ = process.communicate()
 
     # Filter the output to remove all garbarge and to fix the paths.
-    stdout = FilterCompilerOutput(stdout, relative_paths)
+    stdout = FilterCompilerOutput(stdout.decode('utf-8'), relative_paths)
 
     if process.returncode or stdout:
       sys.stderr.write(stdout)

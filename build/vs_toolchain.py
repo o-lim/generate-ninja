@@ -3,6 +3,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+from __future__ import print_function
 import glob
 import json
 import os
@@ -134,7 +135,7 @@ def _CopyRuntimeImpl(target, source, verbose=True):
       (not os.path.isfile(target) or
        abs(os.stat(target).st_mtime - os.stat(source).st_mtime) >= 0.01)):
     if verbose:
-      print 'Copying %s to %s...' % (source, target)
+      print('Copying %s to %s...' % (source, target))
     if os.path.exists(target):
       # Make the file writable so that we can delete it now, and keep it
       # readable.
@@ -339,7 +340,7 @@ def GetToolchainDir():
   runtime_dll_dirs = SetEnvironmentAndGetRuntimeDllDirs()
   win_sdk_dir = SetEnvironmentAndGetSDKDir()
 
-  print '''vs_path = "%s"
+  print('''vs_path = "%s"
 sdk_path = "%s"
 vs_version = "%s"
 wdk_dir = "%s"
@@ -349,7 +350,7 @@ runtime_dirs = "%s"
       win_sdk_dir,
       GetVisualStudioVersion(),
       NormalizePath(os.environ.get('WDK_DIR', '')),
-      os.path.pathsep.join(runtime_dll_dirs or ['None']))
+      os.path.pathsep.join(runtime_dll_dirs or ['None'])))
 
 
 def main():
@@ -358,7 +359,7 @@ def main():
       'copy_dlls': CopyDlls,
   }
   if len(sys.argv) < 2 or sys.argv[1] not in commands:
-    print >>sys.stderr, 'Expected one of: %s' % ', '.join(commands)
+    print('Expected one of: %s' % ', '.join(commands), file=sys.stderr)
     return 1
   return commands[sys.argv[1]](*sys.argv[2:])
 

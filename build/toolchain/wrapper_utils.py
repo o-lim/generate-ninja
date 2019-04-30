@@ -147,4 +147,6 @@ def CaptureCommandStderr(command, env=None):
   """
   child = subprocess.Popen(command, stderr=subprocess.PIPE, env=env)
   _, stderr = child.communicate()
+  if stderr != None:
+      stderr = stderr.decode('utf-8')
   return child.returncode, stderr

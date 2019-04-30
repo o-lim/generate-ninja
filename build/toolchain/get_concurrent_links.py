@@ -69,8 +69,8 @@ def main():
   parser.disable_interspersed_args()
   options, _ = parser.parse_args()
 
-  print _GetDefaultConcurrentLinks(options.mem_per_link_gb,
-                                   options.reserve_mem_gb)
+  print(_GetDefaultConcurrentLinks(options.mem_per_link_gb,
+                                   options.reserve_mem_gb))
   return 0
 
 if __name__ == '__main__':

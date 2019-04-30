@@ -18,7 +18,7 @@ import sys
 
 def GetOutput(*args):
   try:
-    return subprocess.check_output([sys.argv[1]] + list(args))
+    return subprocess.check_output([sys.argv[1]] + list(args)).decode('utf-8')
   except subprocess.CalledProcessError:
     return ''
 
@@ -78,7 +78,7 @@ def ParseCommand(command, out):
 
 def main():
   if len(sys.argv) < 2:
-    print 'usage: help_as_html.py <gn_binary>'
+    print('usage: help_as_html.py <gn_binary>')
     return 1
   header = '''<!DOCTYPE html>
 <html>
@@ -97,7 +97,7 @@ def main():
   commands, output = ParseTopLevel(GetOutput('help'))
   for command in commands:
     output += ParseCommand(command, GetOutput('help', command))
-  print header + '\n'.join(output) + footer
+  print(header + '\n'.join(output) + footer)
   return 0
 
 

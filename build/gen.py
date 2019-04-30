@@ -197,7 +197,7 @@ def WriteGenericNinja(path, static_libraries, executables,
             ' '.join(cflags_cc + settings.get('cflags_cc', [])),
     ])
 
-  for library, settings in static_libraries.iteritems():
+  for library, settings in static_libraries.items():
     for src_file in settings['sources']:
       build_source(src_file, settings)
 
@@ -208,7 +208,7 @@ def WriteGenericNinja(path, static_libraries, executables,
     ninja_lines.append('  libflags = %s' % ' '.join(libflags))
 
 
-  for executable, settings in executables.iteritems():
+  for executable, settings in executables.items():
     for src_file in settings['sources']:
       build_source(src_file, settings)
 

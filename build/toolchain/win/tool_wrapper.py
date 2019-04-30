@@ -139,10 +139,11 @@ class WinTool(object):
     # Read output one line at a time as it shows up to avoid OOM failures when
     # GBs of output is produced.
     for line in link.stdout:
+      line = line.decode('utf-8')
       if (not line.startswith('   Creating library ') and
           not line.startswith('Generating code') and
           not line.startswith('Finished generating code')):
-        print line,
+        print(line)
     return link.wait()
 
   def ExecAsmWrapper(self, arch, *args):
@@ -151,14 +152,14 @@ class WinTool(object):
     popen = subprocess.Popen(args, shell=True, env=env,
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     out, _ = popen.communicate()
-    for line in out.splitlines():
+    for line in out.decode('utf-8').splitlines():
       # Split to avoid triggering license checks:
       if (not line.startswith('Copy' + 'right (C' +
                               ') Microsoft Corporation') and
           not line.startswith('Microsoft (R) Macro Assembler') and
           not line.startswith(' Assembling: ') and
           line):
-        print line
+        print(line)
     return popen.returncode
 
   def ExecRcWrapper(self, arch, *args):
@@ -187,11 +188,11 @@ class WinTool(object):
     if rc_exe_exit_code == 0:
       # Since tool("rc") can't have deps, add deps on this script and on rc.py
       # and its deps here, so that rc edges become dirty if rc.py changes.
-      print 'Note: including file: ../../build/toolchain/win/tool_wrapper.py'
-      print 'Note: including file: ../../build/toolchain/win/rc/rc.py'
-      print 'Note: including file: ../../build/toolchain/win/rc/linux64/rc.sha1'
-      print 'Note: including file: ../../build/toolchain/win/rc/mac/rc.sha1'
-      print 'Note: including file: ../../build/toolchain/win/rc/win/rc.exe.sha1'
+      print('Note: including file: ../../build/toolchain/win/tool_wrapper.py')
+      print('Note: including file: ../../build/toolchain/win/rc/rc.py')
+      print('Note: including file: ../../build/toolchain/win/rc/linux64/rc.sha1')
+      print('Note: including file: ../../build/toolchain/win/rc/mac/rc.sha1')
+      print('Note: including file: ../../build/toolchain/win/rc/win/rc.exe.sha1')
 
     # 2. Run Microsoft rc.exe.
     if sys.platform == 'win32' and rc_exe_exit_code == 0:
@@ -200,12 +201,12 @@ class WinTool(object):
       out, _ = popen.communicate()
       # Filter logo banner from invocations of rc.exe. Older versions of RC
       # don't support the /nologo flag.
-      for line in out.splitlines():
+      for line in out.decode('utf-8').splitlines():
         if (not line.startswith('Microsoft (R) Windows (R) Resource Compiler')
             and not line.startswith('Copy' + 'right (C' +
                                 ') Microsoft Corporation')
             and line):
-          print line
+          print(line)
       rc_exe_exit_code = popen.returncode
       # Assert Microsoft rc.exe and rc.py produced identical .res files.
       if rc_exe_exit_code == 0:

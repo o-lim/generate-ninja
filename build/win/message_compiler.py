@@ -102,6 +102,7 @@ def main():
       with open(header_file, 'rb') as f:
         define_block = []  # The current contiguous block of #defines.
         for line in f.readlines():
+          line = line.decode('utf-8')
           if line.startswith('//') and '?' in line:
             continue
           if line.startswith('#define '):
@@ -121,20 +122,20 @@ def main():
     # in tmp_dir to the checked-in outputs.
     diff = filecmp.dircmp(tmp_dir, source)
     if diff.diff_files or set(diff.left_list) != set(diff.right_list):
-      print 'mc.exe output different from files in %s, see %s' % (source,
-                                                                  tmp_dir)
+      print('mc.exe output different from files in %s, see %s' % (source,
+                                                                  tmp_dir))
       diff.report()
       for f in diff.diff_files:
         if f.endswith('.bin'): continue
         fromfile = os.path.join(source, f)
         tofile = os.path.join(tmp_dir, f)
-        print ''.join(difflib.unified_diff(open(fromfile, 'U').readlines(),
+        print(''.join(difflib.unified_diff(open(fromfile, 'U').readlines(),
                                            open(tofile, 'U').readlines(),
-                                           fromfile, tofile))
+                                           fromfile, tofile)))
       delete_tmp_dir = False
       sys.exit(1)
   except subprocess.CalledProcessError as e:
-    print e.output
+    print(e.output.decode('utf-8'))
     sys.exit(e.returncode)
   finally:
     if os.path.exists(tmp_dir) and delete_tmp_dir:

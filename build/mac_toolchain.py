@@ -26,7 +26,10 @@ import sys
 import tarfile
 import time
 import tempfile
-import urllib2
+try:
+  import urllib.request
+except ImportError:
+  import urllib2
 
 # This can be changed after running /build/package_mac_toolchain.py.
 MAC_TOOLCHAIN_VERSION = '8E2002'
@@ -64,7 +67,7 @@ def GetPlatforms():
   target_os = set(['mac'])
   try:
     env = {}
-    execfile(GCLIENT_CONFIG, env, env)
+    exec(open(GCLIENT_CONFIG).read(), env, env)
     target_os |= set(env.get('target_os', target_os))
   except:
     pass
@@ -97,13 +100,13 @@ def DownloadAndUnpack(url, output_dir):
   """Decompresses |url| into a cleared |output_dir|."""
   temp_name = tempfile.mktemp(prefix='mac_toolchain')
   try:
-    print 'Downloading new toolchain.'
+    print('Downloading new toolchain.')
     subprocess.check_call(['gsutil.py', 'cp', url, temp_name])
     if os.path.exists(output_dir):
-      print 'Deleting old toolchain.'
+      print('Deleting old toolchain.')
       shutil.rmtree(output_dir)
     EnsureDirExists(output_dir)
-    print 'Unpacking new toolchain.'
+    print('Unpacking new toolchain.')
     tarfile.open(mode='r:gz', name=temp_name).extractall(path=output_dir)
   finally:
     if os.path.exists(temp_name):
@@ -160,13 +163,13 @@ def FinalizeUnpack(output_dir, target_os):
     # |target_license_plist_path| or |agreed_to_key| may not exist.
     pass
 
-  print "Accepting license."
+  print("Accepting license.")
   target_version_plist_path = os.path.join(
       output_dir, 'Contents','version.plist')
   target_version_plist = LoadPlist(target_version_plist_path)
   short_version_string = target_version_plist['CFBundleShortVersionString']
   old_path = subprocess.Popen(['/usr/bin/xcode-select', '-p'],
-                               stdout=subprocess.PIPE).communicate()[0].strip()
+                               stdout=subprocess.PIPE).communicate()[0].strip().decode('utf-8')
   try:
     build_dir = os.path.join(output_dir, 'Contents/Developer')
     subprocess.check_call(['sudo', '/usr/bin/xcode-select', '-s', build_dir])
@@ -174,7 +177,7 @@ def FinalizeUnpack(output_dir, target_os):
 
     if target_os == 'ios' and \
         LooseVersion(short_version_string) >= LooseVersion("9.0"):
-      print "Installing packages."
+      print("Installing packages.")
       subprocess.check_call(['sudo', '/usr/bin/xcodebuild', '-runFirstLaunch'])
   finally:
     subprocess.check_call(['sudo', '/usr/bin/xcode-select', '-s', old_path])
@@ -184,29 +187,29 @@ def _UseHermeticToolchain(target_os):
   current_dir = os.path.dirname(os.path.realpath(__file__))
   script_path = os.path.join(current_dir, 'mac/should_use_hermetic_xcode.py')
   proc = subprocess.Popen([script_path, target_os], stdout=subprocess.PIPE)
-  return '1' in proc.stdout.readline()
+  return '1' in proc.stdout.readline().decode('utf-8')
 
 
 def RequestGsAuthentication():
   """Requests that the user authenticate to be able to access gs://.
   """
-  print 'Access to ' + TOOLCHAIN_URL + ' not configured.'
-  print '-----------------------------------------------------------------'
-  print
-  print 'You appear to be a Googler.'
-  print
-  print 'I\'m sorry for the hassle, but you need to do a one-time manual'
-  print 'authentication. Please run:'
-  print
-  print '    download_from_google_storage --config'
-  print
-  print 'and follow the instructions.'
-  print
-  print 'NOTE 1: Use your google.com credentials, not chromium.org.'
-  print 'NOTE 2: Enter 0 when asked for a "project-id".'
-  print
-  print '-----------------------------------------------------------------'
-  print
+  print('Access to ' + TOOLCHAIN_URL + ' not configured.')
+  print('-----------------------------------------------------------------')
+  print('')
+  print('You appear to be a Googler.')
+  print('')
+  print('I\'m sorry for the hassle, but you need to do a one-time manual')
+  print('authentication. Please run:')
+  print('')
+  print('    download_from_google_storage --config')
+  print('')
+  print('and follow the instructions.')
+  print('')
+  print('NOTE 1: Use your google.com credentials, not chromium.org.')
+  print('NOTE 2: Enter 0 when asked for a "project-id".')
+  print('')
+  print('-----------------------------------------------------------------')
+  print('')
   sys.stdout.flush()
   sys.exit(1)
 
@@ -230,20 +233,20 @@ def DownloadHermeticBuild(target_os, toolchain_version, toolchain_filename):
   toolchain_file = '%s.tgz' % toolchain_version
   toolchain_full_url = TOOLCHAIN_URL + toolchain_file
 
-  print 'Updating toolchain to %s...' % toolchain_version
+  print('Updating toolchain to %s...' % toolchain_version)
   try:
     toolchain_file = toolchain_filename % toolchain_version
     toolchain_full_url = TOOLCHAIN_URL + toolchain_file
     DownloadAndUnpack(toolchain_full_url, toolchain_output_path)
     FinalizeUnpack(toolchain_output_path, target_os)
 
-    print 'Toolchain %s unpacked.' % toolchain_version
+    print('Toolchain %s unpacked.' % toolchain_version)
     WriteStampFile(target_os, toolchain_version)
     return 0
   except Exception as e:
-    print 'Failed to download toolchain %s.' % toolchain_file
-    print 'Exception %s' % e
-    print 'Exiting.'
+    print('Failed to download toolchain %s.' % toolchain_file)
+    print('Exception %s' % e)
+    print('Exiting.')
     return 1
 
 
@@ -253,7 +256,7 @@ def main():
 
   for target_os in GetPlatforms():
     if not PlatformMeetsHermeticXcodeRequirements(target_os):
-      print 'OS version does not support toolchain.'
+      print('OS version does not support toolchain.')
       continue
 
     if target_os == 'ios':

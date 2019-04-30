@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+from __future__ import print_function
 import os
 import re
 import subprocess
@@ -37,9 +38,9 @@ def Main(cmd_list):
   env['ZERO_AR_DATE'] = '1'
   libtoolout = subprocess.Popen(cmd_list, stderr=subprocess.PIPE, env=env)
   _, err = libtoolout.communicate()
-  for line in err.splitlines():
+  for line in err.decode('utf-8').splitlines():
     if not IsBlacklistedLine(line):
-      print >>sys.stderr, line
+      print(line, file=sys.stderr)
   # Unconditionally touch the output .a file on the command line if present
   # and the command succeeded. A bit hacky.
   if not libtoolout.returncode:

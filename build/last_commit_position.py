@@ -57,7 +57,7 @@ def FetchCommitPosition(directory):
                                                '--match', 'v*.*.*',
                                                '--always',
                                                '--first-parent'])
-  line = proc.stdout.readline().strip()
+  line = proc.stdout.readline().strip().decode('utf-8')
   if not line:
     return None
 
@@ -91,13 +91,13 @@ def main(argv):
   (options, args) = parser.parse_args(argv)
 
   if options.outfile == None:
-    print "Missing option '--outfile'"
+    print("Missing option '--outfile'")
     sys.exit(1)
   if options.header_guard == None:
-    print "Missing option '--header-guard'"
+    print("Missing option '--header-guard'")
     sys.exit(1)
   if options.git_directory == None and options.version == None:
-    print "Must specify '--git-dir' or '--version' option"
+    print("Must specify '--git-dir' or '--version' option")
     sys.exit(1)
 
   git_directory = options.git_directory

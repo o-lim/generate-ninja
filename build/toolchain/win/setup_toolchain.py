@@ -80,7 +80,7 @@ def _LoadEnvFromBat(args):
   variables, _ = popen.communicate()
   if popen.returncode != 0:
     raise Exception('"%s" failed with error %d' % (args, popen.returncode))
-  return variables
+  return variables.decode('utf-8')
 
 
 def _LoadToolchainEnv(cpu, sdk_dir):
@@ -178,11 +178,11 @@ def main():
       f.write(env_block)
 
   assert vc_bin_dir
-  print 'vc_bin_dir = ' + gn_helpers.ToGNString(vc_bin_dir)
+  print('vc_bin_dir = ' + gn_helpers.ToGNString(vc_bin_dir))
   assert include_I
-  print 'include_flags_I = ' + gn_helpers.ToGNString(include_I)
+  print('include_flags_I = ' + gn_helpers.ToGNString(include_I))
   assert include_imsvc
-  print 'include_flags_imsvc = ' + gn_helpers.ToGNString(include_imsvc)
+  print('include_flags_imsvc = ' + gn_helpers.ToGNString(include_imsvc))
 
 if __name__ == '__main__':
   main()

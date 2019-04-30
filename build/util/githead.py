@@ -22,8 +22,8 @@ head = f.readline()
 f.close()
 match = re.match('ref: (.*)', head)
 if match and os.path.isfile(gitdir + "/" + match.group(1)):
-  print match.group(1)
+  print(match.group(1))
 elif match:
-  print "packed-refs"
+  print("packed-refs")
 else:
-  print ""
+  print("")
