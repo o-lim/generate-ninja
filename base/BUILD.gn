@@ -121,6 +121,10 @@ static_library("base") {
     ]
   }
 
+  if (is_linux) {
+    sources += [ "memcpy_linux.cc" ]
+  }
+
   if (is_win) {
     sources += [
       "files/file_enumerator_win.cc",

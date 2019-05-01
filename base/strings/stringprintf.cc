@@ -15,6 +15,12 @@
 #include "base/strings/utf_string_conversions.h"
 #include "util/build_config.h"
 
+#if defined(__GNUC__) && __GNUC__ > 6
+// Disable erroneous null destination pointer error from
+// -Werror=format-truncation=
+#pragma GCC diagnostic error "-Wformat-truncation=0"
+#endif
+
 namespace base {
 
 namespace {

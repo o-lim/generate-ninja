@@ -40,10 +40,6 @@ declare_args() {
   # Requires profiling to be set to true.
   enable_full_stack_frames_for_profiling = false
 
-  # When we are going to use gold we need to find it.
-  # This is initialized below, after use_gold might have been overridden.
-  gold_path = false
-
   # Enable fatal linker warnings. Building GN with certain versions
   # of binutils can cause linker warning.
   fatal_linker_warnings = true
@@ -60,16 +56,6 @@ declare_args() {
 
   # Strip the debug info of symbols file in lib.unstripped to reduce size.
   strip_debug_info = false
-}
-
-# Apply the default logic for these values if they were not set explicitly.
-if (gold_path == false) {
-  if (use_gold) {
-    gold_path = rebase_path("//third_party/binutils/Linux_x64/Release/bin",
-                            root_build_dir)
-  } else {
-    gold_path = ""
-  }
 }
 
 if (use_debug_fission == "default") {
