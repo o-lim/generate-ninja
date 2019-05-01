@@ -120,9 +120,9 @@ config("default_libs") {
       "Foundation.framework",
     ]
   } else if (is_linux) {
-    ldflags = [ "-pthread" ]
     libs = [
       "dl",
+      "pthread",
       "rt",
     ]
   }
