@@ -5,10 +5,12 @@ sudo: required
 matrix:
   include:
     - os: linux
+      dist: xenial
       env:
         - system="i686-linux"
         - DEPLOY=1
     - os: linux
+      dist: xenial
       env:
         - system="x86_64-linux"
         - DEPLOY=1
