@@ -153,7 +153,9 @@ declare_args() {
   # to configure warnings.
   is_clang =
       current_os == "mac" || current_os == "ios" || current_os == "chromeos" ||
-      current_os == "linux" || current_os == "fuchsia"
+      current_os == "fuchsia" ||
+      (current_os == "linux" &&
+       string_replace(getenv("CC"), "clang", "", 1) != getenv("CC"))
 
   # Allows the path to a custom target toolchain to be injected as a single
   # argument, and set as the default toolchain.
