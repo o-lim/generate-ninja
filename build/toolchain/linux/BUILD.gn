@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/sysroot.gni")
+import("//build/config/c++/c++.gni")
 import("//build/toolchain/gcc_toolchain.gni")
 
 clang_toolchain("clang_arm") {
@@ -61,6 +62,10 @@ clang_toolchain("clang_x86") {
   # Output linker map files for binary size analysis.
   enable_linker_map = true
 
+  if (use_libcxx) {
+    libs_section_postfix = "-Wl,-Bstatic -lc++ -lc++abi -Wl,-Bdynamic"
+  }
+
   toolchain_args = {
     current_cpu = "x86"
     current_os = "linux"
@@ -103,6 +108,10 @@ gcc_toolchain("x86") {
   # Output linker map files for binary size analysis.
   enable_linker_map = true
 
+  if (use_libcxx) {
+    libs_section_postfix = "-Wl,-Bstatic -lc++ -lc++abi -Wl,-Bdynamic -Wl,--as-needed -lm -lc -lgcc_s -lgcc"
+  }
+
   toolchain_args = {
     current_cpu = "x86"
     current_os = "linux"
@@ -113,6 +122,10 @@ gcc_toolchain("x86") {
 clang_toolchain("clang_x64") {
   # Output linker map files for binary size analysis.
   enable_linker_map = true
+
+  if (use_libcxx) {
+    libs_section_postfix = "-Wl,-Bstatic -lc++ -lc++abi -Wl,-Bdynamic"
+  }
 
   toolchain_args = {
     current_cpu = "x64"
@@ -155,6 +168,10 @@ gcc_toolchain("x64") {
 
   # Output linker map files for binary size analysis.
   enable_linker_map = true
+
+  if (use_libcxx) {
+    libs_section_postfix = "-Wl,-Bstatic -lc++ -lc++abi -Wl,-Bdynamic -Wl,--as-needed -lm -lc -lgcc_s -lgcc"
+  }
 
   toolchain_args = {
     current_cpu = "x64"

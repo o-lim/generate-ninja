@@ -5,15 +5,18 @@
 import("//build/config/sanitizers/sanitizers.gni")
 
 declare_args() {
+  # Use libc++ instead of stdlibc++ as standard library.
+  # This is enabled by default for official Mac and Linux builds using clang.
+  # It is also enabled if we are going to deploy the build on Linux.
+  use_libcxx = is_mac || (is_linux && is_official_build &&
+                          (is_clang || getenv("DEPLOY") == "1"))
+
   # Use libc++ (buildtools/third_party/libc++ and
   # buildtools/third_party/libc++abi) instead of stdlibc++ as standard
   # library.
   # Don't check in changes that set this to false for more platforms; doing so
   # is not supported.
-  use_custom_libcxx =
-      is_msan || is_fuchsia ||
-      (is_linux && is_clang &&
-       (!is_chromeos || default_toolchain != "//build/toolchain/cros:target"))
+  use_custom_libcxx = is_fuchsia
 
   # Use libc++ instead of stdlibc++ when using the host_cpu toolchain, even if
   # use_custom_libcxx is false. This is useful for cross-compiles where a custom
@@ -34,9 +37,23 @@ declare_args() {
                      !is_ubsan && !is_ubsan_security && !is_ubsan_vptr
 }
 
+declare_args() {
+  # Use separate libc++ headers instead of the builtin libc++ headers
+  # from clang. This must be done when using libc++ with GCC.
+  use_libcxx_headers = is_linux && !is_clang && use_libcxx
+
+  # The libc++ installation prefix
+  libcxx_prefix = "/usr"
+
+  # The libc++abi installation prefix
+  libcxxabi_prefix = "/usr"
+}
+
 use_custom_libcxx =
     use_custom_libcxx || (use_custom_libcxx_for_host && current_cpu == host_cpu)
 
-libcxx_prefix = "//buildtools/third_party/libc++/trunk"
-libcxxabi_prefix = "//buildtools/third_party/libc++abi/trunk"
-libunwind_prefix = "//buildtools/third_party/libunwind/trunk"
+if (use_custom_libcxx) {
+  libcxx_prefix = rebase_path("//buildtools/third_party/libc++/trunk", root_build_dir)
+  libcxxabi_prefix = rebase_path("//buildtools/third_party/libc++abi/trunk", root_build_dir)
+  libunwind_prefix = rebase_path("//buildtools/third_party/libunwind/trunk", root_build_dir)
+}

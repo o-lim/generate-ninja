@@ -210,6 +210,8 @@ executable("gn") {
 }
 
 executable("gn_unittests") {
+  configs += [ "//build/config/gn:executable_config" ]
+
   sources = [
     "action_target_generator_unittest.cc",
     "analyzer_unittest.cc",

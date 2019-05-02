@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/compiler/compiler.gni")
+import("//build/config/c++/c++.gni")
 import("//build/config/host_byteorder.gni")
 import("//build/toolchain/cc_wrapper.gni")
 import("//build/toolchain/toolchain.gni")
@@ -329,7 +330,7 @@ config("compiler") {
   #
   # TODO(thakis): Figure out if this should be the default, and expose in
   # clang-cl if not.
-  if (is_clang && !is_win) {
+  if (is_clang && !is_win && !is_linux) {
     cflags += [ "-no-canonical-prefixes" ]
   }
 
@@ -339,9 +340,35 @@ config("compiler") {
     cflags_cc += [ "-std=c++14" ]
   }
 
-  if (is_mac) {
-    cflags_cc += [ "-stdlib=libc++" ]
-    ldflags += [ "-stdlib=libc++" ]
+  if (use_libcxx) {
+    if (is_clang && !use_libcxx_headers) {
+      cflags_cc += [ "-stdlib=libc++" ]
+      ldflags += [ "-stdlib=libc++" ]
+      if (is_linux) {
+        ldflags += [ "-static-libstdc++" ]
+      }
+    } else {
+      # GCC does not provide a way to switch from libstdc++ to libc++. Hence,
+      # we must manually configure the compile and link commands.
+      cflags_cc += [
+        "-nostdinc++",
+        "-isystem", "$libcxx_prefix/include/c++/v1",
+        "-isystem", "$libcxxabi_prefix/include/c++/v1",
+      ]
+      lib_dirs = [
+        "$libcxx_prefix/lib",
+        "$libcxxabi_prefix/lib",
+      ]
+      if (is_clang) {
+        ldflags += [ "-stdlib=libc++" ]
+        if (is_linux) {
+          ldflags += [ "-static-libstdc++" ]
+        }
+      } else if (is_linux) {
+        ldflags += [ "-nodefaultlibs" ]
+        libs = [ "m", "c", "gcc_s" ]
+      }
+    }
   }
 
   # Add flags for link-time optimization. These flags enable

@@ -2,12 +2,14 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/c++/c++.gni")
+
 config("static_config") {
   if (is_linux) {
     ldflags = [
       # We want to statically link libstdc++/libgcc for Linux.
-      "-static-libstdc++",
-      "-static-libgcc",
+      #"-static-libstdc++",
+      #"-static-gcc",
     ]
   }
 }
@@ -22,12 +24,12 @@ config("ldconfig") {
 }
 
 config("executable_config") {
-  configs = [ ":ldconfig" ]
+  configs = [ ":ldconfig", ":static_config" ]
 }
 
 # Shared libaries should not have RPATH or RUNPATH set. This allows the
 # shared libs to inherit RPATH from the parent executable that is loading
 # the shared library. (See internal b/37514052 for more details.)
 config("shared_library_config") {
-  #configs = [ ":static_config" ]
+  configs = [ ":static_config" ]
 }
