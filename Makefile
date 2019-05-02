@@ -1,8 +1,26 @@
+# Makefile to build gn bootstrap and release
+
+ifdef system
+# Export `system` if defined since it is used by BUILDCONFIG.gn
+# Use system=i686-linux to build 32-bit binaries
+export system
+endif
+
+ifdef DEPLOY
+# Export `DEPLOY` if defined since it is used to indicate that we want
+# to build for deployment. Use DEPLOY=1 to build binaries for deployment.
+export DEPLOY
+endif
+
+# Export `CC` and `CXX` variables since they are used by gn files
+# GN will be built using clang if CC=clang
+export CC CXX
 
 EMPTY :=
 SPACE := $(EMPTY) $(EMPTY)
 COMMA := ,
 
+# Define the version of GN here with an optional commit hash appended
 COMMIT_HASH := $Format:%h$
 REF_NAMES := $Format:%D$
 REF_NAMES := $(filter-out ->,$(subst $(COMMA),$(SPACE),$(subst :$(SPACE),:,$(REF_NAMES))))
