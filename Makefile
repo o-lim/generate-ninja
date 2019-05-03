@@ -28,8 +28,11 @@ VERSION_SUFFIX = $(if $(filter tag:v$(GN_VERSION),$(REF_NAMES)),,-$(COMMIT_HASH)
 GN_VERSION := 0.3.2
 export GN_VERSION := $(if $(filter-out %:%h %:%h$$,$(COMMIT_HASH)),$(GN_VERSION)$(VERSION_SUFFIX))
 
+OUTDIR=out
+
 .PHONY: all
-all: gn_all gn_test
+all: gn_all gn_test $(OUTDIR)/.envvars
+	@true
 
 .PHONY: clean
 clean:
@@ -37,40 +40,54 @@ clean:
 
 .PHONY: gn_all
 gn_all: gn gn_unittests
-
-out/bootstrap/gn: build/gen.py
-	@build/gen.py --out-path $(@D)
-	@ninja -C $(@D)
-
-.PHONY: bootstrap
-bootstrap: out/bootstrap/gn
 	@true
 
-out/Release/build.ninja: out/bootstrap/gn Makefile
-	@out/bootstrap/gn gen --args='is_debug=false is_official_build=true' //out/Release
+$(OUTDIR)/bootstrap/build.ninja: build/gen.py
+	@env -u CC -u CXX $< --out-path $(@D)
+
+$(OUTDIR)/bootstrap/gn: $(OUTDIR)/bootstrap/build.ninja
+	@ninja -C $(@D)
+	@touch $@
+
+.PHONY: bootstrap
+bootstrap: $(OUTDIR)/bootstrap/gn
+	@true
+
+.PHONY: envvars
+$(OUTDIR)/.envvars: envvars
+	@echo "system=$(system)" >> $@.tmp
+	@echo "CC=$(CC)" >> $@.tmp
+	@echo "CXX=$(CXX)" >> $@.tmp
+	@echo "DEPLOY=$(DEPLOY)" >> $@.tmp
+	@diff -Nq $@ $@.tmp > /dev/null && rm -f $@.tmp || mv $@.tmp $@
+
+$(OUTDIR)/Release/build.ninja: $(OUTDIR)/bootstrap/gn Makefile $(wildcard .git/HEAD) $(OUTDIR)/.envvars
+	@$< gen --args='is_debug=false is_official_build=true' //$(@D)
 
 .PHONY: build.ninja
-build.ninja: out/Release/build.ninja
+build.ninja: $(OUTDIR)/Release/build.ninja
+	@true
 
-out/Release/gn: build.ninja
-	@ninja -C out/Release gn
+$(OUTDIR)/Release/gn $(OUTDIR)/Release/gn_unittests: $(OUTDIR)/Release/build.ninja
+	@ninja -C $(@D) $(@F)
+	@touch $@
 
 .PHONY: gn
-gn: out/Release/gn
-
-out/Release/gn_unittests: build.ninja
-	@ninja -C out/Release gn_unittests
+gn: $(OUTDIR)/Release/gn
+	@true
 
 .PHONY: gn_unittests
-gn_unittests: out/Release/gn_unittests
+gn_unittests: $(OUTDIR)/Release/gn_unittests
+	@true
 
-out/boostrap/gn_unittests.pass: out/boostrap/gn_unittests
+$(OUTDIR)/boostrap/gn_unittests.pass: $(OUTDIR)/boostrap/gn_unittests
 	@$<
 	@touch $@
 
-out/Release/gn_unittests.pass: out/Release/gn_unittests
+$(OUTDIR)/Release/gn_unittests.pass: $(OUTDIR)/Release/gn_unittests
 	@$<
 	@touch $@
 
 .PHONY: gn_test
-gn_test: out/Release/gn_unittests.pass
+gn_test: $(OUTDIR)/Release/gn_unittests.pass
+	@true
