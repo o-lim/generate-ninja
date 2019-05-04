@@ -1,7 +1,5 @@
 language: cpp
 
-sudo: required
-
 matrix:
   include:
     - os: linux
@@ -29,6 +27,9 @@ matrix:
       env:
         - system="x86_64-darwin"
         - DEPLOY=0
+    - language: python
+      before_install: pip install flake8
+      script: flake8 . --count --select=E9,F63,F72,F82 --show-source --statistics
 
 before_install:
   - source .travis/setenv.sh
