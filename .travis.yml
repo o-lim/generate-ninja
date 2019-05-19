@@ -1,7 +1,5 @@
 language: cpp
 
-sudo: required
-
 matrix:
   include:
     - os: linux
@@ -26,6 +24,11 @@ matrix:
         - DEPLOY=1
     - os: osx
       osx_image: xcode9
+      env:
+        - system="x86_64-darwin"
+        - DEPLOY=0
+    - os: osx
+      osx_image: xcode10.2
       env:
         - system="x86_64-darwin"
         - DEPLOY=0
