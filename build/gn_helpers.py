@@ -19,7 +19,11 @@ To use in a random python file in the build:
 Where the sequence of parameters to join is the relative path from your source
 file to the build directory."""
 
-import sys
+try:
+  basestring        # Python 2
+except NameError:
+  basestring = str  # Python 3
+
 
 class GNException(Exception):
   pass
@@ -31,20 +35,21 @@ def ToGNString(value, allow_dicts = True):
   allow_dicts indicates if this function will allow converting dictionaries
   to GN scopes. This is only possible at the top level, you can't nest a
   GN scope in a list, so this should be set to False for recursive calls."""
-  if isinstance(value, str) or (sys.version_info[0] == 2 and isinstance(value, basestring)):
-    if value.find('\n') >= 0:
+  if isinstance(value, basestring):
+    if '\n' in value:
       raise GNException("Trying to print a string with a newline in it.")
     return '"' + \
         value.replace('\\', '\\\\').replace('"', '\\"').replace('$', '\\$') + \
         '"'
 
-  if sys.version_info[0] == 2 and isinstance(value, unicode):
-    return ToGNString(value.encode('utf-8'))
+  try:
+    if isinstance(value, unicode):
+      return ToGNString(value.encode('utf-8'))
+  except NameError:  # 'unicode' was removed in Python 3
+    pass
 
   if isinstance(value, bool):
-    if value:
-      return "true"
-    return "false"
+    return "true" if value else "false"
 
   if isinstance(value, list):
     return '[ %s ]' % ', '.join(ToGNString(v) for v in value)
@@ -54,7 +59,7 @@ def ToGNString(value, allow_dicts = True):
       raise GNException("Attempting to recursively print a dictionary.")
     result = ""
     for key in sorted(value):
-      if not (isinstance(key, str) or (sys.version_info[0] == 2 and isinstance(key, basestring))):
+      if not isinstance(key, basestring):
         raise GNException("Dictionary key is not a string.")
       result += "%s = %s\n" % (key, ToGNString(value[key], False))
     return result
