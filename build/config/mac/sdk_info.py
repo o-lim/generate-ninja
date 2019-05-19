@@ -14,6 +14,11 @@ import sys
 # In the GYP build, this is done inside GYP itself based on the SDKROOT
 # variable.
 
+try:
+  basestring        # Python 2
+except NameError:
+  basestring = str  # Python 3
+
 def FormatVersion(version):
   """Converts Xcode version to a format required for Info.plist."""
   version = version.replace('.', '')
@@ -72,6 +77,6 @@ if __name__ == '__main__':
 
   for key in sorted(settings):
     value = settings[key]
-    if isinstance(value, str) or (sys.version_info[0] == 2 and isinstance(value, unicode)):
+    if isinstance(value, basestring):
       value = '"%s"' % value
     print('%s=%s' % (key, value))
