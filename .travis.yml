@@ -27,6 +27,11 @@ matrix:
       env:
         - system="x86_64-darwin"
         - DEPLOY=0
+    - os: osx
+      osx_image: xcode10.2
+      env:
+        - system="x86_64-darwin"
+        - DEPLOY=0
 
 before_install:
   - source .travis/setenv.sh
