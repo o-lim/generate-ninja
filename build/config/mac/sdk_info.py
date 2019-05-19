@@ -15,9 +15,9 @@ import sys
 # variable.
 
 try:
-  unicode        # Python 2
+  basestring        # Python 2
 except NameError:
-  unicode = str  # Python 3
+  basestring = str  # Python 3
 
 def FormatVersion(version):
   """Converts Xcode version to a format required for Info.plist."""
@@ -77,6 +77,6 @@ if __name__ == '__main__':
 
   for key in sorted(settings):
     value = settings[key]
-    if isinstance(value, unicode):
+    if isinstance(value, basestring):
       value = '"%s"' % value
     print('%s=%s' % (key, value))
