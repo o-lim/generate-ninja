@@ -47,6 +47,7 @@ minor features as well as some bug fixes:
  - Allow clobbering in `forward_variables_from`
  - Use console pool to regenerate ninja files
  - Use abs path for sources when output dir is outside root dir
+ - Add `build_args` to `build_settings` in JSON project file
 
 For more information on GN and Ninja, please refer to the following links:
 

@@ -105,6 +105,17 @@ std::string RenderJSON(const BuildSettings* build_settings,
         std::move(description));
   }
 
+  auto args = std::make_unique<base::DictionaryValue>();
+  for (const auto& arg : build_settings->build_args().GetAllArguments()) {
+    if (arg.second.has_override) {
+      args->SetKey(arg.first,
+                   base::Value(arg.second.override_value.ToString(true)));
+    } else {
+      args->SetKey(arg.first,
+                   base::Value(arg.second.default_value.ToString(true)));
+    }
+  }
+
   auto settings = std::make_unique<base::DictionaryValue>();
   settings->SetKey("root_path", base::Value(build_settings->root_path_utf8()));
   settings->SetKey("build_dir",
@@ -112,6 +123,7 @@ std::string RenderJSON(const BuildSettings* build_settings,
   settings->SetKey(
       "default_toolchain",
       base::Value(default_toolchain_label.GetUserVisibleName(false)));
+  settings->SetWithoutPathExpansion("build_args", std::move(args));
 
   auto output = std::make_unique<base::DictionaryValue>();
   output->SetWithoutPathExpansion("targets", std::move(targets));
