@@ -435,7 +435,7 @@ const char kArgs_HelpShort[] =
 const char kArgs_Help[] =
     R"(gn args: Display or configure arguments declared by the build.
 
-  gn args <out_dir> [--list] [--short] [--args] [--overrides-only]
+  gn args <out_dir> [--list] [--short] [--args] [--overrides-only] [--json]
 
   See also "gn help buildargs" for a more high-level overview of how
   build arguments work.
