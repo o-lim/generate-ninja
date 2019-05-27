@@ -68,9 +68,8 @@ $(OUTDIR)/Release/build.ninja: $(OUTDIR)/bootstrap/gn Makefile $(wildcard .git/H
 build.ninja: $(OUTDIR)/Release/build.ninja
 	@true
 
-$(OUTDIR)/Release/gn $(OUTDIR)/Release/gn_unittests: $(OUTDIR)/Release/build.ninja
+$(OUTDIR)/Release/gn $(OUTDIR)/Release/gn_unittests: build.ninja
 	@ninja -C $(@D) $(@F)
-	@touch $@
 
 .PHONY: gn
 gn: $(OUTDIR)/Release/gn
